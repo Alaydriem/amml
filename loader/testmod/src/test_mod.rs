@@ -91,7 +91,7 @@ impl TestMod {
         // SAFETY: `target` is the start of the game function `name`, which `detour` has the signature of (its
         // module documents it), and `original` belongs to this one hook.
         let hook = unsafe { api.hook(target, detour, HookOrder::READ_AFTER_WRITERS, original) }?;
-        Logger::new(api, Self::NAME).info(&format!(
+        Logger::new(api, &Self::id()).info(&format!(
             "hooked {name} at {target:#x} (rva {:#x}), handle {}",
             target.wrapping_sub(api.module_base()),
             hook.0
@@ -101,17 +101,18 @@ impl TestMod {
 }
 
 impl AmmlMod for TestMod {
-    const NAME: &'static str = "amml-testmod";
+    const NAMESPACE: &'static str = "amml";
+    const NAME: &'static str = "testmod";
 
     fn enable(api: &Api) -> Result<(), SdkError> {
         let entries = GameEntries::resolve(api, &Probe::wanted()).map_err(|error| SdkError::Mod(error.to_string()))?;
-        Logger::new(api, Self::NAME).info(&ProbeReport::features_line(&entries.off_features()));
+        Logger::new(api, &Self::id()).info(&ProbeReport::features_line(&entries.off_features()));
         let update = entries
             .get(EntryId::CLIENT_INSTANCE_UPDATE)
             .ok_or_else(|| SdkError::MissingEntry(EntryId::CLIENT_INSTANCE_UPDATE.as_str().to_string()))?;
         let peek =
             GameEntries::resolve(api, &PeekEntries::wanted()).map_err(|error| SdkError::Mod(error.to_string()))?;
-        Logger::new(api, Self::NAME).info(&ProbeReport::peek_features_line(&peek.off_features()));
+        Logger::new(api, &Self::id()).info(&ProbeReport::peek_features_line(&peek.off_features()));
         let peek_hooks = Self::peek_hooks(&peek);
         // The peek probe holds its entries before the first peek hook can run.
         PEEK.start(peek);
@@ -160,6 +161,6 @@ impl AmmlMod for TestMod {
     fn disable(api: &Api) {
         PEEK.stop();
         PROBE.stop();
-        Logger::new(api, Self::NAME).info("disabled");
+        Logger::new(api, &Self::id()).info("disabled");
     }
 }

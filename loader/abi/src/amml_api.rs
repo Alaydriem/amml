@@ -3,7 +3,7 @@ use core::ffi::c_void;
 use crate::{AmmlLogLevel, AmmlStatus, AmmlStr};
 
 /// Version of the `AmmlApi` table this crate describes.
-pub const AMML_API_VERSION: u32 = 1;
+pub const AMML_API_VERSION: u32 = 2;
 
 /// Resolves an entry id to its value (RVA, slot index or byte offset) in `out`.
 pub type ResolveFn = unsafe extern "C" fn(id: AmmlStr, out: *mut u64) -> AmmlStatus;

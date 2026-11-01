@@ -1,6 +1,7 @@
-name        = "amml-testmod"
+namespace   = "amml"
+name        = "testmod"
 entry       = "amml_testmod.dll"
-api_version = 1
+api_version = 2
 entries = [
   "ClientInstance.update",
   "ClientInstance.getLocalPlayer",

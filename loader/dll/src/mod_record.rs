@@ -2,7 +2,8 @@ use crate::{Library, ModExports, ModPhase};
 
 /// A mod the loader holds. Records are only added, never removed, and the library is never freed.
 pub struct ModRecord {
-    pub name: String,
+    /// The mod id, `@<namespace>/<name>`.
+    pub id: String,
     /// Kept to document that the mapping outlives every pointer a mod holds.
     pub _library: Library,
     pub exports: ModExports,

@@ -20,14 +20,15 @@ impl ModGlue {
             }
             // SAFETY: the loader passes the table it owns, and the contract of `Api::from_raw` is the same.
             let api = unsafe { Api::from_raw(api, M::API_VERSION) }?;
-            ModRuntime::install(api, M::NAME);
+            ModRuntime::install(api, &M::id());
             M::load(&api)?;
             let block = AmmlModInfo {
-                size: AmmlModInfo::SIZE_V1,
+                size: AmmlModInfo::SIZE_V2,
                 api_version: M::API_VERSION,
                 name: AmmlStr::from_str(M::NAME),
+                namespace: AmmlStr::from_str(M::NAMESPACE),
             };
-            // SAFETY: the loader passes a writable AmmlModInfo; `name` points to a static string.
+            // SAFETY: the loader passes a writable AmmlModInfo; `name` and `namespace` point to static strings.
             unsafe { info.write(block) };
             Ok(())
         })

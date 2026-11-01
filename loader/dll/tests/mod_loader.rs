@@ -8,40 +8,85 @@ use crate::support::{EchoMod, Harness, HeapProbe, HookTarget, LogFile};
 
 #[test]
 fn mods_load_in_sorted_order_and_a_bad_manifest_skips_only_that_mod() {
-    let dll = EchoMod::build("plain", &[]);
+    let plain = EchoMod::build("plain", &[]);
+    let hooking = EchoMod::build("hook", &["hook-target"]);
     let harness = Harness::start();
-    harness.install_mod("b-second", "beta", &dll, "beta.dll", 1);
-    harness.install_mod("a-first", "alpha", &dll, "alpha.dll", 1);
-    fs::create_dir_all(harness.mods().join("c-broken")).unwrap();
-    fs::write(harness.mods().join("c-broken").join("amml.hcl"), "name = ").unwrap();
+    harness.install_mod("echo", "echo-hook", &hooking, "echo_hook.dll", 2);
+    harness.install_mod("echo", "echo", &plain, "echo.dll", 2);
+    fs::create_dir_all(harness.mods().join("@echo").join("c-broken")).unwrap();
+    fs::write(harness.mods().join("@echo").join("c-broken").join("amml.hcl"), "name = ").unwrap();
 
     let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
     assert_eq!(scan.skipped.len(), 1);
     let loader = ModLoader::new(harness.state);
     let reports = loader.load_all(&scan.mods);
 
-    let names: Vec<&str> = reports.iter().map(|report| report.name.as_str()).collect();
-    assert_eq!(names, ["alpha", "beta"]);
+    let ids: Vec<&str> = reports.iter().map(|report| report.id.as_str()).collect();
+    assert_eq!(ids, ["@echo/echo", "@echo/echo-hook"]);
     assert!(reports.iter().all(|report| report.is_ok() && report.phase == ModPhase::Loaded));
-    assert_eq!(loader.phases(), [("alpha".to_string(), ModPhase::Loaded), ("beta".to_string(), ModPhase::Loaded)]);
+    assert_eq!(
+        loader.phases(),
+        [("@echo/echo".to_string(), ModPhase::Loaded), ("@echo/echo-hook".to_string(), ModPhase::Loaded)]
+    );
+}
+
+#[test]
+fn a_mod_that_reports_another_namespace_is_refused() {
+    let plain = EchoMod::build("plain", &[]);
+    let hooking = EchoMod::build("hook", &["hook-target"]);
+    let harness = Harness::start();
+    harness.install_mod("other", "echo", &plain, "echo.dll", 2);
+    harness.install_mod("echo", "echo-hook", &hooking, "echo_hook.dll", 2);
+    let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
+    let loader = ModLoader::new(harness.state);
+
+    let reports = loader.load_all(&scan.mods);
+
+    assert_eq!(reports[0].id, "@echo/echo-hook");
+    assert!(reports[0].is_ok());
+    assert_eq!(reports[1].id, "@other/echo");
+    assert!(matches!(&reports[1].error, Some(ModLoadError::IdMismatch { manifest, reported })
+            if manifest == "@other/echo" && reported == "@echo/echo"));
+    assert_eq!(reports[1].phase, ModPhase::Failed);
+    assert!(loader.enable_all().iter().all(|report| report.id == "@echo/echo-hook" && report.is_ok()));
+}
+
+#[test]
+fn a_v1_info_block_is_refused_as_built_for_an_older_loader() {
+    let old = EchoMod::build("old", &["old-info"]);
+    let plain = EchoMod::build("plain", &[]);
+    let harness = Harness::start();
+    harness.install_mod("echo", "echo-old", &old, "echo_old.dll", 1);
+    harness.install_mod("echo", "echo", &plain, "echo.dll", 2);
+    let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
+    let loader = ModLoader::new(harness.state);
+
+    let reports = loader.load_all(&scan.mods);
+
+    assert_eq!(reports[0].id, "@echo/echo");
+    assert!(reports[0].is_ok());
+    assert!(matches!(reports[1].error, Some(ModLoadError::OlderMod { .. })));
+    assert_eq!(reports[1].error.as_ref().map(ModLoadError::status), Some(AmmlStatus::VERSION_MISMATCH));
+    assert_eq!(reports[1].phase, ModPhase::Refused);
 }
 
 #[test]
 fn a_mod_needing_a_newer_api_is_refused_with_version_mismatch() {
     let newer = EchoMod::build("newer", &["newer-api"]);
     let harness = Harness::start();
-    harness.install_mod("newer", "echo-newer", &newer, "echo_newer.dll", 1);
+    harness.install_mod("echo", "echo-newer", &newer, "echo_newer.dll", 2);
     let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
     let loader = ModLoader::new(harness.state);
 
-    // The manifest says 1 but the DLL needs loader API 2, so its own load call refuses this loader.
+    // The manifest says 2 but the DLL needs loader API 3, so its own load call refuses this loader.
     let mut reports = loader.load_all(&scan.mods);
-    // A manifest asking for version 2 is refused before the DLL is mapped.
+    // A manifest asking for version 3 is refused before the DLL is mapped.
     let ahead = ModSpec {
+        namespace: "echo".to_string(),
         name: "ahead".to_string(),
-        dir: harness.mods().join("ahead"),
+        dir: harness.mods().join("@echo").join("ahead"),
         entry: "missing.dll".to_string(),
-        api_version: 2,
+        api_version: 3,
         entries: Vec::new(),
     };
     reports.extend(loader.load_all(&[ahead]));
@@ -59,8 +104,8 @@ fn a_panicking_mod_is_disabled_and_the_next_mod_still_loads() {
     let panicking = EchoMod::build("panic", &["panic-enable"]);
     let plain = EchoMod::build("plain", &[]);
     let harness = Harness::start();
-    harness.install_mod("1-panics", "echo-panic", &panicking, "echo_panic.dll", 1);
-    harness.install_mod("2-echo", "echo", &plain, "echo.dll", 1);
+    harness.install_mod("echo", "echo-panic", &panicking, "echo_panic.dll", 2);
+    harness.install_mod("echo", "echo", &plain, "echo.dll", 2);
     let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
     let loader = ModLoader::new(harness.state);
 
@@ -68,20 +113,20 @@ fn a_panicking_mod_is_disabled_and_the_next_mod_still_loads() {
     assert!(loaded.iter().all(|report| report.is_ok()));
     let enabled = loader.enable_all();
 
-    assert_eq!(enabled[0].name, "echo-panic");
-    assert_eq!(enabled[0].phase, ModPhase::Failed);
-    assert_eq!(enabled[0].error.as_ref().map(ModLoadError::status), Some(AmmlStatus::PANICKED));
-    assert_eq!(enabled[1].name, "echo");
-    assert_eq!(enabled[1].phase, ModPhase::Enabled);
-    assert!(enabled[1].is_ok());
+    assert_eq!(enabled[1].id, "@echo/echo-panic");
+    assert_eq!(enabled[1].phase, ModPhase::Failed);
+    assert_eq!(enabled[1].error.as_ref().map(ModLoadError::status), Some(AmmlStatus::PANICKED));
+    assert_eq!(enabled[0].id, "@echo/echo");
+    assert_eq!(enabled[0].phase, ModPhase::Enabled);
+    assert!(enabled[0].is_ok());
 
-    let echo = LogFile::wait_for(&harness.logs().join("echo.log"), "enabled");
+    let echo = LogFile::wait_for(&harness.logs().join("@echo").join("echo.log"), "enabled");
     assert!(echo.contains(&format!("found={:#x}", Harness::BASE + 0x1234)), "{echo}");
     assert!(echo.contains("absent status=AmmlStatus(2)"), "{echo}");
     assert!(echo.contains("heap block null=false"), "{echo}");
-    assert!(echo.contains(&harness.mods().join("2-echo").display().to_string()), "{echo}");
+    assert!(echo.contains(&harness.mods().join("@echo").join("echo").display().to_string()), "{echo}");
     assert_eq!(HeapProbe::counts(), (1, 1));
-    let panicked = LogFile::wait_for(&harness.logs().join("echo-panic.log"), "panicked");
+    let panicked = LogFile::wait_for(&harness.logs().join("@echo").join("echo-panic.log"), "panicked");
     assert!(panicked.contains("enable panicked: echo-mod enable panics on purpose"), "{panicked}");
     let loader_log = LogFile::wait_for(&harness.logs().join("loader.log"), "mod switched off");
     assert!(loader_log.contains("mod switched off"), "{loader_log}");
@@ -91,9 +136,9 @@ fn a_panicking_mod_is_disabled_and_the_next_mod_still_loads() {
     loader.unload_all();
     assert_eq!(
         loader.phases(),
-        [("echo-panic".to_string(), ModPhase::Unloaded), ("echo".to_string(), ModPhase::Unloaded)]
+        [("@echo/echo".to_string(), ModPhase::Unloaded), ("@echo/echo-panic".to_string(), ModPhase::Unloaded)]
     );
-    let echo = LogFile::wait_for(&harness.logs().join("echo.log"), "unloaded");
+    let echo = LogFile::wait_for(&harness.logs().join("@echo").join("echo.log"), "unloaded");
     assert!(echo.contains("disabled") && echo.contains("unloaded"), "{echo}");
 }
 
@@ -121,7 +166,7 @@ fn resolve_returns_missing_entry_for_an_unresolved_id_and_values_for_others() {
 fn config_and_data_folders_are_inside_the_mod_folder() {
     let dll = EchoMod::build("plain", &[]);
     let harness = Harness::start();
-    harness.install_mod("alpha-dir", "alpha", &dll, "alpha.dll", 1);
+    harness.install_mod("echo", "echo", &dll, "echo.dll", 2);
     let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
     ModLoader::new(harness.state).load_all(&scan.mods);
 
@@ -130,12 +175,12 @@ fn config_and_data_folders_are_inside_the_mod_folder() {
     let dir = |kind: u8| {
         let mut out = AmmlStr::EMPTY;
         // SAFETY: `out` is a writable AmmlStr and the name is a live view.
-        let status = unsafe { (api.mod_dir)(AmmlStr::from_str("alpha"), kind, &mut out) };
+        let status = unsafe { (api.mod_dir)(AmmlStr::from_str("@echo/echo"), kind, &mut out) };
         assert_eq!(status, AmmlStatus::OK);
         // SAFETY: the loader keeps the bytes valid for the life of the process.
         std::path::PathBuf::from(unsafe { out.as_str() }.unwrap())
     };
-    let mod_dir = harness.mods().join("alpha-dir");
+    let mod_dir = harness.mods().join("@echo").join("echo");
 
     assert_eq!(dir(0), mod_dir);
     assert_eq!(dir(1), mod_dir.join("config"));
@@ -146,7 +191,7 @@ fn config_and_data_folders_are_inside_the_mod_folder() {
 fn disable_all_removes_the_hooks_of_a_mod_and_a_hook_from_disable_is_refused() {
     let dll = EchoMod::build("hook", &["hook-target"]);
     let harness = Harness::start();
-    harness.install_mod("hook", "echo-hook", &dll, "echo_hook.dll", 1);
+    harness.install_mod("echo", "echo-hook", &dll, "echo_hook.dll", 2);
     let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
     let loader = ModLoader::new(harness.state);
     loader.load_all(&scan.mods);
@@ -154,7 +199,7 @@ fn disable_all_removes_the_hooks_of_a_mod_and_a_hook_from_disable_is_refused() {
 
     let enabled = loader.enable_all();
     assert!(enabled.iter().all(|report| report.is_ok()));
-    LogFile::wait_for(&harness.logs().join("echo-hook.log"), "hooked handle=");
+    LogFile::wait_for(&harness.logs().join("@echo").join("echo-hook.log"), "hooked handle=");
 
     // target(1) = 2, and the mod adds 1000
     assert_eq!(HookTarget::call(1), 1002);
@@ -162,8 +207,8 @@ fn disable_all_removes_the_hooks_of_a_mod_and_a_hook_from_disable_is_refused() {
     loader.disable_all();
 
     assert_eq!(HookTarget::call(1), 2);
-    assert_eq!(loader.phases(), [("echo-hook".to_string(), ModPhase::Disabled)]);
-    let log = LogFile::wait_for(&harness.logs().join("echo-hook.log"), "disable hook");
+    assert_eq!(loader.phases(), [("@echo/echo-hook".to_string(), ModPhase::Disabled)]);
+    let log = LogFile::wait_for(&harness.logs().join("@echo").join("echo-hook.log"), "disable hook");
     assert!(log.contains(&format!("disable hook status={:?}", AmmlStatus::FAILED)), "{log}");
     assert!(!log.contains("disable hook accepted"), "{log}");
 }
@@ -173,8 +218,8 @@ fn a_mod_cannot_remove_the_hook_of_another_mod() {
     let hooking = EchoMod::build("hook", &["hook-target"]);
     let thief = EchoMod::build("thief", &["steal-hook"]);
     let harness = Harness::start();
-    harness.install_mod("1-hook", "echo-hook", &hooking, "echo_hook.dll", 1);
-    harness.install_mod("2-thief", "echo-thief", &thief, "echo_thief.dll", 1);
+    harness.install_mod("echo", "echo-hook", &hooking, "echo_hook.dll", 2);
+    harness.install_mod("echo", "echo-thief", &thief, "echo_thief.dll", 2);
     let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
     let loader = ModLoader::new(harness.state);
     loader.load_all(&scan.mods);
@@ -182,7 +227,7 @@ fn a_mod_cannot_remove_the_hook_of_another_mod() {
     let enabled = loader.enable_all();
 
     assert!(enabled.iter().all(|report| report.is_ok()));
-    let log = LogFile::wait_for(&harness.logs().join("echo-thief.log"), "unhook");
+    let log = LogFile::wait_for(&harness.logs().join("@echo").join("echo-thief.log"), "unhook");
     assert!(log.contains(&format!("unhook status={:?}", AmmlStatus::FAILED)), "{log}");
     assert_eq!(HookTarget::call(1), 1002);
 

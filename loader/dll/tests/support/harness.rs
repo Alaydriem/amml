@@ -36,13 +36,13 @@ impl Harness {
         self.root.path().join("mods")
     }
 
-    // Writes `<mods>/<folder>/amml.hcl` and copies `dll` to `<mods>/<folder>/<dll_name>`.
-    pub fn install_mod(&self, folder: &str, name: &str, dll: &Path, dll_name: &str, api_version: u32) {
-        let dir = self.mods().join(folder);
+    // Writes `<mods>/@<namespace>/<name>/amml.hcl` and copies `dll` to `<mods>/@<namespace>/<name>/<dll_name>`.
+    pub fn install_mod(&self, namespace: &str, name: &str, dll: &Path, dll_name: &str, api_version: u32) {
+        let dir = self.mods().join(format!("@{namespace}")).join(name);
         fs::create_dir_all(&dir).unwrap();
         fs::copy(dll, dir.join(dll_name)).unwrap();
         let manifest = format!(
-            "name = \"{name}\"\nentry = \"{dll_name}\"\napi_version = {api_version}\nentries = [\"Echo.found\", \"Echo.absent\"]\n"
+            "namespace = \"{namespace}\"\nname = \"{name}\"\nentry = \"{dll_name}\"\napi_version = {api_version}\nentries = [\"Echo.found\", \"Echo.absent\"]\n"
         );
         fs::write(dir.join("amml.hcl"), manifest).unwrap();
     }

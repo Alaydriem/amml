@@ -20,3 +20,5 @@ newer-api = []
 hook-target = []
 # `amml_mod_enable` tries to remove hook handle 1 and logs the status.
 steal-hook = []
+# `amml_mod_load` writes the 24-byte v1 info block.
+old-info = []

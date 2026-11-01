@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 use amml_abi::KnownLogLevel;
 use curia::{Dispatcher, InstallError, Level, Logger, SinkError};
@@ -7,8 +9,9 @@ use curia::{Dispatcher, InstallError, Level, Logger, SinkError};
 use crate::LogRouter;
 
 static INSTALLED: AtomicBool = AtomicBool::new(false);
+static MODS: OnceLock<Mutex<HashMap<String, (String, String)>>> = OnceLock::new();
 
-/// The loader logging: one process-wide curia sink writing `loader.log` and one file per mod.
+/// The loader logging: one process-wide curia sink writing `loader.log` and one file per registered mod.
 pub struct LoaderLog;
 
 impl LoaderLog {
@@ -30,7 +33,22 @@ impl LoaderLog {
         result
     }
 
-    /// Writes a line for `module` to `<module>.log`.
+    /// Makes `id` a module with its own log file, `<logs>/@<namespace>/<name>.log`. A module string that
+    /// was never registered writes to `loader.log`.
+    pub fn register_mod(id: &str, namespace: &str, name: &str) {
+        let mods = MODS.get_or_init(|| Mutex::new(HashMap::new()));
+        if let Ok(mut mods) = mods.lock() {
+            mods.entry(id.to_ascii_lowercase()).or_insert_with(|| (namespace.to_string(), name.to_string()));
+        }
+    }
+
+    /// The `(namespace, name)` registered for `module`, compared case-insensitively.
+    pub(crate) fn registered(module: &str) -> Option<(String, String)> {
+        let mods = MODS.get()?.lock().ok()?;
+        mods.get(&module.to_ascii_lowercase()).cloned()
+    }
+
+    /// Writes a line for `module` to its mod log; an unregistered module writes to `loader.log`.
     pub fn module_line(module: &str, level: KnownLogLevel, message: &str) {
         match level {
             KnownLogLevel::Trace => curia::trace!(message, { module: module }),

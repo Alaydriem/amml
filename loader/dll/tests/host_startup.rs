@@ -8,6 +8,7 @@ use crate::support::LogFile;
 
 fn spec(name: &str, entries: &[&str]) -> ModSpec {
     ModSpec {
+        namespace: "acme".to_string(),
         name: name.to_string(),
         dir: PathBuf::from(name),
         entry: format!("{name}.dll"),

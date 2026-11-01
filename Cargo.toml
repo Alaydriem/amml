@@ -3,7 +3,7 @@ resolver = "3"
 members = ["derive/data", "derive/cli", "sdk/msvc", "sdk/game", "sdk/msvc-fixture", "loader/abi", "loader/runtime", "loader/dll", "sdk/sdk", "loader/testmod", "loader/patch", "loader/patch/tests/fixtures/anchor-stub", "loader/dll/tests/fixtures/echo-mod", "ui/kit", "ui/gen", "ui/rules", "ui/studio", "i18n/runtime", "i18n/tool"]
 
 [workspace.package]
-version = "0.1.0"
+version = "26.60.0"
 edition = "2024"
 rust-version = "1.98"
 authors = ["Charles R. Portwood II"]

@@ -1,5 +1,0 @@
-[env]
-CARGO_BUILD_JOBS = "8"
-NEXTEST_TEST_THREADS = "8"
-
-DEJAVU_REPO = "../dejavu-amml"

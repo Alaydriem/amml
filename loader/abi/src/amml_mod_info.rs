@@ -5,19 +5,23 @@ use crate::AmmlStr;
 /// `size` is `size_of::<AmmlModInfo>()` of the mod build. `api_version` is the lowest
 /// `AmmlApi::version` the mod accepts; the loader refuses a value above its own version.
 ///
-/// `name` is owned by the mod and stays valid until `amml_mod_unload` returns; normally it is a
-/// static string.
+/// `name` and `namespace` are owned by the mod and stay valid until `amml_mod_unload` returns;
+/// normally they are static strings. The mod id is `@<namespace>/<name>`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct AmmlModInfo {
     pub size: u32,
     pub api_version: u32,
     pub name: AmmlStr,
+    pub namespace: AmmlStr,
 }
 
 impl AmmlModInfo {
     /// `size` of a v1 info block. A literal, so it keeps its meaning when a later version adds fields.
     pub const SIZE_V1: u32 = 24;
+
+    /// `size` of a v2 info block: v1 plus `namespace`.
+    pub const SIZE_V2: u32 = 40;
 
     /// Reads `(size, api_version)` through a raw pointer, touching only the two leading fields.
     /// Returns `None` for a null pointer.
@@ -39,10 +43,10 @@ impl AmmlModInfo {
     }
 
     /// Whether a loader speaking `loader_version` can serve this mod: the mod asks for no newer
-    /// API than the loader has, and its info block holds every v1 field.
+    /// API than the loader has, and its info block holds every v2 field.
     pub fn accepted_by(&self, loader_version: u32) -> bool {
-        self.api_version <= loader_version && self.size >= Self::SIZE_V1
+        self.api_version <= loader_version && self.size >= Self::SIZE_V2
     }
 }
 
-const _: () = assert!(core::mem::size_of::<AmmlModInfo>() == AmmlModInfo::SIZE_V1 as usize);
+const _: () = assert!(core::mem::size_of::<AmmlModInfo>() == AmmlModInfo::SIZE_V2 as usize);

@@ -2,17 +2,19 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use amml_runtime::{ModRegistry, ModSpec};
+use crate::LoaderLog;
+use amml_runtime::ModRegistry;
 use curia::{
     DEFAULT_FILE_OPEN_STRATEGY, DEFAULT_TIMEZONE_STRATEGY, FileSink, Level, LineFormatter, LogEvent, RotationStrategy,
     Sink, SinkError,
 };
 
-/// Sends each log line to a file: lines with a string field `module` go to `<module>.log`, every
-/// other line goes to `loader.log`.
+/// Sends each log line to a file: lines with a string field `module` that names a mod registered
+/// with `LoaderLog::register_mod` go to `<dir>/@<namespace>/<name>.log`, every other line goes to
+/// `loader.log`. No path is built from an unregistered module string.
 ///
 /// A module file is opened on its first line. At most `ModRegistry::MAX_MODS` module files exist;
-/// a module name past that, or one that is not a plain file name, writes to `loader.log`.
+/// a module past that writes to `loader.log`.
 pub struct LogRouter {
     dir: PathBuf,
     level: Level,
@@ -55,9 +57,9 @@ impl LogRouter {
     }
 
     fn emit_to_module(&self, module: &str, event: &LogEvent) -> bool {
-        if !ModSpec::is_valid_name(module) {
+        let Some((namespace, name)) = LoaderLog::registered(module) else {
             return false;
-        }
+        };
         // Windows file names are case-insensitive, so `Echo` and `echo` share one file and one sink.
         let module = module.to_ascii_lowercase();
         let module = module.as_str();
@@ -68,7 +70,11 @@ impl LogRouter {
             if modules.len() >= ModRegistry::MAX_MODS {
                 return false;
             }
-            let Ok(sink) = Self::open(&self.dir, module, self.level) else {
+            let folder = self.dir.join(format!("@{namespace}"));
+            if std::fs::create_dir_all(&folder).is_err() {
+                return false;
+            }
+            let Ok(sink) = Self::open(&folder, &name, self.level) else {
                 return false;
             };
             modules.insert(module.to_string(), sink);

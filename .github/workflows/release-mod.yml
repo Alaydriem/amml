@@ -1,0 +1,188 @@
+name: Release mod
+
+# Reusable release workflow for one AMML mod repo. A mod repo calls it from its own release.yml.
+# The caller needs `permissions: contents: write`.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Release version, Cargo semver; it is also the tag (no v)
+        required: true
+        type: string
+      path:
+        description: Folder name of the mod repo (the checkout folder)
+        required: true
+        type: string
+      namespace:
+        description: Mod namespace, for dist/@<namespace>/<name>
+        required: true
+        type: string
+      name:
+        description: Mod name, for dist/@<namespace>/<name>
+        required: true
+        type: string
+      package_task:
+        description: mise task that writes dist/@<namespace>/<name>
+        required: false
+        type: string
+        default: package
+      modmanager:
+        description: Check out alaydriem/amml-modmanager next to the repo
+        required: false
+        type: boolean
+        default: true
+      extra_task:
+        description: Optional mise task that runs after the tests and before the package task
+        required: false
+        type: string
+        default: ""
+      amml_ref:
+        description: amml branch, tag or commit to build against
+        required: false
+        type: string
+        default: master
+      modmanager_ref:
+        description: amml-modmanager branch, tag or commit; empty means its default branch
+        required: false
+        type: string
+        default: ""
+      descriptor:
+        description: Path from the repo root to descriptor.hcl; empty means none
+        required: false
+        type: string
+        default: ""
+
+# The workspace depends on ../amml (and ../modmanager-amml) by relative path, so the mod repo is checked out into a
+# subfolder and the sibling repos next to it.
+env:
+  MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/${{ inputs.path }}
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.path }}
+    steps:
+      - name: Check the version
+        working-directory: ${{ github.workspace }}
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          re='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$'
+          if ! [[ "$VERSION" =~ $re ]]; then
+            echo "::error::version '$VERSION' is not Cargo semver (for example 26.60.5)"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          path: ${{ inputs.path }}
+
+      - uses: actions/checkout@v7
+        with:
+          repository: alaydriem/amml
+          ref: ${{ inputs.amml_ref }}
+          path: amml
+
+      - uses: actions/checkout@v7
+        if: ${{ inputs.modmanager }}
+        with:
+          repository: alaydriem/amml-modmanager
+          ref: ${{ inputs.modmanager_ref }}
+          path: modmanager-amml
+
+      - name: Check that the tag is free
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          if git ls-remote --exit-code --tags origin "refs/tags/$VERSION" >/dev/null; then
+            echo "::error::tag $VERSION already exists"
+            exit 1
+          fi
+
+      - name: Write the version
+        env:
+          VERSION: ${{ inputs.version }}
+          DESCRIPTOR: ${{ inputs.descriptor }}
+        run: |
+          set -eu
+          sed -i "/^\[workspace\.package\]/,/^\[/ s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
+          if ! sed -n '/^\[workspace\.package\]/,/^\[/p' Cargo.toml | grep -qF "version = \"$VERSION\""; then
+            echo "::error::Cargo.toml has no version line in [workspace.package]"
+            exit 1
+          fi
+          if [ -n "$DESCRIPTOR" ]; then
+            sed -E -i "s/^([[:space:]]*version[[:space:]]*=[[:space:]]*)\".*\"/\1\"$VERSION\"/" "$DESCRIPTOR"
+            if ! grep -qE "^[[:space:]]*version[[:space:]]*=[[:space:]]*\"$VERSION\"" "$DESCRIPTOR"; then
+              echo "::error::$DESCRIPTOR has no version line"
+              exit 1
+            fi
+          fi
+
+      - uses: jdx/mise-action@v2
+        with:
+          working_directory: ${{ inputs.path }}
+
+      - uses: taiki-e/install-action@nextest
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ${{ inputs.path }}/target
+          key: cargo-${{ hashFiles(format('{0}/Cargo.lock', inputs.path), format('{0}/rust-toolchain.toml', inputs.path)) }}
+          restore-keys: |
+            cargo-
+
+      - run: mise run check
+      - run: mise run test
+
+      - name: Run the extra task
+        if: ${{ inputs.extra_task != '' }}
+        env:
+          EXTRA_TASK: ${{ inputs.extra_task }}
+        run: mise run "$EXTRA_TASK"
+
+      - name: Package
+        env:
+          PACKAGE_TASK: ${{ inputs.package_task }}
+        run: mise run "$PACKAGE_TASK"
+
+      - name: Zip and checksum
+        env:
+          VERSION: ${{ inputs.version }}
+          NAMESPACE: ${{ inputs.namespace }}
+          MOD_NAME: ${{ inputs.name }}
+        run: |
+          set -eu
+          zip="$MOD_NAME-$VERSION-windows-x64.zip"
+          rm -f "$zip" SHA256SUMS.txt
+          test -d "dist/@$NAMESPACE/$MOD_NAME"
+          (cd dist && 7z a -tzip "../$zip" -- "@$NAMESPACE/$MOD_NAME")
+          sha256sum "$zip" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          MOD_NAME: ${{ inputs.name }}
+          MODMANAGER: ${{ inputs.modmanager }}
+        run: |
+          set -eu
+          notes="Built against amml $(git -C ../amml rev-parse HEAD)"
+          if [ "$MODMANAGER" = "true" ]; then
+            notes="$notes and amml-modmanager $(git -C ../modmanager-amml rev-parse HEAD)"
+          fi
+          gh release create "$VERSION" "$MOD_NAME-$VERSION-windows-x64.zip" SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "$MOD_NAME $VERSION" \
+            --latest=true \
+            --generate-notes \
+            --notes "$notes"

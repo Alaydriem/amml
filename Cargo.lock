@@ -56,11 +56,11 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
 name = "amml-abi"
-version = "0.1.0"
+version = "26.60.0"
 
 [[package]]
 name = "amml-data"
-version = "0.1.0"
+version = "26.60.0"
 dependencies = [
  "hcl-rs",
  "pelite",
@@ -71,7 +71,7 @@ dependencies = [
 
 [[package]]
 name = "amml-derive"
-version = "0.1.0"
+version = "26.60.0"
 dependencies = [
  "amml-data",
  "amml-derive",
@@ -87,7 +87,7 @@ dependencies = [
 
 [[package]]
 name = "amml-game"
-version = "0.1.0"
+version = "26.60.0"
 dependencies = [
  "amml-msvc",
  "amml-sdk",
@@ -96,7 +96,7 @@ dependencies = [
 
 [[package]]
 name = "amml-i18n"
-version = "0.1.0"
+version = "26.60.0"
 dependencies = [
  "curia",
  "icu_locale_core",
@@ -110,7 +110,7 @@ dependencies = [
 
 [[package]]
 name = "amml-i18n-tool"
-version = "0.1.0"
+version = "26.60.0"
 dependencies = [
  "amml-i18n",
  "icu_locale_core",
@@ -123,7 +123,7 @@ dependencies = [
 
 [[package]]
 name = "amml-loader"
-version = "0.1.0"
+version = "26.60.0"
 dependencies = [
  "amml-abi",
  "amml-data",
@@ -141,7 +141,7 @@ dependencies = [
 
 [[package]]
 name = "amml-msvc"
-version = "0.1.0"
+version = "26.60.0"
 dependencies = [
  "amml-msvc-fixture",
  "thiserror 2.0.21",
@@ -149,14 +149,14 @@ dependencies = [
 
 [[package]]
 name = "amml-msvc-fixture"
-version = "0.1.0"
+version = "26.60.0"
 dependencies = [
  "cc",
 ]
 
 [[package]]
 name = "amml-patch"
-version = "0.1.0"
+version = "26.60.0"
 dependencies = [
  "amml-data",
  "clap",
@@ -168,8 +168,9 @@ dependencies = [
 
 [[package]]
 name = "amml-runtime"
-version = "0.1.0"
+version = "26.60.0"
 dependencies = [
+ "amml-abi",
  "amml-data",
  "amml-derive",
  "hcl-rs",
@@ -181,7 +182,7 @@ dependencies = [
 
 [[package]]
 name = "amml-sdk"
-version = "0.1.0"
+version = "26.60.0"
 dependencies = [
  "amml-abi",
  "thiserror 2.0.21",
@@ -189,7 +190,7 @@ dependencies = [
 
 [[package]]
 name = "amml-studio-ui"
-version = "0.1.0"
+version = "26.60.0"
 dependencies = [
  "amml-i18n",
  "amml-i18n-tool",
@@ -205,7 +206,7 @@ dependencies = [
 
 [[package]]
 name = "amml-testmod"
-version = "0.1.0"
+version = "26.60.0"
 dependencies = [
  "amml-game",
  "amml-msvc",
@@ -215,7 +216,7 @@ dependencies = [
 
 [[package]]
 name = "amml-ui"
-version = "0.1.0"
+version = "26.60.0"
 dependencies = [
  "amml-i18n",
  "amml-i18n-tool",
@@ -233,7 +234,7 @@ dependencies = [
 
 [[package]]
 name = "amml-ui-gen"
-version = "0.1.0"
+version = "26.60.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -243,7 +244,7 @@ dependencies = [
 
 [[package]]
 name = "amml-ui-rules"
-version = "0.1.0"
+version = "26.60.0"
 dependencies = [
  "tempfile",
 ]

@@ -11,6 +11,10 @@ pub enum ModLoadError {
     MissingExport(&'static str),
     #[error("the mod needs API version {needs} and this loader has version {loader}")]
     VersionMismatch { needs: u32, loader: u32 },
+    #[error("the mod was built for an older loader (API {found}), this loader needs API 2")]
+    OlderMod { found: u32 },
+    #[error("the manifest says `{manifest}` but the mod reports `{reported}`")]
+    IdMismatch { manifest: String, reported: String },
     #[error("`{call}` returned status {status:?}")]
     Call { call: &'static str, status: AmmlStatus },
     #[error("`amml_mod_load` returned OK but left the info block empty")]
@@ -25,11 +29,14 @@ impl ModLoadError {
     /// The status that describes this error.
     pub fn status(&self) -> AmmlStatus {
         match self {
-            Self::VersionMismatch { .. } => AmmlStatus::VERSION_MISMATCH,
+            Self::VersionMismatch { .. } | Self::OlderMod { .. } => AmmlStatus::VERSION_MISMATCH,
             Self::Call { status, .. } => *status,
-            Self::Library { .. } | Self::MissingExport(_) | Self::EmptyInfo | Self::PathNotUtf8 | Self::TooMany(_) => {
-                AmmlStatus::FAILED
-            }
+            Self::Library { .. }
+            | Self::MissingExport(_)
+            | Self::IdMismatch { .. }
+            | Self::EmptyInfo
+            | Self::PathNotUtf8
+            | Self::TooMany(_) => AmmlStatus::FAILED,
         }
     }
 }

@@ -189,7 +189,7 @@ impl LoaderState {
             return Err(AmmlStatus::INVALID_ARGUMENT);
         }
         let mods = self.lock_mods();
-        let record = mods.iter().find(|record| record.name == module).ok_or(AmmlStatus::INVALID_ARGUMENT)?;
+        let record = mods.iter().find(|record| record.id == module).ok_or(AmmlStatus::INVALID_ARGUMENT)?;
         Ok(AmmlStr::from_str(&record.dirs[index]))
     }
 }

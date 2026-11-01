@@ -120,14 +120,14 @@ echo "packaged into $target"
 '''
 
 [tasks.package-testmod]
-description = "Builds release amml_testmod.dll and copies it with its amml.hcl into <game>/mods/amml/amml-testmod: --game, default %LOCALAPPDATA%/amml/instances/1.26.51.01-ll"
+description = "Builds release amml_testmod.dll and copies it with its amml.hcl into <game>/mods/amml/@amml/testmod: --game, default %LOCALAPPDATA%/amml/instances/1.26.51.01-ll"
 dir = "{{config_root}}"
 shell = "bash -c"
 usage = 'flag "--game <game>" help="The game folder that holds Minecraft.Windows.exe"'
 run = '''
 set -e
 game="${usage_game:-$LOCALAPPDATA/amml/instances/1.26.51.01-ll}"
-target="$game/mods/amml/amml-testmod"
+target="$game/mods/amml/@amml/testmod"
 cargo build -p amml-testmod --release
 mkdir -p "$target"
 cp target/release/amml_testmod.dll "$target/amml_testmod.dll"
@@ -148,7 +148,7 @@ config="$game/mods/amml-loader/amml.hcl"
 build_mods ""
 mise run package-ll --game "$game"
 install_mods "$game/mods/amml"
-testmod="$game/mods/amml/amml-testmod"
+testmod="$game/mods/amml/@amml/testmod"
 testmod_existed=""
 if [ -d "$testmod" ]; then testmod_existed="yes"; fi
 mise run package-testmod --game "$game"
@@ -159,7 +159,7 @@ printf 'grade = true\n' > "$config"
 mkdir -p "$logs"
 . scripts/ingame-common.sh
 loader_start=$(size_of "$logs/loader.log")
-testmod_start=$(size_of "$logs/amml-testmod.log")
+testmod_start=$(size_of "$logs/@amml/testmod.log")
 . scripts/game-pid.sh
 before=" $(echo $(game_pids)) "
 game_pid=""
@@ -173,7 +173,7 @@ launched="yes"
 started=$(date +%s)
 outcome="timeout"
 while [ $(( $(date +%s) - started )) -lt 180 ]; do
-  if since "$logs/amml-testmod.log" "$testmod_start" | grep -q "ticks=100"; then outcome="ticks"; break; fi
+  if since "$logs/@amml/testmod.log" "$testmod_start" | grep -q "ticks=100"; then outcome="ticks"; break; fi
   if [ -z "$game_pid" ]; then find_game_pid "$game"; elif ! pid_alive; then outcome="game exited"; game_pid=""; break; fi
   if [ -z "$game_pid" ] && [ $(( $(date +%s) - started )) -ge 30 ]; then outcome="game did not start"; break; fi
   sleep 2
@@ -182,11 +182,11 @@ echo "waited $(( $(date +%s) - started )) s: $outcome"
 end_game
 echo "--- loader.log (this run)"
 since "$logs/loader.log" "$loader_start"
-echo "--- amml-testmod.log (this run)"
-since "$logs/amml-testmod.log" "$testmod_start"
+echo "--- @amml/testmod.log (this run)"
+since "$logs/@amml/testmod.log" "$testmod_start"
 echo "--- summary"
 since "$logs/loader.log" "$loader_start" | grep -E "resolved [0-9]+/[0-9]+|game heap|grade: " || true
-since "$logs/amml-testmod.log" "$testmod_start" | grep "ticks=" || true
+since "$logs/@amml/testmod.log" "$testmod_start" | grep "ticks=" || true
 heap="no"
 if since "$logs/loader.log" "$loader_start" | grep -q "game heap ok"; then heap="yes"; fi
 echo "game heap ok: $heap"
@@ -248,7 +248,7 @@ mise run package-testmod --game "$instance"
 mkdir -p "$logs"
 . scripts/ingame-common.sh
 loader_start=$(size_of "$logs/loader.log")
-testmod_start=$(size_of "$logs/amml-testmod.log")
+testmod_start=$(size_of "$logs/@amml/testmod.log")
 . scripts/game-pid.sh
 before=" $(echo $(game_pids)) "
 game_pid=""
@@ -260,7 +260,7 @@ launched="yes"
 started=$(date +%s)
 outcome="timeout"
 while [ $(( $(date +%s) - started )) -lt 180 ]; do
-  if since "$logs/amml-testmod.log" "$testmod_start" | grep -q "ticks=100"; then outcome="ticks"; break; fi
+  if since "$logs/@amml/testmod.log" "$testmod_start" | grep -q "ticks=100"; then outcome="ticks"; break; fi
   if [ -z "$game_pid" ]; then find_game_pid "$instance"; elif ! pid_alive; then outcome="game exited"; game_pid=""; break; fi
   if [ -z "$game_pid" ] && [ $(( $(date +%s) - started )) -ge 30 ]; then outcome="game did not start"; break; fi
   sleep 2
@@ -269,11 +269,11 @@ echo "waited $(( $(date +%s) - started )) s: $outcome"
 end_game
 echo "--- loader.log (this run)"
 since "$logs/loader.log" "$loader_start"
-echo "--- amml-testmod.log (this run)"
-since "$logs/amml-testmod.log" "$testmod_start"
+echo "--- @amml/testmod.log (this run)"
+since "$logs/@amml/testmod.log" "$testmod_start"
 echo "--- summary"
 since "$logs/loader.log" "$loader_start" | grep -E "resolved [0-9]+/[0-9]+" || true
-since "$logs/amml-testmod.log" "$testmod_start" | grep "ticks=" || true
+since "$logs/@amml/testmod.log" "$testmod_start" | grep "ticks=" || true
 [ "$outcome" = "ticks" ]
 '''
 
@@ -1270,3 +1270,62 @@ flag "--hold <seconds>" help="Keep the game running this long after the automate
 flag "--with <mod>" help="One more mod repo beside amml to package and keep installed with peek, for a check of the two together: freecam"
 '''
 run = "bash scripts/ingame-peek.sh"
+
+[tasks.install-game]
+description = "Builds release amml.dll and amml-patch, patches <game>/Minecraft.Windows.exe from Minecraft.Windows.exe.bak, and copies amml.dll and the recipes next to it: --game, default %LOCALAPPDATA%/amml/instances/1.26.60.05"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = 'flag "--game <game>" help="The standalone game folder that holds Minecraft.Windows.exe.bak"'
+run = '''
+set -e
+game="${usage_game:-$LOCALAPPDATA/amml/instances/1.26.60.05}"
+cargo build --release -p amml-loader -p amml-patch
+if [ ! -f "$game/Minecraft.Windows.exe.bak" ]; then
+  echo "missing $game/Minecraft.Windows.exe.bak" >&2
+  exit 1
+fi
+target/release/amml-patch.exe --input "$game/Minecraft.Windows.exe.bak" --output "$game/Minecraft.Windows.exe"
+cp target/release/amml.dll "$game/amml.dll"
+rm -rf "$game/amml/recipes"
+mkdir -p "$game/amml/cache" "$game/mods/amml"
+cp -r recipes "$game/amml/recipes"
+echo "installed loader into $game"
+'''
+
+[tasks.install-mods]
+description = "Builds the manager and every mod in its own repo (../<repo>) and copies each dist/@<ns>/<name>/ into <game>/mods/amml/@<ns>/<name>/ without deleting what is there (config/ stays); prints built or failed per repo and exits 1 when any failed: --game, default %LOCALAPPDATA%/amml/instances/1.26.60.05"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = 'flag "--game <game>" help="The standalone game folder"'
+run = '''
+game="${usage_game:-$LOCALAPPDATA/amml/instances/1.26.60.05}"
+failed=0
+results=""
+for row in \
+  "modmanager-amml build-mod amml modmanager" \
+  "zoom build-mod alaydriem zoom" \
+  "minimap package alaydriem minimap" \
+  "levels package alaydriem levels" \
+  "freecam package alaydriem freecam" \
+  "stratum package alaydriem stratum" \
+  "dejavu-amml package alaydriem dejavu" \
+  "heads package alaydriem heads" \
+  "peek package alaydriem peek" \
+  "toggles build-mod alaydriem toggles"; do
+  set -- $row
+  repo="../$1"; task="$2"; ns="$3"; name="$4"
+  dest="$game/mods/amml/@$ns/$name"
+  if (cd "$repo" && mise run "$task") && [ -d "$repo/dist/@$ns/$name" ]; then
+    mkdir -p "$dest"
+    cp -r "$repo/dist/@$ns/$name/." "$dest/"
+    results="$results
+built  @$ns/$name -> $dest"
+  else
+    failed=1
+    results="$results
+failed @$ns/$name ($1 $task)"
+  fi
+done
+echo "$results"
+exit $failed
+'''

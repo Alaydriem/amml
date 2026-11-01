@@ -1,5 +1,6 @@
 use std::ffi::c_void;
 
+use amml::LoaderLog;
 use amml_abi::{AmmlLogLevel, AmmlStatus, AmmlStr};
 
 use crate::support::{Harness, LogFile};
@@ -9,6 +10,7 @@ fn invalid_calls_return_a_status_and_an_unknown_log_level_is_info() {
     let harness = Harness::start();
     // SAFETY: the table lives for the process and has the full v1 size.
     let api = unsafe { &*harness.state.api() };
+    LoaderLog::register_mod("@acme/probe", "acme", "probe");
 
     // SAFETY: each call passes live views; the null pointers are the cases under test.
     unsafe {
@@ -37,11 +39,11 @@ fn invalid_calls_return_a_status_and_an_unknown_log_level_is_info() {
         let mut dir = AmmlStr::EMPTY;
         assert_eq!((api.mod_dir)(AmmlStr::from_str("nobody"), 0, &mut dir), AmmlStatus::INVALID_ARGUMENT);
         assert_eq!((api.mod_dir)(AmmlStr::from_str("nobody"), 9, &mut dir), AmmlStatus::INVALID_ARGUMENT);
-        (api.log)(AmmlStr::from_str("probe"), AmmlLogLevel(99), AmmlStr::from_str("level ninety-nine"));
+        (api.log)(AmmlStr::from_str("@acme/probe"), AmmlLogLevel(99), AmmlStr::from_str("level ninety-nine"));
         (api.log)(AmmlStr::from_str("../escape"), AmmlLogLevel::WARN, AmmlStr::from_str("odd module name"));
     }
 
-    let probe = LogFile::wait_for(&harness.logs().join("probe.log"), "level ninety-nine");
+    let probe = LogFile::wait_for(&harness.logs().join("@acme").join("probe.log"), "level ninety-nine");
     assert!(probe.contains("INFO  level ninety-nine"), "{probe}");
     let loader = LogFile::wait_for(&harness.logs().join("loader.log"), "odd module name");
     assert!(loader.contains("WARN  odd module name"), "{loader}");
@@ -53,16 +55,17 @@ fn module_names_that_differ_only_by_case_share_one_log_file() {
     let harness = Harness::start();
     // SAFETY: the table lives for the process and has the full v1 size.
     let api = unsafe { &*harness.state.api() };
+    LoaderLog::register_mod("@acme/echo", "acme", "echo");
 
     // SAFETY: each call passes live views.
     unsafe {
-        (api.log)(AmmlStr::from_str("Echo"), AmmlLogLevel::INFO, AmmlStr::from_str("upper case line"));
-        (api.log)(AmmlStr::from_str("echo"), AmmlLogLevel::INFO, AmmlStr::from_str("lower case line"));
+        (api.log)(AmmlStr::from_str("@Acme/Echo"), AmmlLogLevel::INFO, AmmlStr::from_str("upper case line"));
+        (api.log)(AmmlStr::from_str("@acme/echo"), AmmlLogLevel::INFO, AmmlStr::from_str("lower case line"));
     }
 
-    let text = LogFile::wait_for(&harness.logs().join("echo.log"), "lower case line");
+    let text = LogFile::wait_for(&harness.logs().join("@acme").join("echo.log"), "lower case line");
     assert!(text.contains("upper case line") && text.contains("lower case line"), "{text}");
-    let names: Vec<String> = std::fs::read_dir(harness.logs())
+    let names: Vec<String> = std::fs::read_dir(harness.logs().join("@acme"))
         .unwrap()
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
         .filter(|name| name.eq_ignore_ascii_case("echo.log"))

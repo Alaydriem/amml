@@ -1,14 +1,22 @@
-use amml_abi::AMML_API_VERSION;
+use amml_abi::{AMML_API_VERSION, ModId};
 
 use crate::{Api, SdkError};
 
 /// A mod. Implement it on a type and give the type to `amml_mod!`, which generates the four
 /// exports the loader calls and runs each callback inside `catch_unwind`.
 pub trait AmmlMod {
-    /// The mod name; it must equal `name` in `amml.hcl` because it names the mod log file.
+    /// The mod namespace; it must equal `namespace` in `amml.hcl`.
+    const NAMESPACE: &'static str;
+    /// The mod name; it must equal `name` in `amml.hcl`. With the namespace it names the mod
+    /// folder and the mod log file.
     const NAME: &'static str;
     /// The lowest loader API version the mod accepts.
     const API_VERSION: u32 = AMML_API_VERSION;
+
+    /// The mod id, `@<namespace>/<name>`: the module string for `Logger` and `ModDirs`.
+    fn id() -> String {
+        ModId::format(Self::NAMESPACE, Self::NAME)
+    }
 
     /// Runs under the loader's load phase. Read entries here; install hooks in `enable`.
     ///

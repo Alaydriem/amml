@@ -1,9 +1,10 @@
-use amml_abi::{AMML_API_VERSION, AmmlModInfo, AmmlStatus, AmmlStr};
+use amml_abi::{AMML_API_VERSION, AmmlModInfo, AmmlStatus, AmmlStr, ModId};
 use amml_data::EntryId;
 use amml_runtime::{ModRegistry, ModSpec};
 
 use crate::{
-    Boundary, Callback, CurrentMod, Library, LoaderState, ModExports, ModLoadError, ModPhase, ModRecord, ModReport,
+    Boundary, Callback, CurrentMod, Library, LoaderLog, LoaderState, ModExports, ModLoadError, ModPhase, ModRecord,
+    ModReport,
 };
 
 /// Loads, enables, disables and unloads mod DLLs.
@@ -30,13 +31,13 @@ impl ModLoader {
     /// Calls `amml_mod_enable` on every loaded mod, in load order.
     pub fn enable_all(&self) -> Vec<ModReport> {
         let mut reports = Vec::new();
-        for (index, name) in self.names_in(ModPhase::Loaded) {
+        for (index, id) in self.names_in(ModPhase::Loaded) {
             let report = match self.call(index, Callback::Enable, |exports| exports.enable) {
                 Ok(()) => {
                     self.set_phase(index, ModPhase::Enabled);
-                    ModReport { name, phase: ModPhase::Enabled, error: None }
+                    ModReport { id, phase: ModPhase::Enabled, error: None }
                 }
-                Err(error) => self.fail(index, name, ModPhase::Failed, error),
+                Err(error) => self.fail(index, id, ModPhase::Failed, error),
             };
             reports.push(report);
         }
@@ -45,14 +46,14 @@ impl ModLoader {
 
     /// Calls `amml_mod_disable` on every enabled mod, in reverse load order.
     pub fn disable_all(&self) {
-        for (index, name) in self.names_in(ModPhase::Enabled).into_iter().rev() {
+        for (index, id) in self.names_in(ModPhase::Enabled).into_iter().rev() {
             let outcome = self.call(index, Callback::Disable, |exports| exports.disable);
             // A disabled mod's detours must stop running, whatever `amml_mod_disable` returned.
             self.state.remove_hooks_of(index);
             match outcome {
                 Ok(()) => self.set_phase(index, ModPhase::Disabled),
                 Err(error) => {
-                    self.fail(index, name, ModPhase::Failed, error);
+                    self.fail(index, id, ModPhase::Failed, error);
                 }
             }
         }
@@ -66,39 +67,40 @@ impl ModLoader {
             targets.extend(self.names_in(phase));
         }
         targets.sort();
-        for (index, name) in targets.into_iter().rev() {
+        for (index, id) in targets.into_iter().rev() {
             self.state.remove_hooks_of(index);
             if let Err(error) = self.call(index, Callback::Unload, |exports| exports.unload) {
-                curia::warn!("a mod failed to unload", { mod_name: name, error: error.to_string() });
+                curia::warn!("a mod failed to unload", { mod_name: id, error: error.to_string() });
             }
             self.set_phase(index, ModPhase::Unloaded);
         }
     }
 
-    /// The name and phase of every mod, in load order.
+    /// The id and phase of every mod, in load order.
     pub fn phases(&self) -> Vec<(String, ModPhase)> {
-        self.state.lock_mods().iter().map(|record| (record.name.clone(), record.phase)).collect()
+        self.state.lock_mods().iter().map(|record| (record.id.clone(), record.phase)).collect()
     }
 
     fn load_one(&self, spec: &ModSpec) -> ModReport {
+        LoaderLog::register_mod(&spec.id(), &spec.namespace, &spec.name);
         let outcome = self.try_load(spec);
         self.log_coverage(spec);
         match outcome {
             Ok(_) => {
-                curia::info!("mod loaded", { mod_name: spec.name.as_str() });
-                ModReport { name: spec.name.clone(), phase: ModPhase::Loaded, error: None }
+                curia::info!("mod loaded", { mod_name: spec.id() });
+                ModReport { id: spec.id(), phase: ModPhase::Loaded, error: None }
             }
-            Err((Some(index), error)) => self.fail(index, spec.name.clone(), Self::phase_for(&error), error),
+            Err((Some(index), error)) => self.fail(index, spec.id(), Self::phase_for(&error), error),
             Err((None, error)) => {
-                curia::error!("mod could not be loaded", { mod_name: spec.name.as_str(), error: error.to_string() });
-                ModReport { name: spec.name.clone(), phase: Self::phase_for(&error), error: Some(error) }
+                curia::error!("mod could not be loaded", { mod_name: spec.id(), error: error.to_string() });
+                ModReport { id: spec.id(), phase: Self::phase_for(&error), error: Some(error) }
             }
         }
     }
 
     fn phase_for(error: &ModLoadError) -> ModPhase {
         match error {
-            ModLoadError::VersionMismatch { .. } => ModPhase::Refused,
+            ModLoadError::VersionMismatch { .. } | ModLoadError::OlderMod { .. } => ModPhase::Refused,
             ModLoadError::Call { status, .. } if *status == AmmlStatus::VERSION_MISMATCH => ModPhase::Refused,
             _ => ModPhase::Failed,
         }
@@ -120,7 +122,7 @@ impl ModLoader {
                 return Err((None, ModLoadError::TooMany(mods.len())));
             }
             mods.push(ModRecord {
-                name: spec.name.clone(),
+                id: spec.id(),
                 _library: library,
                 exports,
                 phase: ModPhase::Loaded,
@@ -134,7 +136,7 @@ impl ModLoader {
     }
 
     fn call_load(&self, index: usize, spec: &ModSpec) -> Result<(), ModLoadError> {
-        let mut info = AmmlModInfo { size: 0, api_version: 0, name: AmmlStr::EMPTY };
+        let mut info = AmmlModInfo { size: 0, api_version: 0, name: AmmlStr::EMPTY, namespace: AmmlStr::EMPTY };
         let info_ptr = &raw mut info;
         let exports = self.exports_of(index)?;
         let api = self.state.api();
@@ -153,24 +155,24 @@ impl ModLoader {
         if size == 0 && api_version == 0 {
             return Err(ModLoadError::EmptyInfo);
         }
-        let mismatch = ModLoadError::VersionMismatch { needs: api_version, loader: AMML_API_VERSION };
-        if size < AmmlModInfo::SIZE_V1 {
-            return Err(mismatch);
+        if size < AmmlModInfo::SIZE_V2 {
+            return Err(ModLoadError::OlderMod { found: api_version });
         }
-        // SAFETY: the header says the mod wrote a whole v1 block, and `info` is initialized memory.
+        // SAFETY: the header says the mod wrote a whole v2 block, and `info` is initialized memory.
         let block = unsafe { info_ptr.read() };
         if !block.accepted_by(AMML_API_VERSION) {
-            return Err(mismatch);
+            return Err(ModLoadError::VersionMismatch { needs: api_version, loader: AMML_API_VERSION });
         }
-        // SAFETY: the mod keeps `name` valid until `amml_mod_unload` returns; it is read now.
-        match unsafe { block.name.as_str() } {
-            Ok(name) if name != spec.name => {
-                curia::warn!("the mod reports another name than its manifest", {
-                    manifest: spec.name.as_str(),
-                    reported: name
+        // SAFETY: the mod keeps `name` and `namespace` valid until `amml_mod_unload` returns; they are read now.
+        let (reported_namespace, reported_name) = unsafe { (block.namespace.as_str(), block.name.as_str()) };
+        match (reported_namespace, reported_name) {
+            (Ok(namespace), Ok(name)) if namespace == spec.namespace && name == spec.name => {}
+            (namespace, name) => {
+                return Err(ModLoadError::IdMismatch {
+                    manifest: spec.id(),
+                    reported: ModId::format(namespace.unwrap_or("?"), name.unwrap_or("?")),
                 });
             }
-            _ => {}
         }
         Ok(())
     }
@@ -189,11 +191,11 @@ impl ModLoader {
         if status.is_ok() { Ok(()) } else { Err(ModLoadError::Call { call: callback.export_name(), status }) }
     }
 
-    fn fail(&self, index: usize, name: String, phase: ModPhase, error: ModLoadError) -> ModReport {
-        curia::error!("mod switched off", { mod_name: name.as_str(), error: error.to_string() });
+    fn fail(&self, index: usize, id: String, phase: ModPhase, error: ModLoadError) -> ModReport {
+        curia::error!("mod switched off", { mod_name: id.as_str(), error: error.to_string() });
         self.state.remove_hooks_of(index);
         self.set_phase(index, phase);
-        ModReport { name, phase, error: Some(error) }
+        ModReport { id, phase, error: Some(error) }
     }
 
     fn exports_of(&self, index: usize) -> Result<ModExports, ModLoadError> {
@@ -213,7 +215,7 @@ impl ModLoader {
             .iter()
             .enumerate()
             .filter(|(_, record)| record.phase == phase)
-            .map(|(index, record)| (index, record.name.clone()))
+            .map(|(index, record)| (index, record.id.clone()))
             .collect()
     }
 
@@ -238,14 +240,14 @@ impl ModLoader {
             .collect();
         if missing.is_empty() {
             curia::info!("mod entries", {
-                mod_name: spec.name.as_str(),
+                mod_name: spec.id(),
                 wanted: spec.entries.len(),
                 missing: 0,
                 not_for_this_build: refused
             });
         } else {
             curia::warn!("mod entries did not all resolve", {
-                mod_name: spec.name.as_str(),
+                mod_name: spec.id(),
                 wanted: spec.entries.len(),
                 missing: missing,
                 not_for_this_build: refused
