@@ -1,0 +1,37 @@
+use std::path::Path;
+
+use amml::HostPaths;
+
+#[test]
+fn the_levilamina_layout_hangs_off_the_folder_of_the_exe() {
+    let paths = HostPaths::levilamina(Path::new("C:/game/Minecraft.Windows.exe"));
+
+    assert_eq!(paths.game, Path::new("C:/game"));
+    assert_eq!(paths.loader, Path::new("C:/game/mods/amml-loader"));
+    assert_eq!(paths.recipes, Path::new("C:/game/mods/amml-loader/recipes"));
+    assert_eq!(paths.cache, Path::new("C:/game/mods/amml-loader/cache"));
+    assert_eq!(paths.settings, Path::new("C:/game/mods/amml-loader/amml.hcl"));
+    assert_eq!(paths.logs, Path::new("C:/game/logs/amml"));
+    assert_eq!(paths.mods, Path::new("C:/game/mods/amml"));
+}
+
+#[test]
+fn the_mods_folder_is_not_one_levilamina_scans() {
+    let paths = HostPaths::levilamina(Path::new("C:/game/Minecraft.Windows.exe"));
+
+    assert_ne!(paths.mods, paths.loader);
+    assert!(!paths.mods.starts_with(&paths.loader));
+}
+
+#[test]
+fn the_standalone_layout_keeps_the_loader_files_in_one_amml_folder_beside_the_exe() {
+    let paths = HostPaths::standalone(Path::new("C:/game/Minecraft.Windows.exe"));
+
+    assert_eq!(paths.game, Path::new("C:/game"));
+    assert_eq!(paths.loader, Path::new("C:/game/amml"));
+    assert_eq!(paths.recipes, Path::new("C:/game/amml/recipes"));
+    assert_eq!(paths.cache, Path::new("C:/game/amml/cache"));
+    assert_eq!(paths.settings, Path::new("C:/game/amml/amml.hcl"));
+    assert_eq!(paths.logs, Path::new("C:/game/amml/logs"));
+    assert_eq!(paths.mods, Path::new("C:/game/mods/amml"));
+}

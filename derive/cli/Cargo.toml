@@ -1,0 +1,43 @@
+[package]
+name = "amml-derive"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+autotests = false
+
+[lints]
+workspace = true
+
+[features]
+test-support = []
+
+[lib]
+name = "amml_derive"
+
+[[bin]]
+name = "amml-derive"
+path = "src/main.rs"
+
+[dependencies]
+amml-data = { path = "../data" }
+clap.workspace = true
+hcl-rs.workspace = true
+iced-x86.workspace = true
+memchr.workspace = true
+pelite.workspace = true
+thiserror.workspace = true
+xxhash-rust.workspace = true
+
+[dev-dependencies]
+amml-derive = { path = ".", features = ["test-support"] }
+tempfile.workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"
+
+[[test]]
+name = "game"
+path = "tests/game.rs"

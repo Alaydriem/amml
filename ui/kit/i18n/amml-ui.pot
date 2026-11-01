@@ -1,0 +1,84 @@
+# Messages of the amml-ui domain, written by amml-i18n-tool. Do not edit.
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Domain: amml-ui\n"
+
+msgid "Close"
+msgstr ""
+
+msgid "Dismiss"
+msgstr ""
+
+msgid "Clear search"
+msgstr ""
+
+#. A toast's age when it is less than one second old
+msgid "now"
+msgstr ""
+
+#. A toast's age in whole seconds
+#, python-brace-format
+msgid "{count} s"
+msgid_plural "{count} s"
+msgstr[0] ""
+msgstr[1] ""
+
+#. A chip that stands for the items that do not fit in the row
+#, python-brace-format
+msgid "+{count}"
+msgstr ""
+
+#. Shown in a key chord cell while the key is being captured
+msgid "Press a key"
+msgstr ""
+
+msgid "Esc cancels"
+msgstr ""
+
+#. {name} is the other mod that uses the same key chord
+#, python-brace-format
+msgid "Also bound by {name}"
+msgstr ""
+
+#. {value} is the setting value the game wrote while an edit was open
+#, python-brace-format
+msgid "Changed in game to {value}"
+msgstr ""
+
+msgid "Use #RRGGBB or #RRGGBBAA."
+msgstr ""
+
+msgid "Enter a number"
+msgstr ""
+
+msgid "Cancel"
+msgstr ""
+
+#. The grid placer's tray heading, in upper case; {count} is the number of pieces not on the grid
+#, python-brace-format
+msgid "NOT PLACED · {count}"
+msgstr ""
+
+#. The label of one grid placer cell; {number} counts the cells from 1, row by row
+#, python-brace-format
+msgid "Cell {number}"
+msgstr ""
+
+#. On an empty grid cell while a piece is dragged over it
+msgid "Drop here"
+msgstr ""
+
+#. On the grid cell the keyboard reached while a piece is held
+msgid "Place here"
+msgstr ""
+
+#. On a filled grid cell while another piece is dragged over it; the cell refuses the drop
+msgid "Taken"
+msgstr ""
+
+#. The tooltip of the button that takes a piece off a grid cell
+msgid "Back to the tray"
+msgstr ""

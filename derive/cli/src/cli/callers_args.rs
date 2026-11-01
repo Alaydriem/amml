@@ -1,0 +1,10 @@
+use clap::Args;
+
+use crate::structs::Address;
+
+#[derive(Args, Clone, Debug)]
+pub struct CallersArgs {
+    /// The called address, as an RVA or a VA in hex
+    #[arg(value_parser = Address::parse)]
+    pub rva: Address,
+}

@@ -1,0 +1,8 @@
+/// A `BlockPos` of the game: the world position of a block.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(C)]
+pub struct BlockPos {
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+}

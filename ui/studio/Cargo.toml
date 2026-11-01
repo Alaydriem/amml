@@ -1,0 +1,46 @@
+[package]
+name = "amml-studio-ui"
+description = "Dejavu helpers; to be removed"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+autotests = false
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"
+
+[[example]]
+# not "gallery": amml-ui's gallery example used that name first
+name = "studio_gallery"
+path = "examples/studio_gallery/main.rs"
+required-features = ["gallery"]
+
+[[example]]
+# not "i18n_extract": amml-ui's example of that name would link the same .exe
+name = "studio_i18n_extract"
+path = "examples/studio_i18n_extract.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+egui.workspace = true
+amml-i18n.workspace = true
+amml-ui.workspace = true
+curia.workspace = true
+png = "0.18.1"
+
+[features]
+# The live component pages: one gallery page per Paper artboard, for the gallery example and the snapshot tests
+gallery = ["amml-ui/gallery"]
+
+[dev-dependencies]
+eframe.workspace = true
+egui_kittest = { workspace = true, features = ["snapshot", "wgpu"] }
+amml-i18n-tool = { path = "../../i18n/tool" }
+amml-ui-rules = { path = "../rules" }
+amml-studio-ui = { path = ".", features = ["gallery"] }

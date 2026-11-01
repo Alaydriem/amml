@@ -1,0 +1,294 @@
+{
+  "owners": {
+    "--color-bg-app": "amml-ui",
+    "--color-bg-panel": "amml-ui",
+    "--color-bg-raised": "amml-ui",
+    "--color-bg-field": "amml-ui",
+    "--color-bg-hover": "amml-ui",
+    "--color-bg-active": "amml-ui",
+    "--color-bg-overlay": "amml-ui",
+    "--color-card": "amml-ui",
+    "--color-pill": "amml-ui",
+    "--color-line": "amml-ui",
+    "--color-line-strong": "amml-ui",
+    "--color-line-overlay": "amml-ui",
+    "--color-text": "amml-ui",
+    "--color-text-dim": "amml-ui",
+    "--color-text-faint": "amml-ui",
+    "--color-accent": "amml-ui",
+    "--color-accent-hover": "amml-ui",
+    "--color-accent-press": "amml-ui",
+    "--color-accent-soft": "amml-ui",
+    "--color-success": "amml-ui",
+    "--color-warning": "amml-ui",
+    "--color-warning-soft": "amml-ui",
+    "--color-danger": "amml-ui",
+    "--color-danger-soft": "amml-ui",
+    "--color-axis-x": "amml-ui",
+    "--color-axis-y": "amml-ui",
+    "--color-axis-z": "amml-ui",
+    "--color-shadow": "amml-ui",
+    "--color-dim": "amml-ui",
+    "--color-playhead": "amml-ui",
+    "--color-playhead-hover": "amml-ui",
+    "--color-track-camera": "amml-studio-ui",
+    "--color-track-fov": "amml-studio-ui",
+    "--color-track-time": "amml-studio-ui",
+    "--color-track-weather": "amml-studio-ui",
+    "--color-track-timelapse": "amml-studio-ui",
+    "--color-scene-1": "amml-studio-ui",
+    "--color-scene-2": "amml-studio-ui",
+    "--color-scene-3": "amml-studio-ui",
+    "--color-scene-4": "amml-studio-ui",
+    "--color-scene-5": "amml-studio-ui",
+    "--color-scene-6": "amml-studio-ui",
+    "--color-realm-overworld": "amml-studio-ui",
+    "--color-realm-nether": "amml-studio-ui",
+    "--color-realm-end": "amml-studio-ui",
+    "--color-marker": "amml-studio-ui",
+    "--color-checkpoint": "amml-studio-ui",
+    "--color-status-works": "amml-studio-ui",
+    "--color-status-engine": "amml-studio-ui",
+    "--color-status-planned": "amml-studio-ui",
+    "--color-status-mockup": "amml-studio-ui",
+    "--color-status-missing": "amml-studio-ui",
+    "--color-scene-camera": "amml-studio-ui",
+    "--color-on-accent": "amml-ui",
+    "--color-accent-soft-hover": "amml-ui",
+    "--color-accent-soft-press": "amml-ui",
+    "--color-danger-hover": "amml-ui",
+    "--color-danger-press": "amml-ui",
+    "--color-focus-ring": "amml-ui",
+    "--color-mode-edit": "amml-studio-ui",
+    "--color-mode-preview": "amml-studio-ui",
+    "--color-mode-read-only": "amml-studio-ui",
+    "--color-mode-busy": "amml-studio-ui",
+    "--color-mode-preview-soft": "amml-studio-ui",
+    "--color-selection": "amml-ui",
+    "--color-caret": "amml-ui",
+    "--color-checker-light": "amml-ui",
+    "--color-checker-dark": "amml-ui",
+    "--color-on-picture": "amml-ui",
+    "--color-on-picture-dim": "amml-studio-ui",
+    "--color-picture-strip": "amml-studio-ui",
+    "--color-picture-dim-soft": "amml-studio-ui",
+    "--color-picture-fade": "amml-studio-ui",
+    "--color-name-tag": "amml-studio-ui",
+    "--color-toast": "amml-ui",
+    "--color-rebuild-overlay": "amml-studio-ui",
+    "--color-brand-border": "amml-studio-ui",
+    "--color-path-point": "amml-ui",
+    "--color-path-point-selected": "amml-ui",
+    "--color-knob-ring": "amml-ui",
+    "--font-ui": "amml-ui",
+    "--font-icons": "amml-ui",
+    "--text-caption": "amml-ui",
+    "--text-note": "amml-ui",
+    "--text-help": "amml-ui",
+    "--text-label": "amml-ui",
+    "--text-body": "amml-ui",
+    "--text-title": "amml-ui",
+    "--text-heading": "amml-ui",
+    "--text-icon-small": "amml-ui",
+    "--text-icon": "amml-ui",
+    "--text-micro": "amml-ui",
+    "--text-display": "amml-ui",
+    "--font-weight-regular": "amml-ui",
+    "--font-weight-semibold": "amml-ui",
+    "--tracking-section": "amml-ui",
+    "--leading-micro": "amml-ui",
+    "--leading-caption": "amml-ui",
+    "--leading-note": "amml-ui",
+    "--leading-help": "amml-ui",
+    "--leading-label": "amml-ui",
+    "--leading-body": "amml-ui",
+    "--leading-title": "amml-ui",
+    "--leading-heading": "amml-ui",
+    "--leading-display": "amml-ui",
+    "--opacity-muted": "amml-ui",
+    "--opacity-track": "amml-ui",
+    "--opacity-soft": "amml-ui",
+    "--breakpoint-small": "amml-ui",
+    "--breakpoint-full": "amml-ui",
+    "--container-menu": "amml-ui",
+    "--container-dialog": "amml-ui",
+    "--container-inspector": "amml-studio-ui",
+    "--container-scene-menu": "amml-studio-ui",
+    "--container-rail": "amml-studio-ui",
+    "--spacing-s": "amml-ui",
+    "--spacing-m": "amml-ui",
+    "--spacing-l": "amml-ui",
+    "--spacing-row": "amml-ui",
+    "--spacing-field": "amml-ui",
+    "--spacing-button": "amml-ui",
+    "--spacing-top-bar": "amml-studio-ui",
+    "--spacing-transport": "amml-studio-ui",
+    "--spacing-status-bar": "amml-ui",
+    "--spacing-lane": "amml-ui",
+    "--spacing-focus-gap": "amml-ui",
+    "--spacing-focus-ring": "amml-ui",
+    "--spacing-control-small": "amml-ui",
+    "--spacing-xs": "amml-ui",
+    "--spacing-button-x": "amml-ui",
+    "--spacing-scrollbar": "amml-ui",
+    "--spacing-splitter": "amml-ui",
+    "--spacing-border": "amml-ui",
+    "--spacing-divider": "amml-ui",
+    "--spacing-border-strong": "amml-ui",
+    "--spacing-stroke-curve": "amml-ui",
+    "--spacing-dot": "amml-ui",
+    "--spacing-swatch": "amml-ui",
+    "--spacing-spinner-small": "amml-ui",
+    "--spacing-spinner": "amml-ui",
+    "--spacing-stroke-thin": "amml-ui",
+    "--spacing-indicator": "amml-ui",
+    "--spacing-tile": "amml-ui",
+    "--spacing-tile-large": "amml-ui",
+    "--radius-small": "amml-ui",
+    "--radius-control": "amml-ui",
+    "--radius-panel": "amml-ui",
+    "--radius-full": "amml-ui"
+  },
+  "selectors": [
+    {
+      "crate": "amml-studio-ui",
+      "name": "SceneColor",
+      "variants": [
+        [
+          "Lime",
+          "--color-scene-1"
+        ],
+        [
+          "Pink",
+          "--color-scene-2"
+        ],
+        [
+          "Orchid",
+          "--color-scene-3"
+        ],
+        [
+          "Periwinkle",
+          "--color-scene-4"
+        ],
+        [
+          "Peach",
+          "--color-scene-5"
+        ],
+        [
+          "Sand",
+          "--color-scene-6"
+        ]
+      ]
+    },
+    {
+      "crate": "amml-studio-ui",
+      "name": "RealmColor",
+      "variants": [
+        [
+          "Overworld",
+          "--color-realm-overworld"
+        ],
+        [
+          "Nether",
+          "--color-realm-nether"
+        ],
+        [
+          "End",
+          "--color-realm-end"
+        ]
+      ]
+    },
+    {
+      "crate": "amml-studio-ui",
+      "name": "TrackColor",
+      "variants": [
+        [
+          "Camera",
+          "--color-track-camera"
+        ],
+        [
+          "Fov",
+          "--color-track-fov"
+        ],
+        [
+          "Time",
+          "--color-track-time"
+        ],
+        [
+          "Weather",
+          "--color-track-weather"
+        ],
+        [
+          "Timelapse",
+          "--color-track-timelapse"
+        ]
+      ]
+    },
+    {
+      "crate": "amml-studio-ui",
+      "name": "StatusColor",
+      "variants": [
+        [
+          "Works",
+          "--color-status-works"
+        ],
+        [
+          "Engine",
+          "--color-status-engine"
+        ],
+        [
+          "Planned",
+          "--color-status-planned"
+        ],
+        [
+          "Mockup",
+          "--color-status-mockup"
+        ],
+        [
+          "Missing",
+          "--color-status-missing"
+        ]
+      ]
+    },
+    {
+      "crate": "amml-studio-ui",
+      "name": "ModeColor",
+      "variants": [
+        [
+          "Edit",
+          "--color-mode-edit"
+        ],
+        [
+          "Preview",
+          "--color-mode-preview"
+        ],
+        [
+          "ReadOnly",
+          "--color-mode-read-only"
+        ],
+        [
+          "Busy",
+          "--color-mode-busy"
+        ]
+      ]
+    },
+    {
+      "crate": "amml-ui",
+      "name": "AxisColor",
+      "variants": [
+        [
+          "X",
+          "--color-axis-x"
+        ],
+        [
+          "Y",
+          "--color-axis-y"
+        ],
+        [
+          "Z",
+          "--color-axis-z"
+        ]
+      ]
+    }
+  ]
+}

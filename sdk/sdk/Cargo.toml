@@ -1,0 +1,19 @@
+[package]
+name = "amml-sdk"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+autotests = false
+
+[lints]
+workspace = true
+
+[dependencies]
+amml-abi = { path = "../../loader/abi" }
+thiserror.workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"

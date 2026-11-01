@@ -1,0 +1,5 @@
+{
+  "name": "amml-loader",
+  "entry": "amml.dll",
+  "type": "native"
+}

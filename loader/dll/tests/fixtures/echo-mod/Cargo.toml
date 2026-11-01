@@ -1,0 +1,22 @@
+[package]
+name = "echo-mod"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "echo_mod"
+crate-type = ["cdylib"]
+
+[dependencies]
+amml-sdk = { path = "../../../../../sdk/sdk" }
+
+[features]
+# `amml_mod_enable` panics.
+panic-enable = []
+# The mod asks for an API version the loader does not have.
+newer-api = []
+# `amml_mod_enable` hooks `Echo.target`; `amml_mod_disable` tries a second hook and logs the status.
+hook-target = []
+# `amml_mod_enable` tries to remove hook handle 1 and logs the status.
+steal-hook = []

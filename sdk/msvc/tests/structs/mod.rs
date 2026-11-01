@@ -1,0 +1,11 @@
+mod deque;
+mod function_ref;
+mod heap;
+mod msvc_function;
+mod msvc_map;
+mod optional;
+mod shared_ptr;
+mod string;
+mod variant;
+mod vec;
+mod vtable;

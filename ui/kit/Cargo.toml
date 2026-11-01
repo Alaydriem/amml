@@ -1,0 +1,42 @@
+[package]
+name = "amml-ui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+autotests = false
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"
+
+[[example]]
+# not "gallery": amml-studio-ui has an example of that name, and both would link target/*/examples/gallery.exe
+name = "widget_gallery"
+path = "examples/gallery/main.rs"
+required-features = ["gallery"]
+
+[lints]
+workspace = true
+
+[dependencies]
+curia.workspace = true
+egui.workspace = true
+amml-i18n.workspace = true
+
+[features]
+# The live widget sheets: one gallery page per Paper sheet, for the gallery example and the snapshot tests
+gallery = []
+
+[dev-dependencies]
+eframe.workspace = true
+egui_kittest = { workspace = true, features = ["snapshot", "wgpu"] }
+amml-ui = { path = ".", features = ["gallery"] }
+amml-i18n-tool = { path = "../../i18n/tool" }
+amml-ui-rules = { path = "../rules" }
+amml-ui-gen = { path = "../gen" }
+log.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true

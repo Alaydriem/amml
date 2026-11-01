@@ -1,0 +1,1272 @@
+[tools]
+# ingame-ll-manager reads the LeviLamina manifests with it
+jq = "1.8.1"
+
+[tasks.preflight]
+description = "Names a missing cargo, cargo-nextest or pinned toolchain before a build turns it into an obscure error"
+dir = "{{config_root}}"
+run = ["rustc --version", "cargo --version", "cargo nextest --version", "cargo build -p amml-msvc-fixture"]
+
+[tasks.check]
+description = "cargo fmt check, cargo check and clippy with warnings denied over the workspace"
+dir = "{{config_root}}"
+run = [
+  "cargo fmt --all --check",
+  "cargo check --workspace --all-targets",
+  "cargo clippy --workspace --all-targets -- -D warnings",
+]
+
+[tasks.test]
+description = "Every workspace test through cargo-nextest, then the doctests that nextest skips (the compile_fail checks that widgets take Text, not &str)"
+dir = "{{config_root}}"
+run = [
+  "cargo nextest run --workspace --no-tests=pass",
+  "cargo test --doc -p amml-i18n -p amml-ui -p amml-studio-ui -p amml-game",
+]
+
+[tasks.heavy]
+description = "Waits in the foreground for the AMML heavy lock, runs the command, always releases the lock: mise run heavy -- <owner> <command...>; exits 75 when the lock stays held for 30 minutes"
+dir = "{{config_root}}"
+run = "bash scripts/heavy.sh"
+
+[tasks.derive]
+description = "Derives the address data of one game build: --exe, --recipes, --out, --report, optional --compare and --jobs <dir>"
+dir = "{{config_root}}"
+run = "cargo run -p amml-derive --release -- derive"
+
+[tasks.lint]
+description = "Lists the open findings of every recipe on one exe: fixed bytes in immediates, displacements or branch offsets, recipes that did not run, matches it cannot decode, literal vtable slots on function entries and narrow range windows: --exe, optional --recipes (default recipes) and --report; exits 1 on findings"
+dir = "{{config_root}}"
+run = "cargo run -p amml-derive --release -- lint"
+
+[tasks.signature]
+description = "Lists the argument registers, stack arguments and return kind of every hooked function: --exe, optional --recipes (default recipes), --out and --compare <other signature file>; with --compare prints same, changed or unknown per entry and exits 1 on any changed or unknown"
+dir = "{{config_root}}"
+run = "cargo run -p amml-derive --release -- signature"
+
+[tasks.inspect]
+description = "Read-only views of one game executable with --exe: scan, function, disasm, vtable (--names), xrefs, callers, draft, explain, similar, fields, packets, build-id; inspect <op> --help shows the arguments"
+dir = "{{config_root}}"
+run = "cargo run -p amml-derive --release -- inspect"
+
+[tasks.decompile]
+description = "Decompiles one function with Ghidra headless: --exe, --rva (hex), optional --out; imports the exe once per BuildId into %LOCALAPPDATA%/amml/ghidra"
+dir = "{{config_root}}"
+run = "pwsh -NoProfile -File scripts/ghidra-decompile.ps1"
+
+[tasks.repair-sandbox]
+description = "Copies the repo into %LOCALAPPDATA%/amml/repair-sandbox/<name> for a timed repair test: --name, --recipes, optional --hide-key and --hide-ids (leak check), --force"
+dir = "{{config_root}}"
+run = "pwsh -NoProfile -File scripts/repair-sandbox.ps1"
+
+[tasks.install-skill]
+description = "Links .claude/skills/amml-repair to skill/amml-repair (a directory junction on Windows) so Claude Code finds the repair skill; safe to run again"
+dir = "{{config_root}}"
+shell = "pwsh -NoProfile -Command"
+run = '''
+$ErrorActionPreference = 'Stop'
+$target = (Resolve-Path -LiteralPath 'skill/amml-repair').Path.TrimEnd([char]92)
+$link = Join-Path (Get-Location).Path '.claude/skills/amml-repair'
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $link) | Out-Null
+if (Test-Path -LiteralPath $link) {
+  $item = Get-Item -LiteralPath $link -Force
+  $now = if ($item.LinkType) { [System.IO.Path]::GetFullPath(([string]$item.Target).Replace('\??\', '')).TrimEnd([char]92) } else { $null }
+  if ($now -eq $target) { Write-Output "already linked: $link -> $target"; exit 0 }
+  [Console]::Error.WriteLine("$link exists and is not a link to $target; remove it by hand"); exit 1
+}
+if ($IsWindows) {
+  cmd /c mklink /J "$link" "$target" | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "mklink /J failed with exit code $LASTEXITCODE" }
+} else {
+  New-Item -ItemType SymbolicLink -Path $link -Target $target | Out-Null
+}
+Write-Output "linked: $link -> $target"
+'''
+
+[tasks.derive-smoke]
+description = "Derives the smoke recipes into data/smoke and reports/smoke; AMML_GAME_EXE overrides the default 1.26.51.01-ll original"
+dir = "{{config_root}}"
+run = "cargo run -p amml-derive --release -- derive --exe \"{{ get_env(name='AMML_GAME_EXE', default=env.LOCALAPPDATA ~ '/amml/instances/1.26.51.01-ll/Minecraft.Windows.exe.orig') }}\" --recipes fixtures/smoke-recipes --out data/smoke --report reports/smoke"
+
+[tasks.game-test-patch]
+description = "Patches the pristine 1.26.51.01-ll executable into a temp folder and checks its BuildId and imports; AMML_GAME_EXE overrides the default .bak"
+dir = "{{config_root}}"
+env = { AMML_GAME_EXE = "{{ get_env(name='AMML_GAME_EXE', default=env.LOCALAPPDATA ~ '/amml/instances/1.26.51.01-ll/Minecraft.Windows.exe.bak') }}" }
+run = "cargo nextest run -p amml-patch --release --run-ignored only --test game --no-capture"
+
+[tasks.game-test]
+description = "Derives the smoke recipes on a real game executable and compares them with data/smoke, then runs game-test-patch; AMML_GAME_EXE overrides the default 1.26.51.01-ll original"
+dir = "{{config_root}}"
+depends = ["game-test-patch"]
+env = { AMML_GAME_EXE = "{{ get_env(name='AMML_GAME_EXE', default=env.LOCALAPPDATA ~ '/amml/instances/1.26.51.01-ll/Minecraft.Windows.exe.orig') }}" }
+run = "cargo nextest run -p amml-derive --release --run-ignored only --test game --no-capture"
+
+[tasks.package-ll]
+description = "Builds release amml.dll and copies the LeviLamina package into <game>/mods/amml-loader: --game, default %LOCALAPPDATA%/amml/instances/1.26.51.01-ll"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = 'flag "--game <game>" help="The game folder that holds Minecraft.Windows.exe"'
+run = '''
+set -e
+game="${usage_game:-$LOCALAPPDATA/amml/instances/1.26.51.01-ll}"
+target="$game/mods/amml-loader"
+cargo build -p amml-loader --release
+mkdir -p "$target/cache"
+cp target/release/amml.dll "$target/amml.dll"
+cp loader/dll/packaging/ll/manifest.json "$target/manifest.json"
+rm -rf "$target/recipes"
+cp -r recipes "$target/recipes"
+echo "packaged into $target"
+'''
+
+[tasks.package-testmod]
+description = "Builds release amml_testmod.dll and copies it with its amml.hcl into <game>/mods/amml/amml-testmod: --game, default %LOCALAPPDATA%/amml/instances/1.26.51.01-ll"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = 'flag "--game <game>" help="The game folder that holds Minecraft.Windows.exe"'
+run = '''
+set -e
+game="${usage_game:-$LOCALAPPDATA/amml/instances/1.26.51.01-ll}"
+target="$game/mods/amml/amml-testmod"
+cargo build -p amml-testmod --release
+mkdir -p "$target"
+cp target/release/amml_testmod.dll "$target/amml_testmod.dll"
+cp loader/testmod/packaging/amml.hcl "$target/amml.hcl"
+echo "packaged into $target"
+'''
+
+[tasks.ingame-ll]
+description = "Builds every AMML mod in its own repo (manager, minimap, levels, freecam, zoom and stratum) and installs all of them into mods/amml, and fails on a failed build or an installed DLL older than a source file it is built from (scripts/ingame-mods.sh). Packages the loader and the test mod into the 1.26.51.01-ll test copy, starts Minecraft.Windows.exe with grade on for the run, waits up to 180 s for ticks=100, ends only the process it started, restores the loader config, removes the test mod again unless it was there before and prints the coverage, heap, grade and ticks lines"
+dir = "{{config_root}}"
+shell = "bash -c"
+run = '''
+set -e
+game="$LOCALAPPDATA/amml/instances/1.26.51.01-ll"
+logs="$game/logs/amml"
+config="$game/mods/amml-loader/amml.hcl"
+. scripts/ingame-mods.sh
+build_mods ""
+mise run package-ll --game "$game"
+install_mods "$game/mods/amml"
+testmod="$game/mods/amml/amml-testmod"
+testmod_existed=""
+if [ -d "$testmod" ]; then testmod_existed="yes"; fi
+mise run package-testmod --game "$game"
+saved=""
+if [ -f "$config" ]; then saved=$(mktemp); cp "$config" "$saved"; fi
+restore() { if [ -n "$saved" ]; then cp "$saved" "$config" && rm -f "$saved" || return 1; else rm -f "$config"; fi; }
+printf 'grade = true\n' > "$config"
+mkdir -p "$logs"
+. scripts/ingame-common.sh
+loader_start=$(size_of "$logs/loader.log")
+testmod_start=$(size_of "$logs/amml-testmod.log")
+. scripts/game-pid.sh
+before=" $(echo $(game_pids)) "
+game_pid=""
+launched=""
+# removes the test mod again unless it was installed before this run
+remove_testmod() { if [ -z "$testmod_existed" ]; then rm -rf "$testmod"; fi; }
+trap 'end_game; restore; remove_testmod' EXIT
+(cd "$game" && ./Minecraft.Windows.exe > /dev/null 2>&1) &
+launcher=$!
+launched="yes"
+started=$(date +%s)
+outcome="timeout"
+while [ $(( $(date +%s) - started )) -lt 180 ]; do
+  if since "$logs/amml-testmod.log" "$testmod_start" | grep -q "ticks=100"; then outcome="ticks"; break; fi
+  if [ -z "$game_pid" ]; then find_game_pid "$game"; elif ! pid_alive; then outcome="game exited"; game_pid=""; break; fi
+  if [ -z "$game_pid" ] && [ $(( $(date +%s) - started )) -ge 30 ]; then outcome="game did not start"; break; fi
+  sleep 2
+done
+echo "waited $(( $(date +%s) - started )) s: $outcome"
+end_game
+echo "--- loader.log (this run)"
+since "$logs/loader.log" "$loader_start"
+echo "--- amml-testmod.log (this run)"
+since "$logs/amml-testmod.log" "$testmod_start"
+echo "--- summary"
+since "$logs/loader.log" "$loader_start" | grep -E "resolved [0-9]+/[0-9]+|game heap|grade: " || true
+since "$logs/amml-testmod.log" "$testmod_start" | grep "ticks=" || true
+heap="no"
+if since "$logs/loader.log" "$loader_start" | grep -q "game heap ok"; then heap="yes"; fi
+echo "game heap ok: $heap"
+[ "$outcome" = "ticks" ] && [ "$heap" = "yes" ]
+'''
+
+[tasks.make-standalone-instance]
+description = "Copies the 1.26.51.01-ll test copy to 1.26.51.01-standalone without LeviLamina files (mods, mods-disabled, ll_data, logs, bedrock_runtime_data, PreLoader, LeviLauncher, tooth_lock.json, PeEditor.exe) (skips files with the same size and time), writes the patched exe from the pristine .bak, and installs amml.dll, the recipes and mods/amml: --game, --instance"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--game <game>" help="The LeviLamina game folder to copy from; default %LOCALAPPDATA%/amml/instances/1.26.51.01-ll"
+flag "--instance <instance>" help="The standalone folder to write; default %LOCALAPPDATA%/amml/instances/1.26.51.01-standalone"
+'''
+run = '''
+set -e
+game="${usage_game:-$LOCALAPPDATA/amml/instances/1.26.51.01-ll}"
+instance="${usage_instance:-$LOCALAPPDATA/amml/instances/1.26.51.01-standalone}"
+cargo build -p amml-loader -p amml-patch --release
+mkdir -p "$instance"
+# robocopy skips files with the same size and time; exit codes below 8 are success
+rc=0
+robocopy "$(cygpath -w "$game")" "$(cygpath -w "$instance")" //E //NFL //NDL //NJH //NJS //NP \
+  //XD "$(cygpath -w "$game/mods")" "$(cygpath -w "$game/mods-disabled")" "$(cygpath -w "$game/ll_data")" \
+    "$(cygpath -w "$game/bedrock_runtime_data")" "$(cygpath -w "$game/logs")" \
+  //XF PreLoader.dll LeviLauncher.dll PreLoaderConfig.json tooth_lock.json PeEditor.exe bedrock_runtime_data Minecraft.Windows.exe Minecraft.Windows.exe.bak Minecraft.Windows.exe.orig \
+  || rc=$?
+[ "$rc" -lt 8 ]
+# bedrock_runtime_data is a file in 26.51 and a folder in other builds; the rest are LeviLamina
+# files that an older copy of this instance may still hold
+rm -rf "$instance/bedrock_runtime_data" "$instance/ll_data" "$instance/mods-disabled" "$instance/tooth_lock.json" "$instance/PeEditor.exe"
+target/release/amml-patch.exe --input "$game/Minecraft.Windows.exe.bak" --output "$instance/Minecraft.Windows.exe"
+cp target/release/amml.dll "$instance/amml.dll"
+rm -rf "$instance/amml/recipes"
+mkdir -p "$instance/amml"
+cp -r recipes "$instance/amml/recipes"
+if [ -d "$game/mods/amml" ]; then
+  mkdir -p "$instance/mods"
+  rm -rf "$instance/mods/amml"
+  cp -r "$game/mods/amml" "$instance/mods/amml"
+fi
+echo "standalone instance ready at $instance"
+'''
+
+[tasks.ingame-standalone]
+description = "Builds every AMML mod in its own repo (manager, minimap, levels, freecam, zoom and stratum) and installs all of them into mods/amml, and fails on a failed build or an installed DLL older than a source file it is built from (scripts/ingame-mods.sh). Refreshes the 1.26.51.01-standalone standalone instance, installs the test mod into it, starts its patched Minecraft.Windows.exe, waits up to 180 s for ticks=100, ends only the process it started and prints the coverage and ticks lines"
+dir = "{{config_root}}"
+shell = "bash -c"
+run = '''
+set -e
+game="$LOCALAPPDATA/amml/instances/1.26.51.01-ll"
+instance="$LOCALAPPDATA/amml/instances/1.26.51.01-standalone"
+logs="$instance/amml/logs"
+. scripts/ingame-mods.sh
+build_mods ""
+mise run make-standalone-instance --game "$game" --instance "$instance"
+install_mods "$instance/mods/amml"
+mise run package-testmod --game "$instance"
+mkdir -p "$logs"
+. scripts/ingame-common.sh
+loader_start=$(size_of "$logs/loader.log")
+testmod_start=$(size_of "$logs/amml-testmod.log")
+. scripts/game-pid.sh
+before=" $(echo $(game_pids)) "
+game_pid=""
+launched=""
+trap end_game EXIT
+(cd "$instance" && ./Minecraft.Windows.exe > /dev/null 2>&1) &
+launcher=$!
+launched="yes"
+started=$(date +%s)
+outcome="timeout"
+while [ $(( $(date +%s) - started )) -lt 180 ]; do
+  if since "$logs/amml-testmod.log" "$testmod_start" | grep -q "ticks=100"; then outcome="ticks"; break; fi
+  if [ -z "$game_pid" ]; then find_game_pid "$instance"; elif ! pid_alive; then outcome="game exited"; game_pid=""; break; fi
+  if [ -z "$game_pid" ] && [ $(( $(date +%s) - started )) -ge 30 ]; then outcome="game did not start"; break; fi
+  sleep 2
+done
+echo "waited $(( $(date +%s) - started )) s: $outcome"
+end_game
+echo "--- loader.log (this run)"
+since "$logs/loader.log" "$loader_start"
+echo "--- amml-testmod.log (this run)"
+since "$logs/amml-testmod.log" "$testmod_start"
+echo "--- summary"
+since "$logs/loader.log" "$loader_start" | grep -E "resolved [0-9]+/[0-9]+" || true
+since "$logs/amml-testmod.log" "$testmod_start" | grep "ticks=" || true
+[ "$outcome" = "ticks" ]
+'''
+
+[tasks.ingame-ll-zoom]
+description = "Builds every AMML mod in its own repo (manager, minimap, levels, freecam, zoom and stratum) and installs all of them into mods/amml, and fails on a failed build or an installed DLL older than a source file it is built from (scripts/ingame-mods.sh). Packages the loader into the 1.26.51.01-ll test copy and installs them into mods/amml (their config/ is kept), starts Minecraft.Windows.exe with grade on for the run, waits up to 180 s for the mod manager to register alaydriem-zoom, ends only the process it started, restores the loader config and prints the loader, zoom and manager lines of the run"
+dir = "{{config_root}}"
+shell = "bash -c"
+run = '''
+set -e
+game="$LOCALAPPDATA/amml/instances/1.26.51.01-ll"
+logs="$game/logs/amml"
+manager_logs="$game/logs/amm/alaydriem-mod-manager"
+config="$game/mods/amml-loader/amml.hcl"
+if [ -d "$game/mods/alaydriem-zoom" ]; then echo "the C++ zoom is still in mods/alaydriem-zoom; back it up and remove it first (two zooms must not run at once)"; exit 1; fi
+. scripts/ingame-mods.sh
+build_mods ""
+mise run package-ll --game "$game"
+install_mods "$game/mods/amml"
+saved=""
+if [ -f "$config" ]; then saved=$(mktemp); cp "$config" "$saved"; fi
+restore() { if [ -n "$saved" ]; then cp "$saved" "$config" && rm -f "$saved" || return 1; else rm -f "$config"; fi; }
+. scripts/game-pid.sh
+. scripts/ingame-common.sh
+game_pid=""
+launched=""
+trap 'end_game; restore' EXIT
+printf 'grade = true\n' > "$config"
+mkdir -p "$logs" "$manager_logs"
+loader_start=$(size_of "$logs/loader.log")
+zoom_start=$(size_of "$logs/alaydriem-zoom.log")
+remember_session_logs "$manager_logs"
+before=" $(echo $(game_pids)) "
+(cd "$game" && ./Minecraft.Windows.exe > /dev/null 2>&1) &
+launcher=$!
+launched="yes"
+started=$(date +%s)
+outcome="timeout"
+while [ $(( $(date +%s) - started )) -lt 180 ]; do
+  current="$(session_logs | tail -n 1)"
+  if [ -n "$current" ] && grep -q '"mod_id":"alaydriem-zoom"' "$current"; then outcome="linked"; break; fi
+  if since "$logs/alaydriem-zoom.log" "$zoom_start" | grep -q "zoom is off"; then outcome="zoom off"; break; fi
+  if [ -z "$game_pid" ]; then find_game_pid "$game"; elif ! pid_alive; then outcome="game exited"; game_pid=""; break; fi
+  if [ -z "$game_pid" ] && [ $(( $(date +%s) - started )) -ge 30 ]; then outcome="game did not start"; break; fi
+  sleep 2
+done
+echo "waited $(( $(date +%s) - started )) s: $outcome"
+# a few more seconds so the first zoom ticks reach the logs
+if [ "$outcome" = "linked" ]; then sleep 5; fi
+end_game
+current="$(session_logs | tail -n 1)"
+echo "--- loader.log (this run)"
+since "$logs/loader.log" "$loader_start"
+echo "--- alaydriem-zoom.log (this run)"
+since "$logs/alaydriem-zoom.log" "$zoom_start"
+echo "--- mod manager log (this run): $current"
+if [ -n "$current" ]; then cat "$current"; fi
+echo "--- summary"
+since "$logs/loader.log" "$loader_start" | grep -E "resolved [0-9]+/[0-9]+|grade: |alaydriem-zoom" || true
+if [ -n "$current" ]; then grep "alaydriem-zoom" "$current" || true; fi
+[ "$outcome" = "linked" ]
+'''
+
+[tasks.ingame-standalone-zoom]
+description = "Builds every AMML mod in its own repo (manager, minimap, levels, freecam, zoom and stratum) and installs all of them into mods/amml, and fails on a failed build or an installed DLL older than a source file it is built from (scripts/ingame-mods.sh). Refreshes the 1.26.51.01-standalone standalone instance, installs them into its mods/amml and takes the manager out again (this run checks zoom without it), starts its patched Minecraft.Windows.exe, waits up to 180 s for zoom to report the mod manager missing, ends only the process it started and prints the loader and zoom lines of the run"
+dir = "{{config_root}}"
+shell = "bash -c"
+run = '''
+set -e
+game="$LOCALAPPDATA/amml/instances/1.26.51.01-ll"
+instance="$LOCALAPPDATA/amml/instances/1.26.51.01-standalone"
+logs="$instance/amml/logs"
+. scripts/ingame-mods.sh
+build_mods ""
+mise run make-standalone-instance --game "$game" --instance "$instance"
+install_mods "$instance/mods/amml"
+# this run checks zoom without the manager, so the manager that every task installs is taken out again
+rm -rf "$instance/mods/amml/alaydriem-mod-manager"
+mkdir -p "$logs"
+. scripts/ingame-common.sh
+loader_start=$(size_of "$logs/loader.log")
+zoom_start=$(size_of "$logs/alaydriem-zoom.log")
+. scripts/game-pid.sh
+game_pid=""
+launched=""
+trap end_game EXIT
+before=" $(echo $(game_pids)) "
+(cd "$instance" && ./Minecraft.Windows.exe > /dev/null 2>&1) &
+launcher=$!
+launched="yes"
+started=$(date +%s)
+outcome="timeout"
+while [ $(( $(date +%s) - started )) -lt 180 ]; do
+  if since "$logs/alaydriem-zoom.log" "$zoom_start" | grep -q "zoom is off"; then outcome="manager missing"; break; fi
+  if [ -z "$game_pid" ]; then find_game_pid "$instance"; elif ! pid_alive; then outcome="game exited"; game_pid=""; break; fi
+  if [ -z "$game_pid" ] && [ $(( $(date +%s) - started )) -ge 30 ]; then outcome="game did not start"; break; fi
+  sleep 2
+done
+echo "waited $(( $(date +%s) - started )) s: $outcome"
+# a few more seconds to show that the game keeps running with zoom off
+if [ "$outcome" = "manager missing" ]; then sleep 5; fi
+end_game
+echo "--- loader.log (this run)"
+since "$logs/loader.log" "$loader_start"
+echo "--- alaydriem-zoom.log (this run)"
+since "$logs/alaydriem-zoom.log" "$zoom_start"
+echo "--- summary"
+since "$logs/loader.log" "$loader_start" | grep -E "resolved [0-9]+/[0-9]+|alaydriem-zoom" || true
+since "$logs/alaydriem-zoom.log" "$zoom_start" | grep "zoom is off" || true
+[ "$outcome" = "manager missing" ]
+'''
+
+[tasks.ingame-ll-manager]
+description = "Builds every AMML mod in its own repo (manager, minimap, levels, freecam, zoom and stratum) and installs all of them into mods/amml, and fails on a failed build or an installed DLL older than a source file it is built from (scripts/ingame-mods.sh). Moves the C++ manager and every LeviLamina mod that depends on it from mods to mods-disabled of the 1.26.51.01-ll test copy (a folder already in mods-disabled is never overwritten), packages the loader, installs them into mods/amml (their config/ is kept), starts Minecraft.Windows.exe with grade on for the run, waits up to 180 s for the manager to bind its overlay and register alaydriem-zoom, ends only the process it started, restores the loader config and prints the lines of the run. Passes when every entry that applies to this build resolves (an entry an entry_is check refuses is not for this build, not missing), both mods load, the manager binds its overlay and registers zoom, and zoom never logs zoom is off. --screenshot <dir> saves two screenshots of the game window; between them it posts Ctrl+Shift+F10, an attempt only, which cannot open the panel (the manager reads the modifiers with GetAsyncKeyState). --cpp-manager is the negative run: it puts the C++ manager back for this run only and passes when the AMML manager logs the duplicate line and the game keeps running"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--screenshot <dir>" help="Saves two screenshots of the game window into this folder, 2 s apart, with Ctrl+Shift+F10 posted between them (an attempt only; it cannot open the panel); no screenshot without it"
+flag "--cpp-manager" help="The negative run: puts mods-disabled/alaydriem-mod-manager back into mods for this run only"
+'''
+run = '''
+set -e
+[ -n "$LOCALAPPDATA" ] || { echo "LOCALAPPDATA is not set; the test copies live under %LOCALAPPDATA%/amml/instances"; exit 1; }
+game="$LOCALAPPDATA/amml/instances/1.26.51.01-ll"
+negative=""
+if [ "${usage_cpp_manager:-false}" = "true" ]; then negative="yes"; fi
+shots="${usage_screenshot:-}"
+logs="$game/logs/amml"
+manager_logs="$game/logs/amm/alaydriem-mod-manager"
+ll_log="$game/logs/latest.log"
+config="$game/mods/amml-loader/amml.hcl"
+disabled="$game/mods-disabled"
+command -v jq > /dev/null || { echo "jq is needed to read the LeviLamina manifests; run mise install in this repo"; exit 1; }
+if [ -d "$game/mods/alaydriem-zoom" ]; then echo "the C++ zoom is still in mods/alaydriem-zoom; back it up and remove it first (two zooms must not run at once)"; exit 1; fi
+# the C++ manager (by its manifest name) and each mod whose manifest depends on it go to mods-disabled; a
+# second run finds nothing to move
+echo "--- moves"
+mkdir -p "$disabled"
+moved=""
+for manifest in "$game"/mods/*/manifest.json; do
+  [ -f "$manifest" ] || continue
+  dir="${manifest%/manifest.json}"
+  name="${dir##*/}"
+  uses=$(jq -r '(.name == "alaydriem-mod-manager") or ([(.dependencies // [])[]?.name] | index("alaydriem-mod-manager") != null)' "$manifest")
+  [ "$uses" = "true" ] || continue
+  if [ -e "$disabled/$name" ]; then echo "mods/$name is not moved: mods-disabled/$name already exists; sort the two out by hand"; exit 1; fi
+  mv "$dir" "$disabled/$name"
+  echo "moved mods/$name to mods-disabled/$name"
+  moved="yes"
+done
+[ -n "$moved" ] || echo "nothing to move"
+. scripts/ingame-mods.sh
+build_mods ""
+mise run package-ll --game "$game"
+install_mods "$game/mods/amml"
+saved=""
+if [ -f "$config" ]; then saved=$(mktemp); cp "$config" "$saved"; fi
+restore() { if [ -n "$saved" ]; then cp "$saved" "$config" && rm -f "$saved" || return 1; else rm -f "$config"; fi; }
+cpp_back=""
+# moves the C++ manager out again after the negative run
+park_cpp() {
+  [ -n "$cpp_back" ] || return 0
+  if [ -e "$disabled/alaydriem-mod-manager" ]; then echo "mods-disabled/alaydriem-mod-manager exists; mods/alaydriem-mod-manager is left in place"; return 0; fi
+  mv "$game/mods/alaydriem-mod-manager" "$disabled/alaydriem-mod-manager" || return 1
+  echo "moved mods/alaydriem-mod-manager back to mods-disabled/alaydriem-mod-manager"
+  cpp_back=""
+}
+. scripts/game-pid.sh
+. scripts/ingame-common.sh
+game_pid=""
+launched=""
+# each step runs whatever the one before did. The game ends first, because Windows does not let a folder move
+# while the game holds the C++ manager's DLL open; then the C++ manager goes back, then the loader config
+trap 'end_game || echo "ending the game failed"; park_cpp || echo "moving mods/alaydriem-mod-manager back to mods-disabled failed; move it by hand"; restore || echo "restoring $config failed"' EXIT
+if [ -n "$negative" ]; then
+  [ -d "$disabled/alaydriem-mod-manager" ] || { echo "no C++ manager in mods-disabled/alaydriem-mod-manager"; exit 1; }
+  mv "$disabled/alaydriem-mod-manager" "$game/mods/alaydriem-mod-manager"
+  cpp_back="yes"
+  echo "negative run: put mods-disabled/alaydriem-mod-manager back into mods for this run"
+fi
+printf 'grade = true\n' > "$config"
+mkdir -p "$logs" "$manager_logs"
+loader_start=$(size_of "$logs/loader.log")
+manager_amml_start=$(size_of "$logs/alaydriem-mod-manager.log")
+zoom_start=$(size_of "$logs/alaydriem-zoom.log")
+ll_start=$(size_of "$ll_log")
+remember_session_logs "$manager_logs"
+duplicate="another alaydriem-mod-manager.dll is loaded from"
+bound="overlay bound"
+before=" $(echo $(game_pids)) "
+(cd "$game" && ./Minecraft.Windows.exe > /dev/null 2>&1) &
+launcher=$!
+launched="yes"
+started=$(date +%s)
+outcome="timeout"
+while [ $(( $(date +%s) - started )) -lt 180 ]; do
+  if [ -n "$negative" ]; then
+    if since "$logs/alaydriem-mod-manager.log" "$manager_amml_start" | grep -q "$duplicate"; then outcome="duplicate"; break; fi
+    if since "$logs/loader.log" "$loader_start" | grep -q 'mod loaded {"mod_name":"alaydriem-mod-manager"}'; then outcome="both loaded"; break; fi
+  else
+    if session_has '"mod_id":"alaydriem-zoom"' && session_has "$bound"; then outcome="linked"; break; fi
+    if since "$logs/alaydriem-zoom.log" "$zoom_start" | grep -q "zoom is off"; then outcome="zoom off"; break; fi
+  fi
+  if [ -z "$game_pid" ]; then find_game_pid "$game"; elif ! pid_alive; then outcome="game exited"; game_pid=""; break; fi
+  if [ -z "$game_pid" ] && [ $(( $(date +%s) - started )) -ge 30 ]; then outcome="game did not start"; break; fi
+  sleep 2
+done
+echo "waited $(( $(date +%s) - started )) s: $outcome"
+running="no"
+if [ "$outcome" = "linked" ] || [ "$outcome" = "duplicate" ] || [ "$outcome" = "both loaded" ]; then
+  # more time so the first frames and ticks reach the logs, and the negative run shows the game keeps running
+  sleep 15
+  if [ -z "$game_pid" ]; then find_game_pid "$game"; fi
+  if pid_alive; then running="yes"; fi
+fi
+if [ "$running" = "yes" ] && [ -n "$shots" ]; then
+  echo "--- screenshots"
+  if [ -n "$negative" ]; then capture ll-cpp-manager; else capture ll; fi
+fi
+end_game
+echo "--- LeviLamina mod lines (this run)"
+since "$ll_log" "$ll_start" | grep -E "alaydriem-mod-manager|amml-loader" || true
+echo "--- loader.log (this run)"
+since "$logs/loader.log" "$loader_start"
+echo "--- alaydriem-mod-manager.log (this run)"
+since "$logs/alaydriem-mod-manager.log" "$manager_amml_start"
+echo "--- alaydriem-zoom.log (this run)"
+since "$logs/alaydriem-zoom.log" "$zoom_start"
+for path in $(session_logs); do
+  echo "--- manager session log (this run): $path"
+  cat "$path"
+done
+echo "--- summary"
+since "$logs/loader.log" "$loader_start" | grep -E "resolved [0-9]+/[0-9]+|not for this build|grade: |mod entries|mod loaded|mod switched off|mod could not be loaded" || true
+since "$logs/alaydriem-mod-manager.log" "$manager_amml_start" | grep "$duplicate" || true
+since "$logs/alaydriem-zoom.log" "$zoom_start" | grep "zoom is off" || true
+for path in $(session_logs); do grep -E "$bound|overlay frames run|mod registered" "$path" || true; done
+echo "game running after the wait: $running"
+if [ -n "$negative" ]; then
+  [ "$outcome" = "duplicate" ] && [ "$running" = "yes" ]
+else
+  # checked over the whole run: all entries resolve (resolved N/N), both mods load, and zoom never logs zoom is off
+  failed=""
+  since "$logs/loader.log" "$loader_start" | grep -q -E 'resolved ([0-9]+)/\1;' || { echo "FAIL: the loader did not resolve all entries"; failed="yes"; }
+  # an entry an entry_is check refuses is not for this build (INFO, counted apart); any other unresolved entry is missing
+  if since "$logs/loader.log" "$loader_start" | grep -q -F "mod entries did not all resolve"; then echo "FAIL: a mod has a missing entry"; failed="yes"; fi
+  for mod in alaydriem-mod-manager alaydriem-zoom; do
+    since "$logs/loader.log" "$loader_start" | grep -q -F "mod loaded {\"mod_name\":\"$mod\"}" || { echo "FAIL: $mod did not load"; failed="yes"; }
+  done
+  if since "$logs/alaydriem-zoom.log" "$zoom_start" | grep -q "zoom is off"; then echo "FAIL: zoom logged zoom is off"; failed="yes"; fi
+  [ "$outcome" = "linked" ] && [ -z "$failed" ]
+fi
+'''
+
+[tasks.ingame-standalone-manager]
+description = "Builds every AMML mod in its own repo (manager, minimap, levels, freecam, zoom and stratum) and installs all of them into mods/amml, and fails on a failed build or an installed DLL older than a source file it is built from (scripts/ingame-mods.sh). Refreshes the 1.26.51.01-standalone standalone instance, installs them into its mods/amml, starts its patched Minecraft.Windows.exe, waits up to 180 s for the manager to bind its overlay and register alaydriem-zoom, ends only the process it started and prints the loader, manager and zoom lines of the run. Passes when every entry that applies to this build resolves (an entry an entry_is check refuses is not for this build, not missing), both mods load, the manager binds its overlay and registers zoom, and zoom never logs zoom is off. --screenshot <dir> saves two screenshots of the game window; between them it posts Ctrl+Shift+F10, an attempt only, which cannot open the panel (the manager reads the modifiers with GetAsyncKeyState)"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--screenshot <dir>" help="Saves two screenshots of the game window into this folder, 2 s apart, with Ctrl+Shift+F10 posted between them (an attempt only; it cannot open the panel); no screenshot without it"
+'''
+run = '''
+set -e
+[ -n "$LOCALAPPDATA" ] || { echo "LOCALAPPDATA is not set; the test copies live under %LOCALAPPDATA%/amml/instances"; exit 1; }
+game="$LOCALAPPDATA/amml/instances/1.26.51.01-ll"
+instance="$LOCALAPPDATA/amml/instances/1.26.51.01-standalone"
+shots="${usage_screenshot:-}"
+logs="$instance/amml/logs"
+manager_logs="$instance/logs/amm/alaydriem-mod-manager"
+. scripts/ingame-mods.sh
+build_mods ""
+mise run make-standalone-instance --game "$game" --instance "$instance"
+install_mods "$instance/mods/amml"
+. scripts/game-pid.sh
+. scripts/ingame-common.sh
+game_pid=""
+launched=""
+trap 'end_game || echo "ending the game failed"' EXIT
+mkdir -p "$logs" "$manager_logs"
+loader_start=$(size_of "$logs/loader.log")
+manager_amml_start=$(size_of "$logs/alaydriem-mod-manager.log")
+zoom_start=$(size_of "$logs/alaydriem-zoom.log")
+remember_session_logs "$manager_logs"
+bound="overlay bound"
+before=" $(echo $(game_pids)) "
+(cd "$instance" && ./Minecraft.Windows.exe > /dev/null 2>&1) &
+launcher=$!
+launched="yes"
+started=$(date +%s)
+outcome="timeout"
+while [ $(( $(date +%s) - started )) -lt 180 ]; do
+  if session_has '"mod_id":"alaydriem-zoom"' && session_has "$bound"; then outcome="linked"; break; fi
+  if since "$logs/alaydriem-zoom.log" "$zoom_start" | grep -q "zoom is off"; then outcome="zoom off"; break; fi
+  if [ -z "$game_pid" ]; then find_game_pid "$instance"; elif ! pid_alive; then outcome="game exited"; game_pid=""; break; fi
+  if [ -z "$game_pid" ] && [ $(( $(date +%s) - started )) -ge 30 ]; then outcome="game did not start"; break; fi
+  sleep 2
+done
+echo "waited $(( $(date +%s) - started )) s: $outcome"
+# more time so the first frames and zoom ticks reach the logs
+if [ "$outcome" = "linked" ]; then
+  sleep 15
+  if [ -n "$shots" ] && pid_alive; then echo "--- screenshots"; capture standalone; fi
+fi
+end_game
+echo "--- loader.log (this run)"
+since "$logs/loader.log" "$loader_start"
+echo "--- alaydriem-mod-manager.log (this run)"
+since "$logs/alaydriem-mod-manager.log" "$manager_amml_start"
+echo "--- alaydriem-zoom.log (this run)"
+since "$logs/alaydriem-zoom.log" "$zoom_start"
+for path in $(session_logs); do
+  echo "--- manager session log (this run): $path"
+  cat "$path"
+done
+echo "--- summary"
+since "$logs/loader.log" "$loader_start" | grep -E "resolved [0-9]+/[0-9]+|not for this build|mod entries|mod loaded|mod switched off|mod could not be loaded" || true
+since "$logs/alaydriem-zoom.log" "$zoom_start" | grep "zoom is off" || true
+for path in $(session_logs); do grep -E "$bound|overlay frames run|mod registered" "$path" || true; done
+# checked over the whole run: all entries resolve (resolved N/N), both mods load, and zoom never logs zoom is off
+failed=""
+since "$logs/loader.log" "$loader_start" | grep -q -E 'resolved ([0-9]+)/\1;' || { echo "FAIL: the loader did not resolve all entries"; failed="yes"; }
+# an entry an entry_is check refuses is not for this build (INFO, counted apart); any other unresolved entry is missing
+if since "$logs/loader.log" "$loader_start" | grep -q -F "mod entries did not all resolve"; then echo "FAIL: a mod has a missing entry"; failed="yes"; fi
+for mod in alaydriem-mod-manager alaydriem-zoom; do
+  since "$logs/loader.log" "$loader_start" | grep -q -F "mod loaded {\"mod_name\":\"$mod\"}" || { echo "FAIL: $mod did not load"; failed="yes"; }
+done
+if since "$logs/alaydriem-zoom.log" "$zoom_start" | grep -q "zoom is off"; then echo "FAIL: zoom logged zoom is off"; failed="yes"; fi
+[ "$outcome" = "linked" ] && [ -z "$failed" ]
+'''
+
+[tasks.ingame-ll-minimap]
+description = "Builds every AMML mod in its own repo (manager, minimap, levels, freecam, zoom and stratum) and installs all of them into mods/amml, and fails on a failed build or an installed DLL older than a source file it is built from (scripts/ingame-mods.sh). Packages the loader into the 1.26.51.01-ll test copy and installs them into mods/amml (their config/ is kept), moves an old LeviLamina minimap from mods to the sibling folder _disabled-ll-minimap, starts Minecraft.Windows.exe with grade on for the run, waits up to 180 s for the manager to register alaydriem-minimap, ends only the process it started, restores the loader config and prints the loader, minimap and manager lines of the run. Passes when every entry that applies to this build resolves (an entry an entry_is check refuses is not for this build, not missing), the minimap loads with no missing entry, its log has no off, missing, error or panic line and the manager registers it"
+dir = "{{config_root}}"
+shell = "bash -c"
+run = '''
+set -e
+[ -n "$LOCALAPPDATA" ] || { echo "LOCALAPPDATA is not set; the test copies live under %LOCALAPPDATA%/amml/instances"; exit 1; }
+game="$LOCALAPPDATA/amml/instances/1.26.51.01-ll"
+logs="$game/logs/amml"
+manager_logs="$game/logs/amm/alaydriem-mod-manager"
+minimap_logs="$game/logs/amm/alaydriem-minimap"
+config="$game/mods/amml-loader/amml.hcl"
+if [ -d "$game/mods/alaydriem-mod-manager" ]; then echo "the C++ manager is still in mods/alaydriem-mod-manager; run mise run ingame-ll-manager once or move it out first"; exit 1; fi
+# an old LeviLamina minimap goes aside inside the instance, so that two minimaps do not run
+echo "--- moves"
+moved=""
+for name in alaydriem-minimap "Alaydriem's Mini Map"; do
+  [ -d "$game/mods/$name" ] || continue
+  mkdir -p "$game/_disabled-ll-minimap"
+  if [ -e "$game/_disabled-ll-minimap/$name" ]; then echo "mods/$name is not moved: _disabled-ll-minimap/$name already exists; sort the two out by hand"; exit 1; fi
+  mv "$game/mods/$name" "$game/_disabled-ll-minimap/$name"
+  echo "moved mods/$name to _disabled-ll-minimap/$name"
+  moved="yes"
+done
+[ -n "$moved" ] || echo "nothing to move"
+. scripts/ingame-mods.sh
+build_mods ""
+mise run package-ll --game "$game"
+install_mods "$game/mods/amml"
+saved=""
+if [ -f "$config" ]; then saved=$(mktemp); cp "$config" "$saved"; fi
+restore() { if [ -n "$saved" ]; then cp "$saved" "$config" && rm -f "$saved" || return 1; else rm -f "$config"; fi; }
+. scripts/game-pid.sh
+. scripts/ingame-common.sh
+game_pid=""
+launched=""
+trap 'end_game || echo "ending the game failed"; restore || echo "restoring $config failed"' EXIT
+printf 'grade = true\n' > "$config"
+mkdir -p "$logs" "$manager_logs" "$minimap_logs"
+minimap_before=" $(cd "$minimap_logs" && echo *.log) "
+loader_start=$(size_of "$logs/loader.log")
+manager_amml_start=$(size_of "$logs/alaydriem-mod-manager.log")
+minimap_start=$(size_of "$logs/alaydriem-minimap.log")
+remember_session_logs "$manager_logs"
+before=" $(echo $(game_pids)) "
+(cd "$game" && ./Minecraft.Windows.exe > /dev/null 2>&1) &
+launcher=$!
+launched="yes"
+started=$(date +%s)
+outcome="timeout"
+while [ $(( $(date +%s) - started )) -lt 180 ]; do
+  if session_has '"mod_id":"alaydriem-minimap"'; then outcome="linked"; break; fi
+  if [ -z "$game_pid" ]; then find_game_pid "$game"; elif ! pid_alive; then outcome="game exited"; game_pid=""; break; fi
+  if [ -z "$game_pid" ] && [ $(( $(date +%s) - started )) -ge 30 ]; then outcome="game did not start"; break; fi
+  sleep 2
+done
+echo "waited $(( $(date +%s) - started )) s: $outcome (game PID ${game_pid:-none})"
+# more time so the first frames and ticks reach the logs
+if [ "$outcome" = "linked" ]; then sleep 15; fi
+running="no"
+if pid_alive; then running="yes"; fi
+end_game
+echo "--- loader.log (this run)"
+since "$logs/loader.log" "$loader_start" | grep -v "resolver note" || true
+echo "--- alaydriem-minimap.log (this run)"
+since "$logs/alaydriem-minimap.log" "$minimap_start"
+minimap_new=""
+for path in "$minimap_logs"/*.log; do
+  [ -f "$path" ] || continue
+  case "$minimap_before" in *" ${path##*/} "*) ;; *) minimap_new="$minimap_new $path"; echo "--- minimap session log (this run): $path"; cat "$path" ;; esac
+done
+echo "--- alaydriem-mod-manager.log (this run)"
+since "$logs/alaydriem-mod-manager.log" "$manager_amml_start"
+for path in $(session_logs); do
+  echo "--- manager session log (this run): $path"
+  cat "$path"
+done
+echo "--- summary"
+since "$logs/loader.log" "$loader_start" | grep -E "resolved [0-9]+/[0-9]+|not for this build|grade: |mod entries|mod loaded|mod switched off|mod could not be loaded" || true
+for path in $(session_logs); do grep -E "overlay bound|mod registered" "$path" || true; done
+echo "game running before it was ended: $running"
+failed=""
+since "$logs/loader.log" "$loader_start" | grep -q -E 'resolved ([0-9]+)/\1;' || { echo "FAIL: the loader did not resolve all entries"; failed="yes"; }
+# an entry an entry_is check refuses is not for this build (INFO, counted apart); any other unresolved entry is missing
+if since "$logs/loader.log" "$loader_start" | grep -q -F "mod entries did not all resolve"; then echo "FAIL: a mod has a missing entry"; failed="yes"; fi
+since "$logs/loader.log" "$loader_start" | grep -q -F '"missing":0,"mod_name":"alaydriem-minimap"' || { echo "FAIL: the minimap has a missing entry (features off: not none)"; failed="yes"; }
+for mod in alaydriem-mod-manager alaydriem-minimap; do
+  since "$logs/loader.log" "$loader_start" | grep -q -F "mod loaded {\"mod_name\":\"$mod\"}" || { echo "FAIL: $mod did not load"; failed="yes"; }
+done
+if { since "$logs/alaydriem-minimap.log" "$minimap_start"; for path in $minimap_new; do cat "$path"; done; } | grep -q -i -E " is off| is missing|panic|ERROR|WARN"; then echo "FAIL: the minimap log holds an off, missing, error or panic line"; failed="yes"; fi
+if since "$logs/loader.log" "$loader_start" | grep -q -i -E "panic| ERROR "; then echo "FAIL: the loader log holds an error or panic line"; failed="yes"; fi
+[ -n "$minimap_new" ] || { echo "FAIL: the minimap wrote no session log"; failed="yes"; }
+[ "$outcome" = "linked" ] && [ "$running" = "yes" ] && [ -z "$failed" ]
+'''
+
+[tasks.ingame-standalone-minimap]
+description = "Builds every AMML mod in its own repo (manager, minimap, levels, freecam, zoom and stratum) and installs all of them into mods/amml, and fails on a failed build or an installed DLL older than a source file it is built from (scripts/ingame-mods.sh). Refreshes the 1.26.51.01-standalone standalone instance, installs them into its mods/amml, starts its patched Minecraft.Windows.exe, waits up to 180 s for the manager to register alaydriem-minimap, ends only the process it started and prints the loader, minimap and manager lines of the run. Passes when every entry that applies to this build resolves (an entry an entry_is check refuses is not for this build, not missing), the minimap loads with no missing entry, its log has no off, missing, error or panic line and the manager registers it"
+dir = "{{config_root}}"
+shell = "bash -c"
+run = '''
+set -e
+[ -n "$LOCALAPPDATA" ] || { echo "LOCALAPPDATA is not set; the test copies live under %LOCALAPPDATA%/amml/instances"; exit 1; }
+game="$LOCALAPPDATA/amml/instances/1.26.51.01-ll"
+instance="$LOCALAPPDATA/amml/instances/1.26.51.01-standalone"
+logs="$instance/amml/logs"
+manager_logs="$instance/logs/amm/alaydriem-mod-manager"
+minimap_logs="$instance/logs/amm/alaydriem-minimap"
+. scripts/ingame-mods.sh
+build_mods ""
+mise run make-standalone-instance --game "$game" --instance "$instance"
+install_mods "$instance/mods/amml"
+. scripts/game-pid.sh
+. scripts/ingame-common.sh
+game_pid=""
+launched=""
+trap 'end_game || echo "ending the game failed"' EXIT
+mkdir -p "$logs" "$manager_logs" "$minimap_logs"
+minimap_before=" $(cd "$minimap_logs" && echo *.log) "
+loader_start=$(size_of "$logs/loader.log")
+manager_amml_start=$(size_of "$logs/alaydriem-mod-manager.log")
+minimap_start=$(size_of "$logs/alaydriem-minimap.log")
+remember_session_logs "$manager_logs"
+before=" $(echo $(game_pids)) "
+(cd "$instance" && ./Minecraft.Windows.exe > /dev/null 2>&1) &
+launcher=$!
+launched="yes"
+started=$(date +%s)
+outcome="timeout"
+while [ $(( $(date +%s) - started )) -lt 180 ]; do
+  if session_has '"mod_id":"alaydriem-minimap"'; then outcome="linked"; break; fi
+  if [ -z "$game_pid" ]; then find_game_pid "$instance"; elif ! pid_alive; then outcome="game exited"; game_pid=""; break; fi
+  if [ -z "$game_pid" ] && [ $(( $(date +%s) - started )) -ge 30 ]; then outcome="game did not start"; break; fi
+  sleep 2
+done
+echo "waited $(( $(date +%s) - started )) s: $outcome (game PID ${game_pid:-none})"
+# more time so the first frames and ticks reach the logs
+if [ "$outcome" = "linked" ]; then sleep 15; fi
+running="no"
+if pid_alive; then running="yes"; fi
+end_game
+echo "--- loader.log (this run)"
+since "$logs/loader.log" "$loader_start" | grep -v "resolver note" || true
+echo "--- alaydriem-minimap.log (this run)"
+since "$logs/alaydriem-minimap.log" "$minimap_start"
+minimap_new=""
+for path in "$minimap_logs"/*.log; do
+  [ -f "$path" ] || continue
+  case "$minimap_before" in *" ${path##*/} "*) ;; *) minimap_new="$minimap_new $path"; echo "--- minimap session log (this run): $path"; cat "$path" ;; esac
+done
+echo "--- alaydriem-mod-manager.log (this run)"
+since "$logs/alaydriem-mod-manager.log" "$manager_amml_start"
+for path in $(session_logs); do
+  echo "--- manager session log (this run): $path"
+  cat "$path"
+done
+echo "--- summary"
+since "$logs/loader.log" "$loader_start" | grep -E "resolved [0-9]+/[0-9]+|not for this build|mod entries|mod loaded|mod switched off|mod could not be loaded" || true
+for path in $(session_logs); do grep -E "overlay bound|mod registered" "$path" || true; done
+echo "game running before it was ended: $running"
+failed=""
+since "$logs/loader.log" "$loader_start" | grep -q -E 'resolved ([0-9]+)/\1;' || { echo "FAIL: the loader did not resolve all entries"; failed="yes"; }
+# an entry an entry_is check refuses is not for this build (INFO, counted apart); any other unresolved entry is missing
+if since "$logs/loader.log" "$loader_start" | grep -q -F "mod entries did not all resolve"; then echo "FAIL: a mod has a missing entry"; failed="yes"; fi
+since "$logs/loader.log" "$loader_start" | grep -q -F '"missing":0,"mod_name":"alaydriem-minimap"' || { echo "FAIL: the minimap has a missing entry (features off: not none)"; failed="yes"; }
+for mod in alaydriem-mod-manager alaydriem-minimap; do
+  since "$logs/loader.log" "$loader_start" | grep -q -F "mod loaded {\"mod_name\":\"$mod\"}" || { echo "FAIL: $mod did not load"; failed="yes"; }
+done
+if { since "$logs/alaydriem-minimap.log" "$minimap_start"; for path in $minimap_new; do cat "$path"; done; } | grep -q -i -E " is off| is missing|panic|ERROR|WARN"; then echo "FAIL: the minimap log holds an off, missing, error or panic line"; failed="yes"; fi
+if since "$logs/loader.log" "$loader_start" | grep -q -i -E "panic| ERROR "; then echo "FAIL: the loader log holds an error or panic line"; failed="yes"; fi
+[ -n "$minimap_new" ] || { echo "FAIL: the minimap wrote no session log"; failed="yes"; }
+[ "$outcome" = "linked" ] && [ "$running" = "yes" ] && [ -z "$failed" ]
+'''
+
+[tasks.ingame-ll-levels]
+description = "Builds every AMML mod in its own repo (manager, minimap, levels, freecam, zoom and stratum) and installs all of them into mods/amml, and fails on a failed build or an installed DLL older than a source file it is built from (scripts/ingame-mods.sh). As ingame-ll-minimap, with levels too: packages the loader into the 1.26.51.01-ll test copy and installs them into mods/amml (their config/ is kept), moves an old LeviLamina minimap from mods to the sibling folder _disabled-ll-mods, starts Minecraft.Windows.exe with grade on for the run, waits up to 180 s for the manager to register alaydriem-levels, ends only the process it started, restores the loader config and prints the loader, minimap and manager lines of the run. Passes when every entry that applies to this build resolves (an entry an entry_is check refuses is not for this build, not missing), the minimap and levels load with no missing entry, their logs have no off, missing, error or panic line, levels logs 'features off: none' and the manager registers it. The levels config of the test copy gets telemetry = true when it has none"
+dir = "{{config_root}}"
+shell = "bash -c"
+run = '''
+set -e
+[ -n "$LOCALAPPDATA" ] || { echo "LOCALAPPDATA is not set; the test copies live under %LOCALAPPDATA%/amml/instances"; exit 1; }
+game="$LOCALAPPDATA/amml/instances/1.26.51.01-ll"
+logs="$game/logs/amml"
+manager_logs="$game/logs/amm/alaydriem-mod-manager"
+minimap_logs="$game/logs/amm/alaydriem-minimap"
+levels_logs="$game/logs/amm/alaydriem-levels"
+config="$game/mods/amml-loader/amml.hcl"
+if [ -d "$game/mods/alaydriem-mod-manager" ]; then echo "the C++ manager is still in mods/alaydriem-mod-manager; run mise run ingame-ll-manager once or move it out first"; exit 1; fi
+# an old LeviLamina minimap goes aside inside the instance, so that two minimaps do not run
+echo "--- moves"
+moved=""
+for name in alaydriem-minimap "Alaydriem's Mini Map" alaydriem-levels; do
+  [ -d "$game/mods/$name" ] || continue
+  mkdir -p "$game/_disabled-ll-mods"
+  if [ -e "$game/_disabled-ll-mods/$name" ]; then echo "mods/$name is not moved: _disabled-ll-mods/$name already exists; sort the two out by hand"; exit 1; fi
+  mv "$game/mods/$name" "$game/_disabled-ll-mods/$name"
+  echo "moved mods/$name to _disabled-ll-mods/$name"
+  moved="yes"
+done
+[ -n "$moved" ] || echo "nothing to move"
+. scripts/ingame-mods.sh
+build_mods ""
+mise run package-ll --game "$game"
+install_mods "$game/mods/amml"
+saved=""
+if [ -f "$config" ]; then saved=$(mktemp); cp "$config" "$saved"; fi
+restore() { if [ -n "$saved" ]; then cp "$saved" "$config" && rm -f "$saved" || return 1; else rm -f "$config"; fi; }
+. scripts/game-pid.sh
+. scripts/ingame-common.sh
+game_pid=""
+launched=""
+trap 'end_game || echo "ending the game failed"; restore || echo "restoring $config failed"' EXIT
+printf 'grade = true\n' > "$config"
+mkdir -p "$logs" "$manager_logs" "$minimap_logs"
+levels_config="$game/mods/amml/alaydriem-levels/config/config.hcl"
+# the test copy logs the overlay cost every 2 s; a config the person already has is kept
+if [ ! -f "$levels_config" ]; then mkdir -p "${levels_config%/*}"; printf 'telemetry = true\n' > "$levels_config"; fi
+mkdir -p "$levels_logs"
+minimap_before=" $(cd "$minimap_logs" && echo *.log) "
+levels_before=" $(cd "$levels_logs" && echo *.log) "
+loader_start=$(size_of "$logs/loader.log")
+manager_amml_start=$(size_of "$logs/alaydriem-mod-manager.log")
+minimap_start=$(size_of "$logs/alaydriem-minimap.log")
+levels_start=$(size_of "$logs/alaydriem-levels.log")
+remember_session_logs "$manager_logs"
+before=" $(echo $(game_pids)) "
+(cd "$game" && ./Minecraft.Windows.exe > /dev/null 2>&1) &
+launcher=$!
+launched="yes"
+started=$(date +%s)
+outcome="timeout"
+while [ $(( $(date +%s) - started )) -lt 180 ]; do
+  if session_has '"mod_id":"alaydriem-levels"'; then outcome="linked"; break; fi
+  if [ -z "$game_pid" ]; then find_game_pid "$game"; elif ! pid_alive; then outcome="game exited"; game_pid=""; break; fi
+  if [ -z "$game_pid" ] && [ $(( $(date +%s) - started )) -ge 30 ]; then outcome="game did not start"; break; fi
+  sleep 2
+done
+echo "waited $(( $(date +%s) - started )) s: $outcome (game PID ${game_pid:-none})"
+# more time so the first frames and ticks reach the logs
+if [ "$outcome" = "linked" ]; then sleep 15; fi
+running="no"
+if pid_alive; then running="yes"; fi
+end_game
+echo "--- loader.log (this run)"
+since "$logs/loader.log" "$loader_start" | grep -v "resolver note" || true
+echo "--- alaydriem-minimap.log (this run)"
+since "$logs/alaydriem-minimap.log" "$minimap_start"
+echo "--- alaydriem-levels.log (this run)"
+since "$logs/alaydriem-levels.log" "$levels_start"
+levels_new=""
+for path in "$levels_logs"/*.log; do
+  [ -f "$path" ] || continue
+  case "$levels_before" in *" ${path##*/} "*) ;; *) levels_new="$levels_new $path"; echo "--- levels session log (this run): $path"; cat "$path" ;; esac
+done
+minimap_new=""
+for path in "$minimap_logs"/*.log; do
+  [ -f "$path" ] || continue
+  case "$minimap_before" in *" ${path##*/} "*) ;; *) minimap_new="$minimap_new $path"; echo "--- minimap session log (this run): $path"; cat "$path" ;; esac
+done
+echo "--- alaydriem-mod-manager.log (this run)"
+since "$logs/alaydriem-mod-manager.log" "$manager_amml_start"
+for path in $(session_logs); do
+  echo "--- manager session log (this run): $path"
+  cat "$path"
+done
+echo "--- summary"
+since "$logs/loader.log" "$loader_start" | grep -E "resolved [0-9]+/[0-9]+|not for this build|grade: |mod entries|mod loaded|mod switched off|mod could not be loaded" || true
+for path in $(session_logs); do grep -E "overlay bound|mod registered" "$path" || true; done
+echo "game running before it was ended: $running"
+failed=""
+since "$logs/loader.log" "$loader_start" | grep -q -E 'resolved ([0-9]+)/\1;' || { echo "FAIL: the loader did not resolve all entries"; failed="yes"; }
+# an entry an entry_is check refuses is not for this build (INFO, counted apart); any other unresolved entry is missing
+if since "$logs/loader.log" "$loader_start" | grep -q -F "mod entries did not all resolve"; then echo "FAIL: a mod has a missing entry"; failed="yes"; fi
+since "$logs/loader.log" "$loader_start" | grep -q -F '"missing":0,"mod_name":"alaydriem-minimap"' || { echo "FAIL: the minimap has a missing entry (features off: not none)"; failed="yes"; }
+since "$logs/loader.log" "$loader_start" | grep -q -F '"missing":0,"mod_name":"alaydriem-levels"' || { echo "FAIL: levels has a missing entry"; failed="yes"; }
+since "$logs/alaydriem-levels.log" "$levels_start" | grep -q -F "features off: none" || { echo "FAIL: the levels log has no 'features off: none' line"; failed="yes"; }
+for mod in alaydriem-mod-manager alaydriem-minimap alaydriem-levels; do
+  since "$logs/loader.log" "$loader_start" | grep -q -F "mod loaded {\"mod_name\":\"$mod\"}" || { echo "FAIL: $mod did not load"; failed="yes"; }
+done
+if { since "$logs/alaydriem-minimap.log" "$minimap_start"; for path in $minimap_new; do cat "$path"; done; } | grep -q -i -E " is off| is missing|panic|ERROR|WARN"; then echo "FAIL: the minimap log holds an off, missing, error or panic line"; failed="yes"; fi
+if since "$logs/loader.log" "$loader_start" | grep -q -i -E "panic| ERROR "; then echo "FAIL: the loader log holds an error or panic line"; failed="yes"; fi
+if { since "$logs/alaydriem-levels.log" "$levels_start"; for path in $levels_new; do cat "$path"; done; } | grep -q -i -E " is off| is missing|panic|ERROR|WARN"; then echo "FAIL: the levels log holds an off, missing, error or panic line"; failed="yes"; fi
+[ -n "$minimap_new" ] || { echo "FAIL: the minimap wrote no session log"; failed="yes"; }
+[ -n "$levels_new" ] || { echo "FAIL: levels wrote no session log"; failed="yes"; }
+[ "$outcome" = "linked" ] && [ "$running" = "yes" ] && [ -z "$failed" ]
+'''
+
+[tasks.ingame-standalone-levels]
+description = "Builds every AMML mod in its own repo (manager, minimap, levels, freecam, zoom and stratum) and installs all of them into mods/amml, and fails on a failed build or an installed DLL older than a source file it is built from (scripts/ingame-mods.sh). As ingame-standalone-minimap, with levels too: refreshes the 1.26.51.01-standalone standalone instance, installs them into its mods/amml, starts its patched Minecraft.Windows.exe, waits up to 180 s for the manager to register alaydriem-levels, ends only the process it started and prints the loader, minimap and manager lines of the run. Passes when every entry that applies to this build resolves (an entry an entry_is check refuses is not for this build, not missing), the minimap and levels load with no missing entry, their logs have no off, missing, error or panic line, levels logs 'features off: none' and the manager registers it. The levels config of the test copy gets telemetry = true when it has none"
+dir = "{{config_root}}"
+shell = "bash -c"
+run = '''
+set -e
+[ -n "$LOCALAPPDATA" ] || { echo "LOCALAPPDATA is not set; the test copies live under %LOCALAPPDATA%/amml/instances"; exit 1; }
+game="$LOCALAPPDATA/amml/instances/1.26.51.01-ll"
+instance="$LOCALAPPDATA/amml/instances/1.26.51.01-standalone"
+logs="$instance/amml/logs"
+manager_logs="$instance/logs/amm/alaydriem-mod-manager"
+minimap_logs="$instance/logs/amm/alaydriem-minimap"
+levels_logs="$instance/logs/amm/alaydriem-levels"
+. scripts/ingame-mods.sh
+build_mods ""
+mise run make-standalone-instance --game "$game" --instance "$instance"
+install_mods "$instance/mods/amml"
+. scripts/game-pid.sh
+. scripts/ingame-common.sh
+game_pid=""
+launched=""
+trap 'end_game || echo "ending the game failed"' EXIT
+mkdir -p "$logs" "$manager_logs" "$minimap_logs"
+levels_config="$instance/mods/amml/alaydriem-levels/config/config.hcl"
+# the test copy logs the overlay cost every 2 s; a config the person already has is kept
+if [ ! -f "$levels_config" ]; then mkdir -p "${levels_config%/*}"; printf 'telemetry = true\n' > "$levels_config"; fi
+mkdir -p "$levels_logs"
+minimap_before=" $(cd "$minimap_logs" && echo *.log) "
+levels_before=" $(cd "$levels_logs" && echo *.log) "
+loader_start=$(size_of "$logs/loader.log")
+manager_amml_start=$(size_of "$logs/alaydriem-mod-manager.log")
+minimap_start=$(size_of "$logs/alaydriem-minimap.log")
+levels_start=$(size_of "$logs/alaydriem-levels.log")
+remember_session_logs "$manager_logs"
+before=" $(echo $(game_pids)) "
+(cd "$instance" && ./Minecraft.Windows.exe > /dev/null 2>&1) &
+launcher=$!
+launched="yes"
+started=$(date +%s)
+outcome="timeout"
+while [ $(( $(date +%s) - started )) -lt 180 ]; do
+  if session_has '"mod_id":"alaydriem-levels"'; then outcome="linked"; break; fi
+  if [ -z "$game_pid" ]; then find_game_pid "$instance"; elif ! pid_alive; then outcome="game exited"; game_pid=""; break; fi
+  if [ -z "$game_pid" ] && [ $(( $(date +%s) - started )) -ge 30 ]; then outcome="game did not start"; break; fi
+  sleep 2
+done
+echo "waited $(( $(date +%s) - started )) s: $outcome (game PID ${game_pid:-none})"
+# more time so the first frames and ticks reach the logs
+if [ "$outcome" = "linked" ]; then sleep 15; fi
+running="no"
+if pid_alive; then running="yes"; fi
+end_game
+echo "--- loader.log (this run)"
+since "$logs/loader.log" "$loader_start" | grep -v "resolver note" || true
+echo "--- alaydriem-minimap.log (this run)"
+since "$logs/alaydriem-minimap.log" "$minimap_start"
+echo "--- alaydriem-levels.log (this run)"
+since "$logs/alaydriem-levels.log" "$levels_start"
+levels_new=""
+for path in "$levels_logs"/*.log; do
+  [ -f "$path" ] || continue
+  case "$levels_before" in *" ${path##*/} "*) ;; *) levels_new="$levels_new $path"; echo "--- levels session log (this run): $path"; cat "$path" ;; esac
+done
+minimap_new=""
+for path in "$minimap_logs"/*.log; do
+  [ -f "$path" ] || continue
+  case "$minimap_before" in *" ${path##*/} "*) ;; *) minimap_new="$minimap_new $path"; echo "--- minimap session log (this run): $path"; cat "$path" ;; esac
+done
+echo "--- alaydriem-mod-manager.log (this run)"
+since "$logs/alaydriem-mod-manager.log" "$manager_amml_start"
+for path in $(session_logs); do
+  echo "--- manager session log (this run): $path"
+  cat "$path"
+done
+echo "--- summary"
+since "$logs/loader.log" "$loader_start" | grep -E "resolved [0-9]+/[0-9]+|not for this build|mod entries|mod loaded|mod switched off|mod could not be loaded" || true
+for path in $(session_logs); do grep -E "overlay bound|mod registered" "$path" || true; done
+echo "game running before it was ended: $running"
+failed=""
+since "$logs/loader.log" "$loader_start" | grep -q -E 'resolved ([0-9]+)/\1;' || { echo "FAIL: the loader did not resolve all entries"; failed="yes"; }
+# an entry an entry_is check refuses is not for this build (INFO, counted apart); any other unresolved entry is missing
+if since "$logs/loader.log" "$loader_start" | grep -q -F "mod entries did not all resolve"; then echo "FAIL: a mod has a missing entry"; failed="yes"; fi
+since "$logs/loader.log" "$loader_start" | grep -q -F '"missing":0,"mod_name":"alaydriem-minimap"' || { echo "FAIL: the minimap has a missing entry (features off: not none)"; failed="yes"; }
+since "$logs/loader.log" "$loader_start" | grep -q -F '"missing":0,"mod_name":"alaydriem-levels"' || { echo "FAIL: levels has a missing entry"; failed="yes"; }
+since "$logs/alaydriem-levels.log" "$levels_start" | grep -q -F "features off: none" || { echo "FAIL: the levels log has no 'features off: none' line"; failed="yes"; }
+for mod in alaydriem-mod-manager alaydriem-minimap alaydriem-levels; do
+  since "$logs/loader.log" "$loader_start" | grep -q -F "mod loaded {\"mod_name\":\"$mod\"}" || { echo "FAIL: $mod did not load"; failed="yes"; }
+done
+if { since "$logs/alaydriem-minimap.log" "$minimap_start"; for path in $minimap_new; do cat "$path"; done; } | grep -q -i -E " is off| is missing|panic|ERROR|WARN"; then echo "FAIL: the minimap log holds an off, missing, error or panic line"; failed="yes"; fi
+if since "$logs/loader.log" "$loader_start" | grep -q -i -E "panic| ERROR "; then echo "FAIL: the loader log holds an error or panic line"; failed="yes"; fi
+if { since "$logs/alaydriem-levels.log" "$levels_start"; for path in $levels_new; do cat "$path"; done; } | grep -q -i -E " is off| is missing|panic|ERROR|WARN"; then echo "FAIL: the levels log holds an off, missing, error or panic line"; failed="yes"; fi
+[ -n "$minimap_new" ] || { echo "FAIL: the minimap wrote no session log"; failed="yes"; }
+[ -n "$levels_new" ] || { echo "FAIL: levels wrote no session log"; failed="yes"; }
+[ "$outcome" = "linked" ] && [ "$running" = "yes" ] && [ -z "$failed" ]
+'''
+
+[tasks.ingame-mods-test]
+description = "Checks the stale-DLL check of scripts/ingame-mods.sh on a fake mod repo in a temporary folder: a DLL newer than its sources installs; a newer source (also one with a space in its path) or a missing dep-info file fails. No build and no game"
+dir = "{{config_root}}"
+run = "bash scripts/ingame-mods-test.sh"
+
+[tasks.ingame-ll-moves-test]
+description = "Checks the all-or-nothing move of the old LeviLamina stratum (scripts/ingame-ll-moves.sh) on a fake game folder in a temporary folder: the DLL, PDB and manifest.json move and the config and data folders stay; a target that already exists moves nothing; a file that cannot move sends the files moved before it back. No build and no game"
+dir = "{{config_root}}"
+run = "bash scripts/ingame-ll-moves-test.sh"
+
+[tasks.ingame-ll-stratum]
+description = "Builds every AMML mod in its own repo (manager, minimap, levels, freecam, zoom, and stratum with --features), packages the loader into the 1.26.51.01-ll test copy and installs them into mods/amml (their config/ is kept), moves old LeviLamina builds to _disabled-ll-mods (of the old stratum only its DLL, PDB and manifest.json, all or nothing; its config and data folders stay for the one-time copy), starts the game with grade on and waits up to 180 s for stratum to enable. With --features gate it enters the first world of the Play list through LeviHeadlessInput (background mode, no foreground), waits up to 150 s for the gate's 600 drawn frames, saves a third-person screenshot to --shot, closes the game window and waits up to 60 s for the game to exit. Ends only the process it started and restores the loader and LeviHeadlessInput configs. Passes when every entry resolves, every mod loads, stratum logs 'features off: none' and no off, missing, error or panic line, and with the gate: a valid mesh with vertices, 'gate nbt kind=Exact name=minecraft:oak_stairs', 600 drawn frames and a clean exit"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--features <features>" help="Cargo features of stratum-amml, comma separated (gate runs the in-game gate)"
+flag "--shot <shot>" help="Where the gate run saves its screenshot (PNG)"
+'''
+run = "bash scripts/ingame-ll-stratum.sh"
+
+[tasks.ingame-standalone-stratum]
+description = "As ingame-ll-stratum on the standalone host: builds every AMML mod (stratum with --features), refreshes a standalone instance (--instance, default 1.26.51.01-standalone) from a game copy (--game, default 1.26.51.01-ll), installs the mods into its mods/amml, starts it and waits up to 180 s for stratum to enable. With --features gate it tries the world entry with clicks posted to the game window (LeviHeadlessInput needs LeviLamina), waits up to 150 s for the gate's 600 drawn frames, closes the game window and waits up to 60 s for the exit. Ends only the process it started. Passes as ingame-ll-stratum does; when the posted clicks do not enter a world it says so and the gate lines are not checked"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--features <features>" help="Cargo features of stratum-amml, comma separated (gate runs the in-game gate)"
+flag "--game <game>" help="The game copy the standalone instance is made from"
+flag "--instance <instance>" help="The standalone instance to run"
+'''
+run = "bash scripts/ingame-standalone-stratum.sh"
+
+[tasks.ingame-ll-dejavu]
+description = "Runs the mod build of the stratum tasks (scripts/ingame-mods.sh), which builds and installs DejaVu too (DEJAVU_REPO defaults to ../dejavu; DEJAVU_DIST defaults to $DEJAVU_REPO/dist/alaydriem-dejavu), and fails with a clear message when alaydriem_dejavu.dll or amml.hcl is missing from the package. Packages the loader into the 1.26.51.01-ll test copy and installs all mods and DejaVu into mods/amml, moves the DLL, PDB and manifest.json of an old LeviLamina mods/DejaVu to the sibling folder _disabled-ll-dejavu (its config and data folders stay for the one-time copy; all or nothing), starts Minecraft.Windows.exe with grade on for the run, waits up to 180 s for DejaVu to log 'features off:', ends only the process it started, restores the loader config and prints the loader and DejaVu lines of the run. Passes when every entry resolves, the manager and DejaVu load, DejaVu has no missing entry, its log holds 'features off: none' and no off, missing, error or panic line"
+dir = "{{config_root}}"
+shell = "bash -c"
+run = '''
+set -e
+[ -n "$LOCALAPPDATA" ] || { echo "LOCALAPPDATA is not set; the test copies live under %LOCALAPPDATA%/amml/instances"; exit 1; }
+game="$LOCALAPPDATA/amml/instances/1.26.51.01-ll"
+logs="$game/logs/amml"
+config="$game/mods/amml-loader/amml.hcl"
+if [ -d "$game/mods/alaydriem-mod-manager" ]; then echo "the C++ manager is still in mods/alaydriem-mod-manager; run mise run ingame-ll-manager once or move it out first"; exit 1; fi
+. scripts/ingame-mods.sh
+build_mods ""
+dejavu_repo="${DEJAVU_REPO:-../dejavu}"
+dejavu_dist="${DEJAVU_DIST:-$dejavu_repo/dist/alaydriem-dejavu}"
+[ -f "$dejavu_dist/alaydriem_dejavu.dll" ] && [ -f "$dejavu_dist/amml.hcl" ] || { echo "FAIL: no DejaVu package in $dejavu_dist (needs alaydriem_dejavu.dll and amml.hcl; set DEJAVU_DIST when the package task writes elsewhere)"; exit 1; }
+# an old LeviLamina DejaVu goes aside inside the instance, so that two DejaVus do not run; only its code files move, all or nothing
+echo "--- moves"
+old="$game/mods/DejaVu"
+aside="$game/_disabled-ll-dejavu/DejaVu"
+if [ -d "$old" ]; then
+  files=""
+  for path in "$old"/*.dll "$old"/*.pdb "$old/manifest.json"; do [ -f "$path" ] && files="$files $path"; done
+  if [ -e "$aside" ]; then echo "mods/DejaVu is not moved: _disabled-ll-dejavu/DejaVu already exists; sort the two out by hand"; exit 1; fi
+  mkdir -p "$aside"
+  for path in $files; do mv "$path" "$aside/"; done
+  echo "moved the code files of mods/DejaVu to _disabled-ll-dejavu/DejaVu"
+else
+  echo "nothing to move"
+fi
+mise run package-ll --game "$game"
+install_mods "$game/mods/amml"
+saved=""
+if [ -f "$config" ]; then saved=$(mktemp); cp "$config" "$saved"; fi
+restore() { if [ -n "$saved" ]; then cp "$saved" "$config" && rm -f "$saved" || return 1; else rm -f "$config"; fi; }
+. scripts/game-pid.sh
+. scripts/ingame-common.sh
+game_pid=""
+launched=""
+trap 'end_game || echo "ending the game failed"; restore || echo "restoring $config failed"' EXIT
+printf 'grade = true\n' > "$config"
+mkdir -p "$logs"
+loader_start=$(size_of "$logs/loader.log")
+dejavu_start=$(size_of "$logs/alaydriem-dejavu.log")
+before=" $(echo $(game_pids)) "
+(cd "$game" && ./Minecraft.Windows.exe > /dev/null 2>&1) &
+launcher=$!
+launched="yes"
+started=$(date +%s)
+outcome="timeout"
+while [ $(( $(date +%s) - started )) -lt 180 ]; do
+  if since "$logs/alaydriem-dejavu.log" "$dejavu_start" | grep -q -F "features off:"; then outcome="enabled"; break; fi
+  if [ -z "$game_pid" ]; then find_game_pid "$game"; elif ! pid_alive; then outcome="game exited"; game_pid=""; break; fi
+  if [ -z "$game_pid" ] && [ $(( $(date +%s) - started )) -ge 30 ]; then outcome="game did not start"; break; fi
+  sleep 2
+done
+echo "waited $(( $(date +%s) - started )) s: $outcome (game PID ${game_pid:-none})"
+if [ "$outcome" = "enabled" ]; then sleep 15; fi
+running="no"
+if pid_alive; then running="yes"; fi
+end_game
+echo "--- loader.log (this run)"
+since "$logs/loader.log" "$loader_start" | grep -v "resolver note" || true
+echo "--- alaydriem-dejavu.log (this run)"
+since "$logs/alaydriem-dejavu.log" "$dejavu_start"
+echo "--- summary"
+since "$logs/loader.log" "$loader_start" | grep -E "resolved [0-9]+/[0-9]+|not for this build|grade: |mod entries|mod loaded|mod switched off|mod could not be loaded" || true
+echo "game running before it was ended: $running"
+failed=""
+since "$logs/loader.log" "$loader_start" | grep -q -E 'resolved ([0-9]+)/\1;' || { echo "FAIL: the loader did not resolve all entries"; failed="yes"; }
+if since "$logs/loader.log" "$loader_start" | grep -q -F "mod entries did not all resolve"; then echo "FAIL: a mod has a missing entry"; failed="yes"; fi
+since "$logs/loader.log" "$loader_start" | grep -q -F '"missing":0,"mod_name":"alaydriem-dejavu"' || { echo "FAIL: DejaVu has a missing entry"; failed="yes"; }
+for mod in alaydriem-mod-manager alaydriem-dejavu; do
+  since "$logs/loader.log" "$loader_start" | grep -q -F "mod loaded {\"mod_name\":\"$mod\"}" || { echo "FAIL: $mod did not load"; failed="yes"; }
+done
+since "$logs/alaydriem-dejavu.log" "$dejavu_start" | grep -q -F "features off: none" || { echo "FAIL: the DejaVu log has no 'features off: none' line"; failed="yes"; }
+if since "$logs/alaydriem-dejavu.log" "$dejavu_start" | grep -q -i -E " is off| is missing|panic|ERROR"; then echo "FAIL: the DejaVu log holds an off, missing, error or panic line"; failed="yes"; fi
+if since "$logs/loader.log" "$loader_start" | grep -q -i -E "panic| ERROR "; then echo "FAIL: the loader log holds an error or panic line"; failed="yes"; fi
+[ "$outcome" = "enabled" ] && [ "$running" = "yes" ] && [ -z "$failed" ]
+'''
+
+[tasks.ingame-standalone-dejavu]
+description = "As ingame-ll-dejavu on the standalone host: runs the mod build of the stratum tasks, which builds and installs DejaVu through scripts/ingame-mods.sh (DEJAVU_REPO defaults to ../dejavu; DEJAVU_DIST defaults to $DEJAVU_REPO/dist/alaydriem-dejavu), and fails with a clear message when the package is missing, refreshes a standalone instance (--instance, default 1.26.51.01-standalone) from a game copy (--game, default 1.26.51.01-ll; use 1.26.60.05 with 1.26.60.05-standalone for 26.60), installs all mods, DejaVu included, into its mods/amml, starts its patched Minecraft.Windows.exe, waits up to 180 s for DejaVu to log 'features off:', ends only the process it started and prints the loader and DejaVu lines of the run. Passes as ingame-ll-dejavu does"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--game <game>" help="The game copy the standalone instance is made from"
+flag "--instance <instance>" help="The standalone instance to run"
+'''
+run = '''
+set -e
+[ -n "$LOCALAPPDATA" ] || { echo "LOCALAPPDATA is not set; the test copies live under %LOCALAPPDATA%/amml/instances"; exit 1; }
+game="${usage_game:-$LOCALAPPDATA/amml/instances/1.26.51.01-ll}"
+instance="${usage_instance:-$LOCALAPPDATA/amml/instances/1.26.51.01-standalone}"
+logs="$instance/amml/logs"
+. scripts/ingame-mods.sh
+build_mods ""
+dejavu_repo="${DEJAVU_REPO:-../dejavu}"
+dejavu_dist="${DEJAVU_DIST:-$dejavu_repo/dist/alaydriem-dejavu}"
+[ -f "$dejavu_dist/alaydriem_dejavu.dll" ] && [ -f "$dejavu_dist/amml.hcl" ] || { echo "FAIL: no DejaVu package in $dejavu_dist (needs alaydriem_dejavu.dll and amml.hcl; set DEJAVU_DIST when the package task writes elsewhere)"; exit 1; }
+mise run make-standalone-instance --game "$game" --instance "$instance"
+install_mods "$instance/mods/amml"
+. scripts/game-pid.sh
+. scripts/ingame-common.sh
+game_pid=""
+launched=""
+trap 'end_game || echo "ending the game failed"' EXIT
+mkdir -p "$logs"
+loader_start=$(size_of "$logs/loader.log")
+dejavu_start=$(size_of "$logs/alaydriem-dejavu.log")
+before=" $(echo $(game_pids)) "
+(cd "$instance" && ./Minecraft.Windows.exe > /dev/null 2>&1) &
+launcher=$!
+launched="yes"
+started=$(date +%s)
+outcome="timeout"
+while [ $(( $(date +%s) - started )) -lt 180 ]; do
+  if since "$logs/alaydriem-dejavu.log" "$dejavu_start" | grep -q -F "features off:"; then outcome="enabled"; break; fi
+  if [ -z "$game_pid" ]; then find_game_pid "$instance"; elif ! pid_alive; then outcome="game exited"; game_pid=""; break; fi
+  if [ -z "$game_pid" ] && [ $(( $(date +%s) - started )) -ge 30 ]; then outcome="game did not start"; break; fi
+  sleep 2
+done
+echo "waited $(( $(date +%s) - started )) s: $outcome (game PID ${game_pid:-none})"
+if [ "$outcome" = "enabled" ]; then sleep 15; fi
+running="no"
+if pid_alive; then running="yes"; fi
+end_game
+echo "--- loader.log (this run)"
+since "$logs/loader.log" "$loader_start" | grep -v "resolver note" || true
+echo "--- alaydriem-dejavu.log (this run)"
+since "$logs/alaydriem-dejavu.log" "$dejavu_start"
+echo "--- summary"
+since "$logs/loader.log" "$loader_start" | grep -E "resolved [0-9]+/[0-9]+|not for this build|mod entries|mod loaded|mod switched off|mod could not be loaded" || true
+echo "game running before it was ended: $running"
+failed=""
+since "$logs/loader.log" "$loader_start" | grep -q -E 'resolved ([0-9]+)/\1;' || { echo "FAIL: the loader did not resolve all entries"; failed="yes"; }
+if since "$logs/loader.log" "$loader_start" | grep -q -F "mod entries did not all resolve"; then echo "FAIL: a mod has a missing entry"; failed="yes"; fi
+since "$logs/loader.log" "$loader_start" | grep -q -F '"missing":0,"mod_name":"alaydriem-dejavu"' || { echo "FAIL: DejaVu has a missing entry"; failed="yes"; }
+for mod in alaydriem-mod-manager alaydriem-dejavu; do
+  since "$logs/loader.log" "$loader_start" | grep -q -F "mod loaded {\"mod_name\":\"$mod\"}" || { echo "FAIL: $mod did not load"; failed="yes"; }
+done
+since "$logs/alaydriem-dejavu.log" "$dejavu_start" | grep -q -F "features off: none" || { echo "FAIL: the DejaVu log has no 'features off: none' line"; failed="yes"; }
+if since "$logs/alaydriem-dejavu.log" "$dejavu_start" | grep -q -i -E " is off| is missing|panic|ERROR"; then echo "FAIL: the DejaVu log holds an off, missing, error or panic line"; failed="yes"; fi
+if since "$logs/loader.log" "$loader_start" | grep -q -i -E "panic| ERROR "; then echo "FAIL: the loader log holds an error or panic line"; failed="yes"; fi
+[ "$outcome" = "enabled" ] && [ "$running" = "yes" ] && [ -z "$failed" ]
+'''
+
+[tasks.ingame-ll-freecam]
+description = "Builds every AMML mod in its own repo (manager, minimap, levels, freecam, zoom and stratum) and installs all of them into mods/amml, and fails on a failed build or an installed DLL older than a source file it is built from (scripts/ingame-mods.sh). As ingame-ll-levels, with freecam too: installs them into mods/amml of the 1.26.51.01-ll test copy (their config/ is kept), moves old LeviLamina builds of them to _disabled-ll-mods, starts the game with grade on, waits up to 180 s for the manager to register alaydriem-freecam and alaydriem-levels, ends only the process it started and prints the lines of the run. Passes as ingame-ll-levels does, and when freecam loads with no missing entry, logs 'features off: none' and has no off, missing, error or panic line"
+dir = "{{config_root}}"
+shell = "bash -c"
+run = "bash scripts/ingame-ll-freecam.sh"
+
+[tasks.ingame-standalone-freecam]
+description = "Builds every AMML mod in its own repo (manager, minimap, levels, freecam, zoom and stratum) and installs all of them into mods/amml, and fails on a failed build or an installed DLL older than a source file it is built from (scripts/ingame-mods.sh). As ingame-standalone-levels, with freecam too: refreshes a standalone instance (--instance, default 1.26.51.01-standalone) from a game copy (--game, default 1.26.51.01-ll; use 1.26.60.05 with 1.26.60.05-standalone for 26.60), installs them into its mods/amml, starts it, waits up to 180 s for the manager to register alaydriem-freecam and alaydriem-levels, ends only the process it started and prints the lines of the run. Passes as ingame-standalone-levels does, and when freecam loads with no missing entry, logs 'features off: none' and has no off, missing, error or panic line"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--game <game>" help="The game copy the standalone instance is made from"
+flag "--instance <instance>" help="The standalone instance to run"
+'''
+run = "bash scripts/ingame-standalone-freecam.sh"
+
+[tasks."amml-studio-ui:gallery"]
+description = "Opens the amml-studio-ui gallery: one page per Paper artboard of a studio component"
+dir = "{{config_root}}"
+run = "cargo run --release -p amml-studio-ui --features gallery --example studio_gallery"
+
+[tasks."amml-studio-ui:snapshots"]
+description = "Rewrites the amml-studio-ui page snapshots in ui/studio/tests/snapshots; compare them with Paper before keeping them"
+dir = "{{config_root}}"
+env = { UPDATE_SNAPSHOTS = "1" }
+run = "cargo nextest run -p amml-studio-ui --no-fail-fast snapshot::"
+
+[tasks."amml-ui:gallery"]
+description = "Opens the amml-ui gallery: one page per Paper widget sheet"
+dir = "{{config_root}}"
+run = "cargo run --release -p amml-ui --features gallery --example widget_gallery"
+
+[tasks."amml-ui:snapshots"]
+description = "Rewrites the amml-ui sheet snapshots in ui/kit/tests/snapshots; compare them with Paper before keeping them"
+dir = "{{config_root}}"
+env = { UPDATE_SNAPSHOTS = "1" }
+run = "cargo nextest run -p amml-ui --no-fail-fast snapshot::"
+
+# Translation catalogs: each crate that shows text has <crate folder>/i18n/ holding <domain>.pot
+# (written from its Message enum), the translators' <locale>.po files, and packs/<locale>.json.
+
+[tasks."i18n:extract"]
+description = "Writes each crate's i18n/<domain>.pot from its Message enum"
+dir = "{{config_root}}"
+# One `cargo run --example i18n_extract` line per crate with a Message enum
+run = [
+  "cargo run -q -p amml-ui --example i18n_extract",
+  "cargo run -q -p amml-studio-ui --example studio_i18n_extract",
+]
+
+[tasks."i18n:check"]
+description = "Fails when a crate's .pot is out of date with its Message enum"
+dir = "{{config_root}}"
+# One `cargo run --example i18n_extract -- --check` line per crate with a Message enum
+run = [
+  "cargo run -q -p amml-ui --example i18n_extract -- --check",
+  "cargo run -q -p amml-studio-ui --example studio_i18n_extract -- --check",
+]
+
+[tasks."i18n:build"]
+description = "Compiles each crate's i18n/<locale>.po into i18n/packs/<locale>.json; a locale under 90 % coverage is not shipped"
+dir = "{{config_root}}"
+shell = "bash -c"
+run = 'for dir in ui/*/i18n i18n/*/i18n; do [ -d "$dir" ] || continue; cargo run -q -p amml-i18n-tool -- build "$dir" "$dir/packs" || exit 1; done'
+
+[tasks."i18n:pseudo"]
+description = "Writes the en_XA pseudo-locale pack of each crate's .pot into i18n/packs/en_XA.json"
+dir = "{{config_root}}"
+shell = "bash -c"
+run = 'for pot in ui/*/i18n/*.pot i18n/*/i18n/*.pot; do [ -f "$pot" ] || continue; cargo run -q -p amml-i18n-tool -- pseudo "$pot" "$(dirname "$pot")/packs/en_XA.json" || exit 1; done'
+
+[tasks."i18n:report"]
+description = "Prints the translation coverage of each crate's locales against its .pot"
+dir = "{{config_root}}"
+shell = "bash -c"
+run = 'for pot in ui/*/i18n/*.pot i18n/*/i18n/*.pot; do [ -f "$pot" ] || continue; echo "## $pot"; cargo run -q -p amml-i18n-tool -- report "$pot" "$(dirname "$pot")" || exit 1; done'
+
+[tasks."design:generate"]
+description = "Regenerates the amml-ui and amml-studio-ui token types from ui/kit/design/tokens.json"
+dir = "{{config_root}}"
+run = "cargo run -q -p amml-ui-gen -- --tokens ui/kit/design/tokens.json --ownership ui/kit/design/ownership.json --kit-out ui/kit/src/tokens/generated --studio-out ui/studio/src/tokens/generated"
+
+[tasks."design:check"]
+description = "Fails if the generated token types differ from what tokens.json produces"
+dir = "{{config_root}}"
+run = "cargo run -q -p amml-ui-gen -- --tokens ui/kit/design/tokens.json --ownership ui/kit/design/ownership.json --kit-out ui/kit/src/tokens/generated --studio-out ui/studio/src/tokens/generated --check"
+
+[tasks.ingame-standalone-locator-heads]
+description = "Builds the mod manager and alaydriem-locator-heads (each in its own repo) and runs them in the private instance 1.26.60.05-locator-heads (--instance; no other instance is accepted): installs only those two mods into its mods/amml and removes any other, copies recipes/ into its amml/recipes, starts its Minecraft.Windows.exe, writes the game PID to locator-heads.pid, waits up to 180 s for the manager to register alaydriem-locator-heads, ends only that PID and prints the lines of the run. Passes when all entries resolve, locator heads has no missing entry, logs 'features off: none' and has no off, missing, error or panic line. --game is accepted for the call form and not used: the instance is made once from 1.26.60.05-standalone"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--game <game>" help="Not used; the private instance is a copy made once from 1.26.60.05-standalone"
+flag "--instance <instance>" help="The private instance to run; only 1.26.60.05-locator-heads is accepted"
+'''
+run = "bash scripts/ingame-standalone-locator-heads.sh"
+
+[tasks.ingame-peek]
+description = "Runs the peek in-game gate in the private instance 1.26.60.05-peek (a copy of 1.26.60.05-standalone; no other instance is used): builds the loader and installs it with the chosen mod (--mod testmod|peek), keeps only the copied mod manager beside it and removes any other mod, copies recipes/ into its amml/recipes, starts its Minecraft.Windows.exe, records the game PID in pids.md, waits up to 180 s for the ready line (ticks=100 for the test mod, the manager registering alaydriem-peek for peek), optionally holds the game for --hold seconds for a manual check, ends only that PID and checks that it is gone, and prints the loader, manager and mod lines of the run. It does not run scripts/ingame-mods.sh. Passes when all entries resolve, the mod has no missing entry and no off, missing, error or panic line, and the game ran until it was ended"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--mod <mod>" help="The mod to run: testmod or peek"
+flag "--hold <seconds>" help="Keep the game running this long after the automated checks, for a manual check; default 0"
+flag "--with <mod>" help="One more mod repo beside amml to package and keep installed with peek, for a check of the two together: freecam"
+'''
+run = "bash scripts/ingame-peek.sh"

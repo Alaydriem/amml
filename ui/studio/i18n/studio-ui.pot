@@ -1,0 +1,465 @@
+# Messages of the studio-ui domain, written by amml-i18n-tool. Do not edit.
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Domain: studio-ui\n"
+
+#. The product name in the top bar; keep it as a name
+msgid "DejaVu Studio"
+msgstr ""
+
+msgctxt "studio mode"
+msgid "Edit"
+msgstr ""
+
+msgctxt "studio mode"
+msgid "Preview"
+msgstr ""
+
+msgid "Undo"
+msgstr ""
+
+msgid "Redo"
+msgstr ""
+
+msgid "Undo history"
+msgstr ""
+
+msgid "Nothing to undo"
+msgstr ""
+
+msgid "Nothing to redo"
+msgstr ""
+
+msgid "Settings"
+msgstr ""
+
+msgid "Close replay"
+msgstr ""
+
+msgid "Coverage"
+msgstr ""
+
+msgid "Queue"
+msgstr ""
+
+msgid "Export"
+msgstr ""
+
+msgid "Original"
+msgstr ""
+
+#. Which scene of how many, on the scene switcher chip, as in 1 of 5
+#, python-brace-format
+msgid "{index} of {count}"
+msgstr ""
+
+msgid "To scene start"
+msgstr ""
+
+msgid "Previous key"
+msgstr ""
+
+#. s is seconds
+msgid "Back 5 s"
+msgstr ""
+
+msgctxt "transport"
+msgid "Play"
+msgstr ""
+
+msgctxt "transport"
+msgid "Pause"
+msgstr ""
+
+#. s is seconds
+msgid "Forward 5 s"
+msgstr ""
+
+msgid "Next key"
+msgstr ""
+
+msgid "To scene end"
+msgstr ""
+
+#. After the playhead time in the transport: the replay length, as in / 02:14:08.40
+#, python-brace-format
+msgid "/ {duration}"
+msgstr ""
+
+msgid "Playback speed"
+msgstr ""
+
+msgid "Loop the scene"
+msgstr ""
+
+msgid "Snap to keys, bookmarks and the playhead"
+msgstr ""
+
+msgid "Composition guides"
+msgstr ""
+
+msgid "Zoom out"
+msgstr ""
+
+msgid "Zoom in"
+msgstr ""
+
+msgid "Add camera key"
+msgstr ""
+
+msgid "Pause playback to add a key"
+msgstr ""
+
+msgid "Fit"
+msgstr ""
+
+#. A coverage status in the status bar legend, written in capitals
+msgid "WORKS / AUTO"
+msgstr ""
+
+#. A coverage status in the status bar legend, written in capitals
+msgid "ENGINE-ONLY"
+msgstr ""
+
+#. A coverage status in the status bar legend, written in capitals
+msgid "PLANNED"
+msgstr ""
+
+#. A coverage status in the status bar legend, written in capitals
+msgid "MOCKUP-ONLY"
+msgstr ""
+
+#. A coverage status in the status bar legend, written in capitals
+msgid "MISSING"
+msgstr ""
+
+msgctxt "viewer chip"
+msgid "Scene"
+msgstr ""
+
+msgid "As recorded"
+msgstr ""
+
+#. A world axis in the camera readout, before its value
+msgid "X"
+msgstr ""
+
+#. A world axis in the camera readout, before its value
+msgid "Y"
+msgstr ""
+
+#. A world axis in the camera readout, before its value
+msgid "Z"
+msgstr ""
+
+msgid "Yaw"
+msgstr ""
+
+msgid "Pitch"
+msgstr ""
+
+msgid "Roll"
+msgstr ""
+
+msgid "Scene camera"
+msgstr ""
+
+#. On the viewer tag while the camera follows a player, before the player name
+msgid "Following"
+msgstr ""
+
+msgid "Rebuilding the world"
+msgstr ""
+
+msgid "Camera track hidden"
+msgstr ""
+
+#. A number in a count pill, as in the keys on a track or the scenes in a replay
+#, python-brace-format
+msgid "{count}"
+msgstr ""
+
+#. The head of a timeline row in the track list, written in capitals
+msgid "SCENES"
+msgstr ""
+
+#. The head of a timeline row in the track list, written in capitals
+msgid "REALM"
+msgstr ""
+
+msgid "Add scene"
+msgstr ""
+
+msgid "Add track"
+msgstr ""
+
+msgid "Show track"
+msgstr ""
+
+msgid "Hide track"
+msgstr ""
+
+msgid "Lock track"
+msgstr ""
+
+msgid "Unlock track"
+msgstr ""
+
+msgctxt "inspector tab"
+msgid "Key"
+msgstr ""
+
+msgctxt "inspector tab"
+msgid "Scene"
+msgstr ""
+
+msgctxt "inspector tab"
+msgid "Players"
+msgstr ""
+
+msgctxt "inspector tab"
+msgid "Track"
+msgstr ""
+
+msgid "Close the inspector"
+msgstr ""
+
+#. A row of the undo history: its number, then the name of the step, as in 3. Edit key
+#, python-brace-format
+msgid "{index}. {step}"
+msgstr ""
+
+msgid "Easing"
+msgstr ""
+
+msgid "Close"
+msgstr ""
+
+#. A bezier handle coordinate: x or y of the first or second handle
+msgid "x1"
+msgstr ""
+
+#. A bezier handle coordinate: x or y of the first or second handle
+msgid "y1"
+msgstr ""
+
+#. A bezier handle coordinate: x or y of the first or second handle
+msgid "x2"
+msgstr ""
+
+#. A bezier handle coordinate: x or y of the first or second handle
+msgid "y2"
+msgstr ""
+
+msgid "Drag a handle for a custom curve"
+msgstr ""
+
+msgid "Make custom bezier"
+msgstr ""
+
+#. The head of the saved easing presets, written in capitals
+msgid "SAVED PRESETS"
+msgstr ""
+
+msgid "Save preset"
+msgstr ""
+
+msgctxt "easing family"
+msgid "All"
+msgstr ""
+
+msgctxt "easing family"
+msgid "In"
+msgstr ""
+
+msgctxt "easing family"
+msgid "Out"
+msgstr ""
+
+msgctxt "easing family"
+msgid "In Out"
+msgstr ""
+
+msgctxt "easing family"
+msgid "Other"
+msgstr ""
+
+msgid "Cancel"
+msgstr ""
+
+msgid "Rename"
+msgstr ""
+
+msgid "Enter to apply, Esc to cancel"
+msgstr ""
+
+msgid "Name"
+msgstr ""
+
+msgid "Type a name first"
+msgstr ""
+
+msgid "Render queue"
+msgstr ""
+
+msgid "No render jobs"
+msgstr ""
+
+msgid "Export a scene to add it to the queue."
+msgstr ""
+
+msgid "Video only · audio is not exported"
+msgstr ""
+
+msgid "Remove"
+msgstr ""
+
+#. A render job's progress, as in Rendering 28%
+#, python-brace-format
+msgid "Rendering {percent}%"
+msgstr ""
+
+msgid "Retry"
+msgstr ""
+
+msgid "Show file"
+msgstr ""
+
+msgid "Resume"
+msgstr ""
+
+msgid "Clear finished"
+msgstr ""
+
+msgid "Rendering"
+msgstr ""
+
+msgid "Queued"
+msgstr ""
+
+msgid "Preparing"
+msgstr ""
+
+msgid "Finishing"
+msgstr ""
+
+msgid "Cancelled"
+msgstr ""
+
+msgid "Done"
+msgstr ""
+
+msgid "Failed"
+msgstr ""
+
+msgid "All"
+msgstr ""
+
+#. A coverage filter pill: the status name, then how many items have it
+#, python-brace-format
+msgid "{label} {count}"
+msgstr ""
+
+msgid "Search items"
+msgstr ""
+
+msgid "No matches"
+msgstr ""
+
+msgid "Try another word, or show every status."
+msgstr ""
+
+msgid "Search matches the item name, or the exact id (type \"K5\")."
+msgstr ""
+
+msgid "Go"
+msgstr ""
+
+msgid "Export scene"
+msgstr ""
+
+#. A row label in the export dialog, written in capitals
+msgid "FORMAT"
+msgstr ""
+
+#. A row label in the export dialog, written in capitals
+msgid "RESOLUTION"
+msgstr ""
+
+#. A row label in the export dialog, written in capitals
+msgid "FRAME RATE"
+msgstr ""
+
+#. A row label in the export dialog, written in capitals
+msgid "QUALITY"
+msgstr ""
+
+#. A row label in the export dialog, written in capitals
+msgid "SIDECAR FILE"
+msgstr ""
+
+#. A row label in the export dialog, written in capitals
+msgid "OUTPUT"
+msgstr ""
+
+#. A video format name; keep the codec name
+msgid "H.264"
+msgstr ""
+
+#. A video format name; keep the codec name
+msgid "H.265"
+msgstr ""
+
+#. A video format name; keep the codec name
+msgid "ProRes 422"
+msgstr ""
+
+#. A video format name; keep the codec name
+msgid "PNG seq."
+msgstr ""
+
+msgid "1080p"
+msgstr ""
+
+msgid "1440p"
+msgstr ""
+
+msgid "4K"
+msgstr ""
+
+#. A video size in pixels, as in 3840 × 2160
+#, python-brace-format
+msgid "{width} × {height}"
+msgstr ""
+
+msgid "Render"
+msgstr ""
+
+msgid "Add to queue"
+msgstr ""
+
+msgid "Open queue"
+msgstr ""
+
+#. The capture timer's tag, written in capitals: recording, or paused
+msgid "REC"
+msgstr ""
+
+#. The capture timer's tag, written in capitals: recording, or paused
+msgid "PAUSED"
+msgstr ""
+
+msgid "Discard this recording?"
+msgstr ""
+
+msgid "The capture so far will be deleted. You cannot undo this."
+msgstr ""
+
+msgid "Keep recording"
+msgstr ""
+
+msgid "Discard"
+msgstr ""

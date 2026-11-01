@@ -1,0 +1,21 @@
+[package]
+name = "amml-msvc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+autotests = false
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]
+amml-msvc-fixture = { path = "../msvc-fixture" }
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"
