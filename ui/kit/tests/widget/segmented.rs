@@ -188,14 +188,15 @@ fn each_arrow_moves_one_segment() {
 #[test]
 fn height_sets_the_track_height_and_the_default_is_the_field() {
     let mut row = ClickProbe::harness_with(0usize, |ui, selected| {
-        Segmented::new(egui::Id::new("short"), selected, SegmentPaint::segments(&["Linear", "Smooth"]))
+        Segmented::new(egui::Id::unique("short"), selected, SegmentPaint::segments(&["Linear", "Smooth"]))
             .height(28.0)
             .show(ui, 240.0)
     });
     row.run();
     assert_eq!(row.state().rect.height(), 28.0);
     let mut field = ClickProbe::harness_with(0usize, |ui, selected| {
-        Segmented::new(egui::Id::new("field"), selected, SegmentPaint::segments(&["Linear", "Smooth"])).show(ui, 240.0)
+        Segmented::new(egui::Id::unique("field"), selected, SegmentPaint::segments(&["Linear", "Smooth"]))
+            .show(ui, 240.0)
     });
     field.run();
     assert_eq!(field.state().rect.height(), 34.0);
