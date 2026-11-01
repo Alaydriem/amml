@@ -37,12 +37,12 @@ on:
         type: string
         default: ""
       amml_ref:
-        description: amml branch, tag or commit to build against
+        description: amml branch, tag or commit to build against; empty means the highest amml tag in the release's MAJOR.MINOR series
         required: false
         type: string
-        default: master
+        default: ""
       modmanager_ref:
-        description: amml-modmanager branch, tag or commit; empty means its default branch
+        description: amml-modmanager branch, tag or commit; empty means the highest amml-modmanager tag in the release's MAJOR.MINOR series
         required: false
         type: string
         default: ""
@@ -81,17 +81,57 @@ jobs:
         with:
           path: ${{ inputs.path }}
 
+      # A mod release 26.60.x builds against the highest amml and amml-modmanager tags 26.60.N. Pre-release tags are
+      # not candidates. A ref the caller passes is used as given.
+      - name: Pick the amml and amml-modmanager refs
+        id: refs
+        working-directory: ${{ github.workspace }}
+        env:
+          VERSION: ${{ inputs.version }}
+          AMML_REF: ${{ inputs.amml_ref }}
+          MODMANAGER: ${{ inputs.modmanager }}
+          MODMANAGER_REF: ${{ inputs.modmanager_ref }}
+        run: |
+          set -eu
+          core="${VERSION%%-*}"
+          series="${core%.*}"
+          pick() {
+            local repo="$1" given="$2" input="$3" ref
+            if [ -n "$given" ]; then
+              printf '%s\n' "$given"
+              return
+            fi
+            ref=$(git ls-remote --tags --refs "https://github.com/alaydriem/$repo.git" \
+              | sed -n 's#^.*refs/tags/##p' \
+              | { grep -E "^${series//./\\.}\.(0|[1-9][0-9]*)$" || true; } \
+              | sort -V \
+              | tail -n 1)
+            if [ -z "$ref" ]; then
+              echo "::error::$repo has no release tag $series.N for version $VERSION; release $repo $series.N first or pass $input" >&2
+              return 1
+            fi
+            printf '%s\n' "$ref"
+          }
+          amml=$(pick amml "$AMML_REF" amml_ref)
+          echo "amml ref: $amml"
+          echo "amml=$amml" >> "$GITHUB_OUTPUT"
+          if [ "$MODMANAGER" = "true" ]; then
+            modmanager=$(pick amml-modmanager "$MODMANAGER_REF" modmanager_ref)
+            echo "amml-modmanager ref: $modmanager"
+            echo "modmanager=$modmanager" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v7
         with:
           repository: alaydriem/amml
-          ref: ${{ inputs.amml_ref }}
+          ref: ${{ steps.refs.outputs.amml }}
           path: amml
 
       - uses: actions/checkout@v7
         if: ${{ inputs.modmanager }}
         with:
           repository: alaydriem/amml-modmanager
-          ref: ${{ inputs.modmanager_ref }}
+          ref: ${{ steps.refs.outputs.modmanager }}
           path: modmanager-amml
 
       - name: Check that the tag is free
