@@ -3,8 +3,9 @@ use egui::{Id, Ui, vec2};
 use super::{BarRows, TimelineSamples, ViewerSamples};
 use crate::component::dialog::{
     ConfirmDialog, ConfirmDialogView, CoverageFilter, CoverageGroup, CoveragePanel, CoveragePanelView, CoverageRow,
-    ExportDialog, ExportDialogView, ExportFormat, ExportFrameRate, ExportH265Profile, ExportProResProfile, ExportResolution, JobStatus, RenameDialog,
-    RenderJobRow, RenderProgressCard, RenderProgressView, RenderQueue, RenderQueueView,
+    ExportDialog, ExportDialogView, ExportFormat, ExportFrameRate, ExportH265Profile, ExportProResProfile,
+    ExportResolution, JobStatus, RenameDialog, RenderJobRow, RenderProgressCard, RenderProgressView, RenderQueue,
+    RenderQueueView,
 };
 use crate::gallery::GalleryState;
 use crate::id::StudioUiId;

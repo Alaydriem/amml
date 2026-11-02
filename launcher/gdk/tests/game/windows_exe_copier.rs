@@ -33,7 +33,7 @@ fn copies_current_store_exe_in_package_context() {
     assert_eq!(copy.bytes, source);
     assert_eq!(copy.method, "package-context");
     assert!(PeCheck::is_x64(&copy.path).unwrap());
-    assert!(!dest.path().join("robocopy.exit").exists());
+    assert!(!dest.path().join("robocopy.log").exists());
 }
 
 // The destination holds a space and both kinds of apostrophe, as a user name may.

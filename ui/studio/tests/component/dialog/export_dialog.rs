@@ -1,6 +1,6 @@
 use amml_studio_ui::component::dialog::{
-    ExportChoice, ExportDialog, ExportDialogAction, ExportDialogView, ExportFormat, ExportFrameRate,
-    ExportH265Profile, ExportProResProfile, ExportResolution,
+    ExportChoice, ExportDialog, ExportDialogAction, ExportDialogView, ExportFormat, ExportFrameRate, ExportH265Profile,
+    ExportProResProfile, ExportResolution,
 };
 
 use super::export;

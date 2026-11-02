@@ -21,6 +21,16 @@ fn the_script_names_the_package_and_holds_no_path() {
     assert!(!script.contains("WindowsApps") && !script.contains("brien"));
 }
 
+// A process started by robocopy's own parent inside the package is refused the exe of an older version
+#[test]
+fn the_cmdlet_starts_robocopy_itself_with_a_unicode_log() {
+    let script = command(r"C:\a", r"C:\b").script();
+    assert!(script.contains("-Command $robocopy "));
+    assert!(!script.contains("powershell.exe"));
+    assert!(script.contains("/UNILOG:"));
+    assert!(script.contains("robocopy.log"));
+}
+
 #[test]
 fn paths_with_any_quote_character_travel_unchanged_in_the_environment() {
     let destinations = [

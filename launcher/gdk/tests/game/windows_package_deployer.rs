@@ -8,7 +8,8 @@ const FAMILY: &str = "Microsoft.MinecraftUWP_8wekyb3d8bbwe";
 #[test]
 #[ignore = "changes the Store install; run by the operator with AMML_GDK_CURRENT_MSIXVC set"]
 fn re_add_current_package_keeps_registration() {
-    let package = PathBuf::from(std::env::var("AMML_GDK_CURRENT_MSIXVC").unwrap());
+    let package = PathBuf::from(std::env::var("AMML_GDK_CURRENT_MSIXVC").expect("set AMML_GDK_CURRENT_MSIXVC"));
+    assert!(package.is_file(), "AMML_GDK_CURRENT_MSIXVC names no file: {}", package.display());
     let inventory = WindowsPackageInventory::new();
     let before = inventory.registered(FAMILY).unwrap().unwrap();
 

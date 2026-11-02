@@ -1,4 +1,4 @@
-use super::{ExeCopier, PackageContextCommand, PeCheck};
+use super::{ExeCopier, PackageContextCommand, PeCheck, RobocopyLog};
 use crate::GdkError;
 use crate::structs::{ExeCopy, RegisteredPackage};
 use std::io::Read;
@@ -15,6 +15,7 @@ pub struct WindowsExeCopier {
 impl WindowsExeCopier {
     pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(120);
     const POLL: Duration = Duration::from_millis(250);
+    const SETTLE: Duration = Duration::from_secs(3);
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
     pub fn new(timeout: Duration) -> WindowsExeCopier {
@@ -53,14 +54,14 @@ impl WindowsExeCopier {
         let expected = std::fs::metadata(&source).map_err(|error| Self::failed(METHOD, error.to_string()))?.len();
         std::fs::create_dir_all(dest_dir)?;
         let command = PackageContextCommand::new(&package.family_name, app_id, &package.install_location, dest_dir);
-        let marker = dest_dir.join(PackageContextCommand::MARKER_NAME);
-        let _ = std::fs::remove_file(&marker);
+        let log = dest_dir.join(PackageContextCommand::LOG_NAME);
+        let dest = dest_dir.join(PackageContextCommand::EXE_NAME);
+        let _ = std::fs::remove_file(&log);
         let started = Instant::now();
         self.run_script(&command, started)?;
-        self.wait_for_robocopy(&marker, started)?;
-        let _ = std::fs::remove_file(&marker);
-        let dest = dest_dir.join(PackageContextCommand::EXE_NAME);
-        self.wait_until_complete(&dest, expected, started)?;
+        let finished = self.wait_until_complete(&dest, &log, expected, started);
+        let _ = std::fs::remove_file(&log);
+        finished?;
         self.verify(METHOD, dest, expected)
     }
 
@@ -108,39 +109,33 @@ impl WindowsExeCopier {
         }
     }
 
-    // robocopy writes its exit code last; a code of 8 or more is a failed copy
-    fn wait_for_robocopy(&self, marker: &Path, started: Instant) -> Result<(), GdkError> {
+    // Done when the copy has the exact length and robocopy no longer holds it open. Failed when robocopy logged an
+    // error and then wrote nothing for SETTLE: with one retry it has given up by then.
+    fn wait_until_complete(&self, dest: &Path, log: &Path, expected: u64, started: Instant) -> Result<(), GdkError> {
         const METHOD: &str = "package-context";
-        loop {
-            if let Ok(text) = std::fs::read_to_string(marker) {
-                let text = text.trim();
-                if text.starts_with("error") {
-                    return Err(Self::failed(METHOD, text.to_string()));
-                }
-                if let Ok(code) = text.parse::<u32>() {
-                    if code < 8 {
-                        return Ok(());
-                    }
-                    return Err(Self::failed(METHOD, format!("robocopy ended with exit code {code}")));
-                }
-            }
-            if started.elapsed() >= self.timeout {
-                return Err(Self::failed(METHOD, format!("robocopy did not finish in {} s", self.timeout.as_secs())));
-            }
-            std::thread::sleep(Self::POLL);
-        }
-    }
-
-    // after robocopy ended, the file has the exact length and no other process holds it open
-    fn wait_until_complete(&self, dest: &Path, expected: u64, started: Instant) -> Result<(), GdkError> {
+        let mut last_log = (0u64, Instant::now());
         loop {
             let length = std::fs::metadata(dest).map(|found| found.len()).unwrap_or(0);
             if length == expected && std::fs::OpenOptions::new().read(true).share_mode(0).open(dest).is_ok() {
                 return Ok(());
             }
+            let log_length = std::fs::metadata(log).map(|found| found.len()).unwrap_or(0);
+            if log_length != last_log.0 {
+                last_log = (log_length, Instant::now());
+            } else if last_log.1.elapsed() >= Self::SETTLE {
+                let errors = RobocopyLog::errors(log);
+                if !errors.is_empty() {
+                    return Err(Self::failed(METHOD, format!("robocopy: {}", errors.join(" "))));
+                }
+            }
             if started.elapsed() >= self.timeout {
-                let detail = format!("the copy reached {length} of {expected} bytes in {} s", self.timeout.as_secs());
-                return Err(Self::failed("package-context", detail));
+                let mut detail =
+                    format!("the copy reached {length} of {expected} bytes in {} s", self.timeout.as_secs());
+                let errors = RobocopyLog::errors(log);
+                if !errors.is_empty() {
+                    detail = format!("{detail}; robocopy: {}", errors.join(" "));
+                }
+                return Err(Self::failed(METHOD, detail));
             }
             std::thread::sleep(Self::POLL);
         }

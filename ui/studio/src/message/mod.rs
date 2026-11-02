@@ -492,9 +492,12 @@ impl Message for StudioUiMessage {
             | Self::ProfileLabel
             | Self::SidecarLabel
             | Self::OutputLabel => Some("A row label in the export dialog, written in capitals"),
-            Self::FormatH264 | Self::FormatH265 | Self::FormatProRes | Self::FormatProResHq | Self::FormatH265Main10 | Self::FormatPng => {
-                Some("A video format name; keep the codec name")
-            }
+            Self::FormatH264
+            | Self::FormatH265
+            | Self::FormatProRes
+            | Self::FormatProResHq
+            | Self::FormatH265Main10
+            | Self::FormatPng => Some("A video format name; keep the codec name"),
             Self::H265Main | Self::H265Main10 => {
                 Some("An H.265 profile in the export dialog: Main (8 bit), or Main 10 (10 bit, smoother gradients)")
             }

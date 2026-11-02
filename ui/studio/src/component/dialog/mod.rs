@@ -14,7 +14,8 @@ pub use coverage_panel::{
     CoverageFilter, CoverageGroup, CoveragePanel, CoveragePanelAction, CoveragePanelView, CoverageRow,
 };
 pub use export_dialog::{
-    ExportChoice, ExportDialog, ExportDialogAction, ExportDialogView, ExportFormat, ExportFrameRate, ExportH265Profile, ExportProResProfile, ExportResolution,
+    ExportChoice, ExportDialog, ExportDialogAction, ExportDialogView, ExportFormat, ExportFrameRate, ExportH265Profile,
+    ExportProResProfile, ExportResolution,
 };
 pub use rename_dialog::{RenameAction, RenameDialog};
 pub use render_progress::{RenderProgressAction, RenderProgressCard, RenderProgressView};

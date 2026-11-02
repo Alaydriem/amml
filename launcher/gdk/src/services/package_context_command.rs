@@ -6,10 +6,9 @@ use std::path::Path;
 // The PowerShell that copies the game exe with the game's package identity, so Windows serves the locked file.
 //
 // The script holds no path. The source and destination folders travel in the environment variables
-// `AMML_SRC` and `AMML_DEST`, so no quote character in a user name can end a string early. The script starts a
-// second PowerShell inside the package with `Invoke-CommandInDesktopPackage`; that one runs robocopy and writes
-// robocopy's exit code to `robocopy.exit` in the destination folder, which is how the caller learns the copy is
-// finished and whether it worked.
+// `AMML_SRC` and `AMML_DEST`, so no quote character in a user name can end a string early. The script starts
+// robocopy inside the package with `Invoke-CommandInDesktopPackage`. robocopy writes a Unicode log,
+// `robocopy.log`, in the destination folder; the caller reads it for errors.
 pub struct PackageContextCommand {
     family: String,
     app_id: String,
@@ -19,7 +18,7 @@ pub struct PackageContextCommand {
 
 impl PackageContextCommand {
     pub const EXE_NAME: &'static str = "Minecraft.Windows.exe";
-    pub const MARKER_NAME: &'static str = "robocopy.exit";
+    pub const LOG_NAME: &'static str = "robocopy.log";
     pub const SRC_VARIABLE: &'static str = "AMML_SRC";
     pub const DEST_VARIABLE: &'static str = "AMML_DEST";
 
@@ -37,30 +36,21 @@ impl PackageContextCommand {
         [(Self::SRC_VARIABLE, self.src_dir.clone()), (Self::DEST_VARIABLE, self.dest_dir.clone())]
     }
 
+    // robocopy itself must be the process the cmdlet starts: a process it starts in turn is refused the exe of an
+    // older version. A Windows path cannot hold a double quote, so double quotes delimit the paths safely.
     pub fn script(&self) -> String {
-        // the inner script gets its three paths as Base64 text
-        let inner = "$inner = '$ErrorActionPreference = ''Stop''; ' + '$text = [Text.Encoding]::UTF8; ' + \
-             '$src = $text.GetString([Convert]::FromBase64String(''' + (Pack $src) + ''')); ' + \
-             '$dest = $text.GetString([Convert]::FromBase64String(''' + (Pack $dest) + ''')); ' + \
-             '$robocopy = $text.GetString([Convert]::FromBase64String(''' + (Pack $robocopy) + ''')); ' + \
-             '$marker = Join-Path $dest ''robocopy.exit''; ' + \
-             'try { & $robocopy $src $dest Minecraft.Windows.exe /COPY:DT /R:1 /W:1 /NP | Out-Null; ' + \
-             'Set-Content -LiteralPath $marker -Value $LASTEXITCODE -Encoding ASCII } ' + \
-             'catch { Set-Content -LiteralPath $marker -Value (''error '' + $_.Exception.Message) -Encoding UTF8 }'";
         let lines = [
             "$ErrorActionPreference = 'Stop'".to_string(),
             format!("$src = $env:{}", Self::SRC_VARIABLE),
             format!("$dest = $env:{}", Self::DEST_VARIABLE),
-            "$system = Join-Path $env:SystemRoot 'System32'".to_string(),
-            "$robocopy = Join-Path $system 'robocopy.exe'".to_string(),
-            "$shell = Join-Path $system 'WindowsPowerShell\\v1.0\\powershell.exe'".to_string(),
-            "$text = [Text.Encoding]::UTF8".to_string(),
-            "function Pack($value) { [Convert]::ToBase64String($text.GetBytes($value)) }".to_string(),
-            inner.to_string(),
-            "$encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($inner))".to_string(),
-            "$arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ' + $encoded".to_string(),
+            format!("$log = Join-Path $dest '{}'", Self::LOG_NAME),
+            "$robocopy = Join-Path $env:SystemRoot 'System32\\robocopy.exe'".to_string(),
             format!(
-                "Invoke-CommandInDesktopPackage -PackageFamilyName {} -AppId {} -Command $shell -Args $arguments -ErrorAction Stop",
+                "$arguments = '\"' + $src + '\" \"' + $dest + '\" {} /COPY:DT /R:1 /W:1 /NP /UNILOG:\"' + $log + '\"'",
+                Self::EXE_NAME
+            ),
+            format!(
+                "Invoke-CommandInDesktopPackage -PackageFamilyName {} -AppId {} -Command $robocopy -Args $arguments -ErrorAction Stop",
                 PowerShellText::quote(&self.family),
                 PowerShellText::quote(&self.app_id)
             ),
