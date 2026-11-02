@@ -13,6 +13,7 @@ fn spec(name: &str, entries: &[&str]) -> ModSpec {
         dir: PathBuf::from(name),
         entry: format!("{name}.dll"),
         api_version: 1,
+        version: None,
         entries: entries.iter().map(|id| EntryId(id.to_string())).collect(),
     }
 }

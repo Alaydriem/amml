@@ -13,6 +13,8 @@ pub struct ModSpec {
     pub entry: String,
     /// The lowest loader API version the mod accepts.
     pub api_version: u32,
+    /// The release version the mod publishes, when its manifest carries one.
+    pub version: Option<String>,
     /// Entry ids the mod needs; used for the coverage log line.
     pub entries: Vec<EntryId>,
 }

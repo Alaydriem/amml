@@ -1,0 +1,8 @@
+export { CatalogFixtures } from "./catalog";
+export { DialogFixtures } from "./dialogs";
+export { InstallFixtures } from "./install";
+export { InstanceFixtures } from "./instances";
+export { ModFixtures } from "./mods";
+export { SettingsFixtures } from "./settings";
+export { ShellFixtures } from "./shell";
+export { SetupFixtures } from "./setup";

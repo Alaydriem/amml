@@ -35,3 +35,17 @@ fn the_standalone_layout_keeps_the_loader_files_in_one_amml_folder_beside_the_ex
     assert_eq!(paths.logs, Path::new("C:/game/amml/logs"));
     assert_eq!(paths.mods, Path::new("C:/game/mods/amml"));
 }
+
+#[test]
+fn standalone_instance_file_is_in_loader_folder() {
+    let paths = HostPaths::standalone(Path::new("C:/g/Minecraft.Windows.exe"));
+
+    assert_eq!(paths.instance, Path::new("C:/g/amml/instance.hcl"));
+}
+
+#[test]
+fn levilamina_instance_file_is_in_loader_folder() {
+    let paths = HostPaths::levilamina(Path::new("C:/game/Minecraft.Windows.exe"));
+
+    assert_eq!(paths.instance, Path::new("C:/game/mods/amml-loader/instance.hcl"));
+}

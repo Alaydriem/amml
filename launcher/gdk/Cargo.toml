@@ -1,0 +1,43 @@
+[package]
+name = "amml-gdk"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+autotests = false
+
+[lints]
+workspace = true
+
+[lib]
+name = "amml_gdk"
+path = "src/lib.rs"
+
+[dependencies]
+base64.workspace = true
+clap.workspace = true
+hcl-rs.workspace = true
+serde.workspace = true
+curia.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+ureq.workspace = true
+uuid.workspace = true
+windows.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[[bin]]
+name = "amml-gdk"
+path = "src/bin/amml-gdk.rs"
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"
+
+[[test]]
+name = "game"
+path = "tests/game.rs"

@@ -12,6 +12,12 @@ pub enum HookError {
     Detour(#[from] retour::Error),
     #[error("executable memory for the thunk: {0}")]
     Thunk(#[from] region::Error),
+    #[error("import table: {0}")]
+    ImportTable(&'static str),
+    #[error("cannot change the protection of an import table page: {0}")]
+    Protect(std::io::Error),
+    #[error("cannot create the data folder: {0}")]
+    DataDir(std::io::Error),
 }
 
 impl HookError {
@@ -26,7 +32,9 @@ impl HookError {
                 | ChainError::DuplicateDetour(_),
             ) => AmmlStatus::INVALID_ARGUMENT,
             Self::Chain(ChainError::Full(_)) => AmmlStatus::FAILED,
-            Self::Detour(_) | Self::Thunk(_) => AmmlStatus::HOOK_FAILED,
+            Self::Detour(_) | Self::Thunk(_) | Self::ImportTable(_) | Self::Protect(_) | Self::DataDir(_) => {
+                AmmlStatus::HOOK_FAILED
+            }
         }
     }
 }

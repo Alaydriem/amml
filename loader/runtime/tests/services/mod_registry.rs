@@ -165,3 +165,85 @@ fn a_namespace_folder_without_mods_is_ignored() {
 
     assert!(scan.mods.is_empty() && scan.skipped.is_empty());
 }
+
+struct Manifests;
+
+impl Manifests {
+    const BASE: &'static str = "namespace = \"acme\"\nname = \"zoom\"\nentry = \"zoom.dll\"\napi_version = 2\n";
+
+    fn scan(extra: &str) -> amml_runtime::ModScan {
+        let root = tempdir().unwrap();
+        Folders::write(root.path(), "@acme/zoom", &format!("{}{extra}", Self::BASE));
+        ModRegistry::new(ModRegistry::MAX_MODS).scan(root.path()).unwrap()
+    }
+
+    fn refusal(extra: &str) -> String {
+        let scan = Self::scan(extra);
+        assert!(scan.mods.is_empty(), "the manifest should be refused");
+        scan.skipped[0].reason.clone()
+    }
+}
+
+#[test]
+fn manifest_with_version_loads() {
+    let scan = Manifests::scan("version = \"26.60.1\"\n");
+
+    assert_eq!(scan.mods.len(), 1);
+    assert_eq!(scan.mods[0].version.as_deref(), Some("26.60.1"));
+}
+
+#[test]
+fn manifest_without_version_loads() {
+    let scan = Manifests::scan("");
+
+    assert_eq!(scan.mods.len(), 1);
+    assert_eq!(scan.mods[0].version, None);
+}
+
+#[test]
+fn non_string_version_is_refused() {
+    let reason = Manifests::refusal("version = 26\n");
+
+    assert!(reason.contains("`version` has the wrong type"), "{reason}");
+}
+
+#[test]
+fn manifest_with_listing_block_loads() {
+    let scan = Manifests::scan(
+        "version = \"1.0.0\"\nlisting {\n  summary = \"A zoom\"\n  tags = [\"view\"]\n  author = \"acme\"\n}\n",
+    );
+
+    assert_eq!(scan.mods.len(), 1);
+    assert_eq!(scan.mods[0].entry, "zoom.dll");
+    assert_eq!(scan.mods[0].api_version, 2);
+    assert_eq!(scan.mods[0].version.as_deref(), Some("1.0.0"));
+}
+
+#[test]
+fn listing_content_is_not_checked() {
+    let summary = "x".repeat(500);
+    let scan = Manifests::scan(&format!("listing {{\n  summary = \"{summary}\"\n  surprise = 7\n}}\n"));
+
+    assert_eq!(scan.mods.len(), 1);
+}
+
+#[test]
+fn second_listing_block_is_refused() {
+    let reason = Manifests::refusal("listing {\n}\nlisting {\n}\n");
+
+    assert!(reason.contains("only one `listing` block"), "{reason}");
+}
+
+#[test]
+fn other_block_is_refused() {
+    let reason = Manifests::refusal("settings {\n}\n");
+
+    assert!(reason.contains("unknown block `settings`"), "{reason}");
+}
+
+#[test]
+fn labelled_listing_block_is_refused() {
+    let reason = Manifests::refusal("listing \"x\" {\n}\n");
+
+    assert!(reason.contains("`listing` takes no labels"), "{reason}");
+}

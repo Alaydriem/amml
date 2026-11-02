@@ -87,7 +87,7 @@ impl ModLoader {
         self.log_coverage(spec);
         match outcome {
             Ok(_) => {
-                curia::info!("mod loaded", { mod_name: spec.id() });
+                curia::info!("mod loaded", { mod_name: spec.id(), version: spec.version.clone().unwrap_or_default() });
                 ModReport { id: spec.id(), phase: ModPhase::Loaded, error: None }
             }
             Err((Some(index), error)) => self.fail(index, spec.id(), Self::phase_for(&error), error),

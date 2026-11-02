@@ -34,6 +34,8 @@ pub enum GalleryPage {
     UndoHistory,
     EasingPopover,
     ExportDialog,
+    ExportDialogProRes,
+    ExportDialogH265Profile,
     RenderQueue,
     RenderQueueStates,
     RenderProgress,
@@ -53,7 +55,7 @@ pub enum GalleryPage {
 }
 
 impl GalleryPage {
-    pub const ALL: [Self; 38] = [
+    pub const ALL: [Self; 40] = [
         Self::Glyphs,
         Self::StatusBadge,
         Self::CurvePlot,
@@ -76,6 +78,8 @@ impl GalleryPage {
         Self::UndoHistory,
         Self::EasingPopover,
         Self::ExportDialog,
+        Self::ExportDialogProRes,
+        Self::ExportDialogH265Profile,
         Self::RenderQueue,
         Self::RenderQueueStates,
         Self::RenderProgress,
@@ -119,6 +123,8 @@ impl GalleryPage {
             Self::UndoHistory => "Undo history",
             Self::EasingPopover => "Easing popover",
             Self::ExportDialog => "Export dialog",
+            Self::ExportDialogProRes => "Export dialog, ProRes 422",
+            Self::ExportDialogH265Profile => "Export dialog, H.265 Main 10",
             Self::RenderQueue => "Render queue",
             Self::RenderQueueStates => "Render queue states",
             Self::RenderProgress => "Render progress",
@@ -163,6 +169,8 @@ impl GalleryPage {
             Self::UndoHistory => "undo_history",
             Self::EasingPopover => "easing_popover",
             Self::ExportDialog => "export_dialog",
+            Self::ExportDialogProRes => "export_dialog_pro_res",
+            Self::ExportDialogH265Profile => "export_dialog_h265_profile",
             Self::RenderQueue => "render_queue",
             Self::RenderQueueStates => "render_queue_states",
             Self::RenderProgress => "render_progress",
@@ -214,7 +222,7 @@ impl GalleryPage {
             | Self::BoxSelect => TimelineSamples::WIDTH,
             Self::InspectorTabs | Self::InspectorLocked | Self::UndoHistory => InspectorPage::WIDTH,
             Self::EasingPopover => EasingPopoverPage::WIDTH,
-            Self::ExportDialog => DialogsPage::EXPORT,
+            Self::ExportDialog | Self::ExportDialogProRes | Self::ExportDialogH265Profile => DialogsPage::EXPORT,
             Self::RenderQueue | Self::RenderQueueStates => DialogsPage::QUEUE,
             Self::RenderProgress => DialogsPage::PROGRESS,
             Self::CoveragePanel => DialogsPage::COVERAGE,
@@ -248,6 +256,8 @@ impl GalleryPage {
             Self::UndoHistory => InspectorPage::undo_history(ui, state),
             Self::EasingPopover => EasingPopoverPage::show(ui, state),
             Self::ExportDialog => DialogsPage::export(ui, state),
+            Self::ExportDialogProRes => DialogsPage::export_pro_res(ui, state),
+            Self::ExportDialogH265Profile => DialogsPage::export_h265_profile(ui, state),
             Self::RenderQueue => DialogsPage::queue(ui, state),
             Self::RenderQueueStates => DialogsPage::queue_states(ui, state),
             Self::RenderProgress => DialogsPage::progress(ui, state),

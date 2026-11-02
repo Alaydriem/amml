@@ -1329,3 +1329,60 @@ done
 echo "$results"
 exit $failed
 '''
+
+[tasks."launcher-kit:install"]
+description = "Installs the launcher UI kit's node packages (launcher/kit) with yarn"
+dir = "{{config_root}}/launcher/kit"
+run = "yarn install --non-interactive --frozen-lockfile"
+
+[tasks."launcher-kit:check"]
+description = "Type-checks every launcher kit component, screen and gallery page with svelte-check; warnings fail"
+dir = "{{config_root}}/launcher/kit"
+run = "yarn run typecheck"
+
+[tasks."launcher-kit:test"]
+description = "Runs the launcher kit's behaviour tests with Vitest"
+dir = "{{config_root}}/launcher/kit"
+run = "yarn test"
+
+[tasks."launcher-kit:dev"]
+description = "Serves the launcher kit gallery (every screen and component sheet) on port 1440"
+dir = "{{config_root}}/launcher/kit"
+run = "yarn dev"
+
+[tasks."launcher-kit:build"]
+description = "Builds the launcher kit gallery into launcher/kit/dist, which proves every component compiles"
+dir = "{{config_root}}/launcher/kit"
+run = "yarn build"
+
+[tasks.package-release]
+description = "Builds release amml.dll and amml-patch and writes amml-<version>-windows-x64.zip, SHA256SUMS.txt and release-meta.env in the repo root: mise run package-release -- --version <v> --game-versions <comma list>"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--version <version>" help="Release version, Cargo semver (26.60.5)"
+flag "--game-versions <game_versions>" help="Tested game versions, comma separated (1.26.60.5)"
+'''
+run = 'bash scripts/package-release.sh "${usage_version:-}" "${usage_game_versions:-}"'
+
+[tasks.build-folder-trace]
+description = "Builds the release loader with the folder-trace feature (it logs every folder request the game makes) and copies it to target/operator/amml-folder-trace.dll; never ships"
+dir = "{{config_root}}"
+shell = "bash -c"
+run = '''
+set -e
+cargo build --release -p amml-loader --features folder-trace
+mkdir -p target/operator
+cp target/release/amml.dll target/operator/amml-folder-trace.dll
+echo "built target/operator/amml-folder-trace.dll"
+'''
+
+[tasks.build-registry]
+description = "Builds the amml-registry CLI (release): the registry publish workflow and the mod release lint run target/release/amml-registry"
+dir = "{{config_root}}"
+run = "cargo build --release -p amml-registry"
+
+[tasks.gdk]
+description = "The Store-route installer CLI: gdk list [--preview], install <version> [--preview], instance <version> <name>, seed <instance dir>, recover, status"
+dir = "{{config_root}}"
+run = "cargo run --release -p amml-gdk --"

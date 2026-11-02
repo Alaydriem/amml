@@ -1,0 +1,45 @@
+{
+  "name": "@amml/launcher-kit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Svelte 5 components and screens for the AMML launcher, built from the Paper page Launcher v1",
+  "license": "BSD-3-Clause",
+  "type": "module",
+  "svelte": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "svelte": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./css/tokens.css": "./src/css/tokens.css",
+    "./css/base.css": "./src/css/base.css",
+    "./fixtures": {
+      "types": "./src/fixtures/index.ts",
+      "default": "./src/fixtures/index.ts"
+    }
+  },
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "svelte": "^5.57.1"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.1.2",
+    "@testing-library/dom": "^10.4",
+    "@testing-library/jest-dom": "^7.0",
+    "@testing-library/svelte": "^5.4",
+    "@testing-library/user-event": "^14.6",
+    "@types/node": "^25",
+    "happy-dom": "^20.11",
+    "svelte": "^5.57.1",
+    "svelte-check": "^4.7.6",
+    "typescript": "^6.0",
+    "vite": "^8.0.16",
+    "vitest": "^4.1"
+  }
+}

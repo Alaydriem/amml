@@ -7,6 +7,10 @@ on:
         description: Release version, semver from the Minecraft version (26.60.5)
         required: true
         type: string
+      game_versions:
+        description: Tested game versions, comma separated (1.26.60.5)
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -23,6 +27,10 @@ defaults:
 jobs:
   release:
     runs-on: windows-latest
+    outputs:
+      version: ${{ inputs.version }}
+      api_version: ${{ steps.meta.outputs.api_version }}
+      game_versions: ${{ steps.meta.outputs.game_versions }}
     steps:
       - name: Check the version
         env:
@@ -75,26 +83,18 @@ jobs:
       - run: mise run check
       - run: mise run test
 
-      - name: Build the loader and the patcher
-        run: cargo build --release -p amml-loader -p amml-patch
-
       - name: Package
+        id: meta
         env:
           VERSION: ${{ inputs.version }}
+          GAME_VERSIONS: ${{ inputs.game_versions }}
         run: |
           set -eu
-          rm -rf stage
-          zip="amml-$VERSION-windows-x64.zip"
-          rm -f "$zip" SHA256SUMS.txt
-
-          mkdir -p stage/amml
-          cp target/release/amml.dll stage/amml.dll
-          cp target/release/amml-patch.exe stage/amml-patch.exe
-          cp -r recipes stage/amml/recipes
-          (cd stage && 7z a -tzip "../$zip" -- amml.dll amml-patch.exe amml)
-
-          sha256sum "$zip" > SHA256SUMS.txt
-          cat SHA256SUMS.txt
+          mise run package-release -- --version "$VERSION" --game-versions "$GAME_VERSIONS"
+          # release-meta.env holds API_VERSION and GAME_VERSIONS
+          . ./release-meta.env
+          echo "api_version=$API_VERSION" >> "$GITHUB_OUTPUT"
+          echo "game_versions=$GAME_VERSIONS" >> "$GITHUB_OUTPUT"
 
       - name: Create the release
         env:
@@ -111,3 +111,62 @@ jobs:
             --latest=true \
             --generate-notes \
             --notes "Built from amml $GITHUB_SHA"
+
+  # Tells the registry about the release. It reads the version, API version and game versions that the release job exposes as outputs (the release job must declare them). A failure here fails this job only; the GitHub release stays as it is.
+  notify-registry:
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check the App secrets
+        id: app
+        env:
+          APP_ID: ${{ secrets.APP_ID }}
+        run: |
+          set -eu
+          if [ -n "$APP_ID" ]; then
+            echo "notify=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "notify=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::registry not notified: no App secrets"
+          fi
+
+      - name: Get the GitHub App token
+        id: app-token
+        if: ${{ steps.app.outputs.notify == 'true' }}
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: alaydriem
+          repositories: amml-registry
+          permission-contents: write
+
+      - name: Send the release to the registry
+        if: ${{ steps.app.outputs.notify == 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ needs.release.outputs.version }}
+          API_VERSION: ${{ needs.release.outputs.api_version }}
+          GAME_VERSIONS: ${{ needs.release.outputs.game_versions }}
+        run: |
+          set -eu
+          case "$VERSION" in
+            *-*)
+              echo "::notice::pre-release $VERSION is not sent to the registry"
+              exit 0
+              ;;
+          esac
+          if [ -z "$VERSION" ] || [ -z "$API_VERSION" ] || [ -z "$GAME_VERSIONS" ]; then
+            echo "::error::the release job exposed no version, api_version or game_versions output"
+            exit 1
+          fi
+          gh api repos/alaydriem/amml-registry/dispatches \
+            -f event_type=amml-released \
+            -f "client_payload[kind]=amml" \
+            -f "client_payload[repo]=$GITHUB_REPOSITORY" \
+            -f "client_payload[version]=$VERSION" \
+            -f "client_payload[api_version]=$API_VERSION" \
+            -f "client_payload[game_versions]=$GAME_VERSIONS"

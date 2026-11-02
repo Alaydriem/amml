@@ -3,6 +3,8 @@ mod export_dialog_action;
 mod export_dialog_view;
 mod export_format;
 mod export_frame_rate;
+mod export_h265_profile;
+mod export_pro_res_profile;
 mod export_resolution;
 
 pub use export_choice::ExportChoice;
@@ -10,6 +12,8 @@ pub use export_dialog_action::ExportDialogAction;
 pub use export_dialog_view::ExportDialogView;
 pub use export_format::ExportFormat;
 pub use export_frame_rate::ExportFrameRate;
+pub use export_h265_profile::ExportH265Profile;
+pub use export_pro_res_profile::ExportProResProfile;
 pub use export_resolution::ExportResolution;
 
 use amml_i18n::text::Text;
@@ -26,7 +30,7 @@ use crate::message::StudioUiMessage;
 
 /// Paper: Menus + Dialogs, `Export dialog` (`971-0`). The export settings in the amml-ui `ModalFrame`: format,
 /// resolution and frame rate as `Segmented` controls (a choice that cannot be made is disabled with its reason),
-/// quality as a `Slider`, the sidecar file as a `Toggle`, the output path, and a note (or why Render cannot start);
+/// quality as a `Slider` (for H.265 a profile row, Main or Main 10, comes before it; for ProRes 422 the profile as a `Segmented` takes its place), the sidecar file as a `Toggle`, the output path, and a note (or why Render cannot start);
 /// then Render, Add to queue and Open queue.
 pub struct ExportDialog<'a> {
     view: &'a ExportDialogView,
@@ -104,12 +108,36 @@ impl<'a> ExportDialog<'a> {
         }) {
             action = Some(ExportDialogAction::SetFrameRate(ExportFrameRate::ALL[rate]));
         }
-        let mut quality = view.quality.clamp(0.0, 1.0);
-        let note = (&view.quality_label, Self::QUALITY_NOTE, <color::Text as ColorToken>::VALUE, Self::NOTE_GAP);
-        if Self::row(ui, StudioUiMessage::QualityLabel, Some(note), |ui| {
-            Slider::new(&mut quality, 0.0..=1.0).show(ui, Self::CONTROL).changed()
-        }) {
-            action = Some(ExportDialogAction::SetQuality(quality));
+        if let Some(profile) = view.pro_res_profile {
+            let mut selected = ExportProResProfile::ALL.iter().position(|item| *item == profile).unwrap_or(0);
+            if Self::row(ui, StudioUiMessage::ProfileLabel, None, |ui| {
+                let segments = ExportProResProfile::ALL.iter().map(|item| Segment::Text(item.label())).collect();
+                Segmented::new(Id::unique(StudioUiId::ExportProResProfile), &mut selected, segments)
+                    .show(ui, Self::CONTROL)
+                    .changed()
+            }) {
+                action = Some(ExportDialogAction::SetProResProfile(ExportProResProfile::ALL[selected]));
+            }
+        } else {
+            if let Some(profile) = view.h265_profile {
+                let mut selected = ExportH265Profile::ALL.iter().position(|item| *item == profile).unwrap_or(0);
+                if Self::row(ui, StudioUiMessage::ProfileLabel, None, |ui| {
+                    let segments = ExportH265Profile::ALL.iter().map(|item| Segment::Text(item.label())).collect();
+                    let control = Segmented::new(Id::unique(StudioUiId::ExportH265Profile), &mut selected, segments);
+                    self.limit(control, ExportH265Profile::ALL.map(ExportChoice::H265Profile))
+                        .show(ui, Self::CONTROL)
+                        .changed()
+                }) {
+                    action = Some(ExportDialogAction::SetH265Profile(ExportH265Profile::ALL[selected]));
+                }
+            }
+            let mut quality = view.quality.clamp(0.0, 1.0);
+            let note = (&view.quality_label, Self::QUALITY_NOTE, <color::Text as ColorToken>::VALUE, Self::NOTE_GAP);
+            if Self::row(ui, StudioUiMessage::QualityLabel, Some(note), |ui| {
+                Slider::new(&mut quality, 0.0..=1.0).show(ui, Self::CONTROL).changed()
+            }) {
+                action = Some(ExportDialogAction::SetQuality(quality));
+            }
         }
         let mut sidecar = view.sidecar;
         if Self::row(ui, StudioUiMessage::SidecarLabel, None, |ui| Toggle::new(&mut sidecar).show(ui).changed()) {

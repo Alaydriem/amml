@@ -1,0 +1,19 @@
+{
+  "schema": 2,
+  "name": "Official",
+  "published": "2026-11-02T00:00:00Z",
+  "mod_count": 0,
+  "amml": {
+    "repo": "alaydriem/amml",
+    "versions": []
+  },
+  "index": {
+    "page_size": 100,
+    "apis": {}
+  },
+  "names": {
+    "path": "names.json",
+    "sha256": "79744a9a1e755901290723dc9591e24a5e1ac7609b58afede14e6e0b885aef02",
+    "size": 23
+  }
+}
