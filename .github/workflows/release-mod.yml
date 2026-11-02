@@ -51,6 +51,16 @@ on:
         required: false
         type: string
         default: ""
+      private_repos:
+        description: Comma-separated alaydriem repo names that cargo fetches with the GitHub App token; empty means none. The caller also passes its secrets (secrets inherit)
+        required: false
+        type: string
+        default: ""
+    secrets:
+      APP_ID:
+        required: false
+      APP_PRIVATE_KEY:
+        required: false
 
 # The workspace depends on ../amml (and ../modmanager-amml) by relative path, so the mod repo is checked out into a
 # subfolder and the sibling repos next to it.
@@ -133,6 +143,30 @@ jobs:
           repository: alaydriem/amml-modmanager
           ref: ${{ steps.refs.outputs.modmanager }}
           path: modmanager-amml
+
+      - name: Get the GitHub App token
+        id: app-token
+        if: ${{ inputs.private_repos != '' }}
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: alaydriem
+          repositories: ${{ inputs.private_repos }}
+
+      # Only the private repos are rewritten, so public git dependencies are fetched without the token.
+      - name: Let cargo fetch the private repos
+        if: ${{ inputs.private_repos != '' }}
+        working-directory: ${{ github.workspace }}
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          PRIVATE_REPOS: ${{ inputs.private_repos }}
+        run: |
+          set -eu
+          for repo in ${PRIVATE_REPOS//,/ }; do
+            git config --global --add "url.https://x-access-token:${APP_TOKEN}@github.com/alaydriem/${repo}.insteadOf" "https://github.com/alaydriem/${repo}"
+          done
+          echo "CARGO_NET_GIT_FETCH_WITH_CLI=true" >> "$GITHUB_ENV"
 
       - name: Check that the tag is free
         env:
