@@ -1386,3 +1386,8 @@ run = "cargo build --release -p amml-registry"
 description = "The Store-route installer CLI: gdk list [--preview], install <version> [--preview], instance <version> <name>, seed <instance dir>, recover, status"
 dir = "{{config_root}}"
 run = "cargo run --release -p amml-gdk --"
+
+[tasks.launcher]
+description = "The launcher core CLI: registry, instance, amml, mod, updates, data, launch and settings commands (amml-launcher --help)"
+dir = "{{config_root}}"
+run = "cargo run --release -p amml-launcher-core --bin amml-launcher --"

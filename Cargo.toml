@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["derive/data", "derive/cli", "sdk/msvc", "sdk/game", "sdk/msvc-fixture", "loader/abi", "loader/runtime", "loader/dll", "sdk/sdk", "loader/testmod", "loader/patch", "loader/patch/tests/fixtures/anchor-stub", "loader/dll/tests/fixtures/echo-mod", "loader/dll/tests/fixtures/folder-probe", "ui/kit", "ui/gen", "ui/rules", "ui/studio", "i18n/runtime", "i18n/tool", "launcher/registry", "launcher/gdk"]
+members = ["derive/data", "derive/cli", "sdk/msvc", "sdk/game", "sdk/msvc-fixture", "loader/abi", "loader/runtime", "loader/dll", "sdk/sdk", "loader/testmod", "loader/patch", "loader/patch/tests/fixtures/anchor-stub", "loader/dll/tests/fixtures/echo-mod", "loader/dll/tests/fixtures/folder-probe", "ui/kit", "ui/gen", "ui/rules", "ui/studio", "i18n/runtime", "i18n/tool", "launcher/registry", "launcher/gdk", "launcher/core"]
 
 [workspace.package]
 version = "26.60.0"
@@ -21,7 +21,7 @@ xxhash-rust = { version = "0.8", features = ["xxh3"] }
 clap = { version = "4", features = ["derive"] }
 cc = "1"
 curia = "=0.2.2"
-serde_json = "1.0.154"
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_LibraryLoader"] }
 egui = { version = "=0.37.0", default-features = false, features = ["default_fonts"] }
 eframe = { version = "=0.37.0", default-features = false, features = ["default_fonts", "glow"] }
@@ -52,6 +52,7 @@ windows = { version = "0.62", features = [
   "Win32_Storage_FileSystem",
   "Win32_System_Diagnostics_ToolHelp",
   "Win32_System_Threading",
+  "Win32_UI_WindowsAndMessaging",
 ] }
 
 [workspace.lints.clippy]

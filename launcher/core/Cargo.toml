@@ -1,0 +1,46 @@
+[package]
+name = "amml-launcher-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+autotests = false
+
+[lints]
+workspace = true
+
+[lib]
+name = "amml_launcher_core"
+path = "src/lib.rs"
+
+[dependencies]
+amml-gdk = { path = "../gdk" }
+amml-registry = { path = "../registry" }
+clap.workspace = true
+curia.workspace = true
+hcl-rs.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+ureq.workspace = true
+uuid.workspace = true
+windows.workspace = true
+zip.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[[bin]]
+name = "amml-launcher"
+path = "src/bin/amml-launcher.rs"
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"
+
+[[test]]
+name = "game"
+path = "tests/game.rs"

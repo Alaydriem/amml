@@ -37,10 +37,22 @@ impl Downloader {
         file_name: &str,
         progress: &mut impl FnMut(DownloadProgress),
     ) -> Result<PathBuf, GdkError> {
+        self.fetch_limited(urls, file_name, None, progress)
+    }
+
+    // Like `fetch`, but a file whose own HEAD answer announces more than `max_len` bytes is refused before any GET.
+    // The transfer is then stopped at the announced length, which is at most `max_len`.
+    pub fn fetch_limited(
+        &self,
+        urls: &[String],
+        file_name: &str,
+        max_len: Option<u64>,
+        progress: &mut impl FnMut(DownloadProgress),
+    ) -> Result<PathBuf, GdkError> {
         std::fs::create_dir_all(&self.dir)?;
         let mut last = String::from("no download URL");
         for url in urls {
-            match self.fetch_from(url, file_name, progress) {
+            match self.fetch_from(url, file_name, max_len, progress) {
                 Ok(path) => return Ok(path),
                 Err(error) => {
                     curia::warn!("download source failed", { file: file_name, error: error.to_string() });
@@ -76,12 +88,21 @@ impl Downloader {
         &self,
         url: &str,
         file_name: &str,
+        max_len: Option<u64>,
         progress: &mut impl FnMut(DownloadProgress),
     ) -> Result<PathBuf, GdkError> {
         let dest = self.dir.join(file_name);
         let part = self.dir.join(format!("{file_name}.part"));
         let meta = self.dir.join(format!("{file_name}.part.meta"));
         let remote = self.head(url)?;
+        if let Some(max) = max_len
+            && remote.length > max
+        {
+            return Err(GdkError::Download(format!(
+                "the server announces {} bytes, more than the limit of {max}",
+                remote.length
+            )));
+        }
 
         if std::fs::metadata(&dest).is_ok_and(|found| found.len() == remote.length) {
             return Ok(dest);
@@ -169,6 +190,18 @@ impl Downloader {
             }
             file.write_all(&buffer[..read])?;
             done += read as u64;
+            if done > remote.length {
+                // a server that sends more than it announced does not get to fill the disk
+                drop(file);
+                let _ = std::fs::remove_file(part);
+                let mut meta = part.clone().into_os_string();
+                meta.push(".meta");
+                let _ = std::fs::remove_file(meta);
+                return Err(GdkError::Download(format!(
+                    "the server sent more than the announced {} bytes",
+                    remote.length
+                )));
+            }
             progress(DownloadProgress { bytes_done: done, bytes_total: remote.length });
         }
         file.flush()?;

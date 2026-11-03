@@ -102,7 +102,7 @@ impl InstanceService {
     }
 
     // `[A-Za-z0-9._-]{1,64}`, not `.` or `..`, no trailing dot, no device name, and not a staging name
-    fn check_name(name: &str) -> Result<(), GdkError> {
+    pub fn check_name(name: &str) -> Result<(), GdkError> {
         let allowed = |character: char| character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-');
         let valid = !name.is_empty()
             && name.len() <= Self::NAME_LIMIT
