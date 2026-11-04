@@ -211,6 +211,40 @@ jobs:
             fi
           fi
 
+      # Cargo builds against the git tags named in the manifests, not against the checkouts above, so every amml and
+      # amml-modmanager git dependency is pointed at the refs this release picked. The manifests are committed with
+      # the version. A ref that is not a release tag (a branch or commit the caller passed) leaves the manifests as
+      # they are.
+      - name: Point the amml dependencies at the release refs
+        env:
+          AMML: ${{ steps.refs.outputs.amml }}
+          MODMANAGER: ${{ steps.refs.outputs.modmanager }}
+        run: |
+          set -eu
+          tag_re='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          manifests=$(git ls-files '*Cargo.toml' | grep -v '/tests/fixtures/' || true)
+          point() {
+            local repo="$1" ref="$2" bad
+            if ! [[ "$ref" =~ $tag_re ]]; then
+              echo "::notice::$repo ref '$ref' is not a release tag; its git dependencies are left as they are"
+              return 0
+            fi
+            for m in $manifests; do
+              sed -E -i "s#(github\.com/[Aa]laydriem/$repo\.git\"[^}]*tag[[:space:]]*=[[:space:]]*\")[^\"]*\"#\1$ref\"#" "$m"
+            done
+            bad=$(grep -nE "github\.com/[Aa]laydriem/$repo\.git\"" $manifests | grep -vF "tag = \"$ref\"" || true)
+            if [ -n "$bad" ]; then
+              echo "::error::these $repo dependencies do not name tag $ref:"
+              echo "$bad"
+              return 1
+            fi
+            echo "$repo dependencies point at $ref"
+          }
+          point amml "$AMML"
+          if [ -n "$MODMANAGER" ]; then
+            point amml-modmanager "$MODMANAGER"
+          fi
+
       - uses: jdx/mise-action@v2
         with:
           working_directory: ${{ inputs.path }}
@@ -344,7 +378,7 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.toml Cargo.lock
+          git add -u -- '*Cargo.toml' Cargo.lock
           if [ -n "$DESCRIPTOR" ]; then
             git add "$DESCRIPTOR"
           fi
