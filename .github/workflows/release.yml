@@ -80,6 +80,29 @@ jobs:
           restore-keys: |
             cargo-
 
+      # Cargo.lock records each workspace crate's version, so it is rewritten with the new one. Every workspace crate
+      # must then report the release version; only the test fixture crates keep their own.
+      - name: Check that every crate has the version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          cargo metadata --format-version 1 > /dev/null
+          wrong=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r --arg v "$VERSION" '.packages[]
+                | select(.manifest_path | gsub("\\\\"; "/") | contains("/tests/fixtures/") | not)
+                | select(.version != $v)
+                | "\(.name) \(.version)"')
+          if [ -n "$wrong" ]; then
+            echo "::error::these crates do not have version $VERSION:"
+            echo "$wrong"
+            exit 1
+          fi
+          if ! grep -qF "version = \"$VERSION\"" Cargo.lock; then
+            echo "::error::Cargo.lock does not record version $VERSION"
+            exit 1
+          fi
+
       - run: mise run check
       - run: mise run test
 
@@ -96,21 +119,46 @@ jobs:
           echo "api_version=$API_VERSION" >> "$GITHUB_OUTPUT"
           echo "game_versions=$GAME_VERSIONS" >> "$GITHUB_OUTPUT"
 
+      # The tag must hold the version it names, because other repos build against the tag. The version change is
+      # committed and pushed to the branch the release ran from, and the release is tagged at that commit. A push
+      # that is not a fast-forward (the branch moved during the run) fails here, before any release exists.
+      - name: Commit the version
+        id: commit
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          if [ "$GITHUB_REF_TYPE" != "branch" ]; then
+            echo "::error::run the release from a branch, not $GITHUB_REF_TYPE $GITHUB_REF_NAME"
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock
+          if git diff --cached --quiet; then
+            echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "chore: release $VERSION"
+            git push origin "HEAD:refs/heads/$GITHUB_REF_NAME"
+            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
+          TARGET: ${{ steps.commit.outputs.sha }}
         run: |
           set -eu
           gh release create "$VERSION" \
             "amml-$VERSION-windows-x64.zip" \
             SHA256SUMS.txt \
             --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
+            --target "$TARGET" \
             --title "AMML $VERSION" \
             --latest=true \
             --generate-notes \
-            --notes "Built from amml $GITHUB_SHA"
+            --notes "Built from amml $TARGET"
 
   # Tells the registry about the release. It reads the version, API version and game versions that the release job exposes as outputs (the release job must declare them). A failure here fails this job only; the GitHub release stays as it is.
   notify-registry:
