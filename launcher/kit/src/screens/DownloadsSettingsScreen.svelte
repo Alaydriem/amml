@@ -9,26 +9,16 @@
     let {
         folder,
         usedBytes,
-        limitBytes,
-        limit,
-        limitOptions,
         files,
         text,
-        onlimitchange,
         onremovefile,
         onremoveunfinished,
     }: DownloadsSettingsScreenProps = $props();
+
+    const used = $derived(DownloadsSettingsScreenRules.used(usedBytes));
 </script>
 
-<DownloadUsage
-    text={text.usage}
-    path={folder}
-    usedText={DownloadsSettingsScreenRules.usedText(usedBytes, limitBytes)}
-    percent={DownloadsSettingsScreenRules.percent(usedBytes, limitBytes)}
-    {limitOptions}
-    {limit}
-    {onlimitchange}
-/>
+<DownloadUsage text={text.usage} path={folder} value={used.value} unit={used.unit} />
 
 <Panel heading={Template.fill(text.filesHeading, { count: files.length })}>
     {#snippet aside()}

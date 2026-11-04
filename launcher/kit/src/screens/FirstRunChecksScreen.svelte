@@ -4,7 +4,7 @@
     import WizardFooter from "../components/shell/WizardFooter.svelte";
     import type { FirstRunChecksScreenProps } from "./FirstRunChecksScreen";
 
-    let { checks, text, oninstallcheck, onnext, onskip }: FirstRunChecksScreenProps = $props();
+    let { checks, nextDisabled = false, text, oninstallcheck, onnext, onskip }: FirstRunChecksScreenProps = $props();
 </script>
 
 <div class="amml-screen">
@@ -20,6 +20,7 @@
     </div>
     <WizardFooter
         text={{ note: text.footerNote, secondary: text.skip, primary: text.next }}
+        primaryDisabled={nextDisabled}
         onsecondary={onskip}
         onprimary={onnext}
     />

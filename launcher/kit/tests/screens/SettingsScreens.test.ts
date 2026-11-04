@@ -12,9 +12,7 @@ import { sharedDataSettingsEn } from "../../src/text/en/sharedDataSettings";
 const downloads = {
     folder: SettingsFixtures.downloadsFolder,
     usedBytes: SettingsFixtures.downloadsUsedBytes,
-    limitBytes: SettingsFixtures.downloadsLimitBytes,
     limit: "10",
-    limitOptions: SettingsFixtures.downloadLimitOptions,
     files: SettingsFixtures.downloadFiles,
     text: downloadsSettingsEn,
 };
@@ -30,21 +28,17 @@ describe("DownloadsSettingsScreen", () => {
         expect(screen.getByText("1.28 GB")).toBeInTheDocument();
     });
 
-    it("drops the unit from the figure when it is the unit of the limit", () => {
-        expect(DownloadsSettingsScreenRules.usedText(3_340_000_000, 10_000_000_000)).toBe("3.34");
-        expect(DownloadsSettingsScreenRules.usedText(340_000_000, 10_000_000_000)).toBe("340 MB");
-    });
+    it("shows the folder total as one figure with a small unit and no limit controls", () => {
+        expect(DownloadsSettingsScreenRules.used(3_340_000_000)).toEqual({ value: "3.34", unit: "GB" });
+        expect(DownloadsSettingsScreenRules.used(340_000_000)).toEqual({ value: "340", unit: "MB" });
 
-    it("asks the parent for the picked limit and keeps showing the limit it passed", async () => {
-        const onlimitchange = vi.fn();
-        render(DownloadsSettingsScreen, { ...downloads, onlimitchange });
+        render(DownloadsSettingsScreen, downloads);
 
-        const select = screen.getByRole("combobox", { name: "Size limit" });
-        await fireEvent.change(select, { target: { value: "20" } });
-
-        expect(onlimitchange).toHaveBeenCalledExactlyOnceWith("20");
-        expect(select).toHaveValue("10");
-        expect(screen.getByText("of 10 GB")).toBeInTheDocument();
+        expect(screen.getByText("3.34")).toBeInTheDocument();
+        expect(screen.getByText("GB")).toBeInTheDocument();
+        expect(screen.queryByRole("combobox")).toBeNull();
+        expect(screen.queryByRole("progressbar")).toBeNull();
+        expect(screen.queryByText(/limit/i)).toBeNull();
     });
 
     it("removes a file by its id and offers no Remove for a kept file", async () => {

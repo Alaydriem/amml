@@ -1,13 +1,14 @@
-import type { AddModDialogText, ConfirmDialogText } from "../../components/dialogs";
+import type { AddModDialogText, AddRegistryDialogText, ConfirmDialogText } from "../../components/dialogs";
 
 /**
- * The text of the three dialogs of artboard 08. The caller fills `{name}`, `{version}` and `{file}` through the
+ * The text of the dialogs of artboard 08. The caller fills `{name}`, `{version}` and `{file}` through the
  * `values` prop of the dialog.
  */
 export interface DialogsText {
     developerMode: ConfirmDialogText;
     deleteInstance: ConfirmDialogText;
     addMod: AddModDialogText;
+    addRegistry: AddRegistryDialogText;
 }
 
 export const dialogsEn: DialogsText = {
@@ -35,5 +36,13 @@ export const dialogsEn: DialogsText = {
         add: "Add",
         cancel: "Cancel",
         install: "Install unofficial",
+    },
+    addRegistry: {
+        title: "Add a registry",
+        fieldLabel: "Registry address",
+        placeholder: "https://example.github.io/registry/",
+        invalid: "Use an https:// address.",
+        add: "Add",
+        cancel: "Cancel",
     },
 };

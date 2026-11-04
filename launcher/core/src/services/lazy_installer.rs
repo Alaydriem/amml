@@ -1,6 +1,6 @@
 use amml_gdk::{
-    AmmlPaths, Catalogue, CatalogueReader, DiskSpace, DownloadCache, DownloadProgress, Downloader, GdkError,
-    InstallOutcome, InstallRequest, InstallService, InstallStep, Installer, StoreCheck, WindowsExeCopier,
+    AmmlPaths, CancelFlag, Catalogue, CatalogueReader, DiskSpace, DownloadCache, DownloadProgress, Downloader,
+    GdkError, InstallOutcome, InstallRequest, InstallService, InstallStep, Installer, StoreCheck, WindowsExeCopier,
     WindowsPackageDeployer, WindowsPackageInventory, WindowsProcessInspector,
 };
 use std::time::Duration;
@@ -9,6 +9,7 @@ use std::time::Duration;
 // do not fetch the version catalogue.
 pub struct LazyInstaller {
     paths: AmmlPaths,
+    cancel: CancelFlag,
 }
 
 type StoreInstall = InstallService<
@@ -20,8 +21,8 @@ type StoreInstall = InstallService<
 >;
 
 impl LazyInstaller {
-    pub fn new(paths: AmmlPaths) -> LazyInstaller {
-        LazyInstaller { paths }
+    pub fn new(paths: AmmlPaths, cancel: CancelFlag) -> LazyInstaller {
+        LazyInstaller { paths, cancel }
     }
 
     fn agent() -> ureq::Agent {
@@ -37,7 +38,7 @@ impl LazyInstaller {
         InstallService::new(
             self.paths.clone(),
             catalogue,
-            Downloader::new(agent, self.paths.downloads(), Downloader::DEFAULT_ATTEMPTS),
+            Downloader::new(agent, self.paths.downloads(), Downloader::DEFAULT_ATTEMPTS, self.cancel.clone()),
             DownloadCache::new(self.paths.downloads()),
             StoreCheck::new(WindowsPackageInventory::new(), WindowsProcessInspector::new(), DiskSpace::new()),
             WindowsPackageInventory::new(),

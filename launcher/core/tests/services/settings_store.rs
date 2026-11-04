@@ -59,3 +59,35 @@ fn an_unknown_key_or_wrong_type_is_a_named_error() {
         other => panic!("{other:?}"),
     }
 }
+
+#[test]
+fn a_settings_file_that_still_holds_the_retired_download_limit_is_read_and_the_key_is_dropped_on_save() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Roots::paths(root.path());
+    std::fs::create_dir_all(paths.settings().parent().unwrap()).unwrap();
+    std::fs::write(
+        paths.settings(),
+        "registries = [\"https://example.org/reg/\"]\npreview = true\ndownload_limit_bytes = 10000000000\n",
+    )
+    .unwrap();
+    let store = SettingsStore::new(paths.clone());
+
+    let settings = store.load().unwrap();
+    assert!(settings.preview);
+    assert_eq!(settings.registries.len(), 2);
+    store.save(&settings).unwrap();
+
+    let text = std::fs::read_to_string(paths.settings()).unwrap();
+    assert!(!text.contains("download_limit"), "{text}");
+    assert_eq!(store.load().unwrap(), settings);
+}
+
+#[test]
+fn a_retired_download_limit_of_any_type_does_not_fail_the_read() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Roots::paths(root.path());
+    std::fs::create_dir_all(paths.settings().parent().unwrap()).unwrap();
+    std::fs::write(paths.settings(), "download_limit_bytes = \"lots\"\n").unwrap();
+
+    assert!(SettingsStore::new(paths).load().is_ok());
+}

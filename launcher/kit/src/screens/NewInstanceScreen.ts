@@ -34,6 +34,10 @@ export interface NewInstanceScreenProps {
     summary: NewInstanceSummary;
     text: NewInstanceScreenText;
     channel: Channel;
+    /** Why the app refuses the name, in the user's language. It shows under the name field and holds Create back. */
+    problem?: string;
+    /** Shows the release and preview switch. Default true; the app turns it off when preview builds are off. */
+    showPreview?: boolean;
     /** Version string of the chosen row. */
     selectedVersion?: string;
     name: string;

@@ -1,6 +1,6 @@
 import type { LauncherFaultKind, LauncherFaultText } from "../../model";
 
-/** The eight named error states of artboard 08, with the Paper wording. The app fills the figures and codes. */
+/** The ten named error states of artboard 08, with the Paper wording. The app fills the figures and codes. */
 export const faultsEn: Record<LauncherFaultKind, LauncherFaultText> = {
     "store-missing": {
         title: "Minecraft is not installed from the Store.",
@@ -36,6 +36,16 @@ export const faultsEn: Record<LauncherFaultKind, LauncherFaultText> = {
         title: "Not enough space on C:\\.",
         body: "This install needs 6.1 GB at once for the download, the copy and the instance. 3.4 GB is free.",
         action: "Check again",
+    },
+    "restore-failed": {
+        title: "Your Store version was not put back.",
+        body: "Put it back with the command in the details, or reinstall Minecraft from the Store.",
+        action: "Copy details",
+    },
+    "operation-failed": {
+        title: "That did not work.",
+        body: "The details are below.",
+        action: "Show log",
     },
     "install-interrupted": {
         title: "The last install was cut off.",

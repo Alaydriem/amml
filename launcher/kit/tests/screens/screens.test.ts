@@ -4,11 +4,13 @@ import FirstRunAdoptScreen from "../../src/screens/FirstRunAdoptScreen.svelte";
 import InstallProgressScreen from "../../src/screens/InstallProgressScreen.svelte";
 import InstancesScreen from "../../src/screens/InstancesScreen.svelte";
 import { InstancesScreenRules } from "../../src/screens/InstancesScreen";
+import FirstRunChecksScreen from "../../src/screens/FirstRunChecksScreen.svelte";
 import NewInstanceScreen from "../../src/screens/NewInstanceScreen.svelte";
 import { NewInstanceScreenRules } from "../../src/screens/NewInstanceScreen";
 import { InstallFixtures } from "../../src/fixtures/install";
 import { InstanceFixtures } from "../../src/fixtures/instances";
 import { SetupFixtures } from "../../src/fixtures/setup";
+import { firstRunChecksEn } from "../../src/text/en/firstRunChecks";
 import { faultsEn } from "../../src/text/en/faults";
 import { firstRunAdoptEn } from "../../src/text/en/firstRunAdopt";
 import { installProgressEn } from "../../src/text/en/installProgress";
@@ -108,6 +110,18 @@ describe("NewInstanceScreen", () => {
         expect(screen.getByRole("radio", { name: "Release" })).toHaveAttribute("aria-checked", "true");
     });
 
+    it("shows the problem and keeps Create off", () => {
+        render(NewInstanceScreen, { ...base, problem: "Use another name." });
+        expect(screen.getByRole("alert")).toHaveTextContent("Use another name.");
+        expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+    });
+
+    it("hides the release and preview switch when preview builds are off", () => {
+        render(NewInstanceScreen, { ...base, showPreview: false });
+        expect(screen.queryByRole("radio", { name: "Preview" })).toBeNull();
+        expect(screen.queryByRole("radio", { name: "Release" })).toBeNull();
+    });
+
     it("asks for a version change when the list is moved with the arrow keys", async () => {
         const onversionchange = vi.fn();
         render(NewInstanceScreen, { ...base, selectedVersion: "1.26.52.3", onversionchange });
@@ -195,5 +209,30 @@ describe("InstallProgressScreen", () => {
     it("marks the failed step for assistive technology", () => {
         render(InstallProgressScreen, failed);
         expect(screen.getByText("Failed")).toHaveClass("amml-visually-hidden");
+    });
+});
+
+describe("FirstRunChecksScreen", () => {
+    it("holds Next back when asked and keeps Skip on", async () => {
+        const onnext = vi.fn();
+        const onskip = vi.fn();
+        render(FirstRunChecksScreen, { checks: SetupFixtures.checks, text: firstRunChecksEn, nextDisabled: true, onnext, onskip });
+
+        const next = screen.getByRole("button", { name: "Next" });
+        expect(next).toBeDisabled();
+        await fireEvent.click(next);
+        await fireEvent.click(screen.getByRole("button", { name: "Skip" }));
+
+        expect(onnext).not.toHaveBeenCalled();
+        expect(onskip).toHaveBeenCalledOnce();
+    });
+
+    it("lets Next through by default", async () => {
+        const onnext = vi.fn();
+        render(FirstRunChecksScreen, { checks: SetupFixtures.checks, text: firstRunChecksEn, onnext });
+
+        await fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+        expect(onnext).toHaveBeenCalledOnce();
     });
 });

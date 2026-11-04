@@ -4,7 +4,7 @@ use amml_launcher_core::{Asset, AssetFetcher, LauncherError, UreqHttpFetch};
 use amml_registry::HashText;
 
 fn fetcher(dir: &std::path::Path) -> AssetFetcher {
-    let downloader = Downloader::new(UreqHttpFetch::agent(), dir.to_path_buf(), 1);
+    let downloader = Downloader::new(UreqHttpFetch::agent(), dir.to_path_buf(), 1, amml_gdk::CancelFlag::new());
     AssetFetcher::new(downloader, dir.to_path_buf())
 }
 

@@ -14,6 +14,7 @@
         takenNames,
         folder,
         canSubmit = true,
+        problem,
         text,
         summary,
         onnamechange,
@@ -23,7 +24,7 @@
     }: NewInstanceFormProps = $props();
 
     const uid = $props.id();
-    const allowed = $derived(canSubmit && NewInstanceFormRules.canCreate(name, takenNames));
+    const allowed = $derived(canSubmit && !problem && NewInstanceFormRules.canCreate(name, takenNames));
 
     function submit() {
         if (!allowed) return;
@@ -42,6 +43,9 @@
         <Eyebrow size="md" id="{uid}-name">{text.nameLabel}</Eyebrow>
         <TextField value={name} labelledby="{uid}-name" label={text.nameLabel} mono oninput={onnamechange} />
         <span class="amml-new-instance__hint">{Template.fill(text.folderHint, { folder })}</span>
+        {#if problem}
+            <span class="amml-new-instance__problem" role="alert">{problem}</span>
+        {/if}
     </div>
     <div class="amml-new-instance__group">
         <Eyebrow size="md">{text.worldsLabel}</Eyebrow>
@@ -82,6 +86,12 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
+    }
+
+    .amml-new-instance__problem {
+        color: var(--color-rad-warn);
+        font-size: var(--text-rad-body-sm);
+        line-height: 18px;
     }
 
     .amml-new-instance__hint {

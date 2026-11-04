@@ -4,12 +4,13 @@
 </script>
 
 <script lang="ts">
-    import { AddModDialog, ConfirmDialog, FaultBanner } from "../../src/components/dialogs";
+    import { AddModDialog, AddRegistryDialog, ConfirmDialog, FaultBanner } from "../../src/components/dialogs";
     import { DialogFixtures } from "../../src/fixtures/dialogs";
     import { dialogsEn } from "../../src/text/en/dialogs";
     import { faultsEn } from "../../src/text/en/faults";
 
     let input = $state(DialogFixtures.addModInput);
+    let registry = $state("http://example.org/");
     let last = $state("");
 </script>
 
@@ -49,6 +50,15 @@
             onadd={(id) => (last = `add: ${id}`)}
             oninstallurl={(url) => (last = `install unofficial: ${url}`)}
             oncancel={() => (last = "add mod: cancel")}
+        />
+
+        <AddRegistryDialog
+            inline
+            text={dialogsEn.addRegistry}
+            value={registry}
+            oninput={(next) => (registry = next)}
+            onadd={(url) => (last = `add registry: ${url}`)}
+            oncancel={() => (last = "add registry: cancel")}
         />
     </div>
 

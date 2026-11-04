@@ -48,6 +48,12 @@
         text-align: left;
     }
 
+    /* the selected tab keeps its rule straight along the left edge: only the right corners are round */
+    .amml-settings-nav__item.amml-row--selected {
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
+    }
+
     .amml-settings-nav__item:hover,
     .amml-settings-nav__item.amml-row--selected {
         color: var(--color-rad-tx);

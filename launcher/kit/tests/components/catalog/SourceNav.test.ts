@@ -41,3 +41,12 @@ describe("SourceNav", () => {
         expect(toggle).toHaveAttribute("aria-checked", "false");
     });
 });
+
+describe("SourceNav without the other-AMML callback", () => {
+    it("hides the other-AMML switch when no callback is given", () => {
+        render(SourceNav, { registries, text });
+
+        expect(screen.queryByRole("switch")).toBeNull();
+        expect(screen.getByRole("button", { name: /All registries/ })).toBeInTheDocument();
+    });
+});

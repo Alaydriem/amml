@@ -1,10 +1,10 @@
 use crate::support::{Bodies, FakeServer, Route};
-use amml_gdk::{Downloader, GdkError};
+use amml_gdk::{CancelFlag, Downloader, GdkError};
 
 const PATH: &str = "/pkg/a.msixvc";
 
 fn downloader(dir: &tempfile::TempDir) -> Downloader {
-    Downloader::new(FakeServer::agent(), dir.path().to_path_buf(), Downloader::DEFAULT_ATTEMPTS)
+    Downloader::new(FakeServer::agent(), dir.path().to_path_buf(), Downloader::DEFAULT_ATTEMPTS, CancelFlag::new())
 }
 
 fn gets(server: &FakeServer) -> Vec<Option<String>> {
@@ -35,7 +35,7 @@ fn restarts_when_remote_changed() {
     first.drop_times = 99;
     let server = FakeServer::start(vec![(PATH, first)]);
     let dir = tempfile::tempdir().unwrap();
-    let loader = Downloader::new(FakeServer::agent(), dir.path().to_path_buf(), 1);
+    let loader = Downloader::new(FakeServer::agent(), dir.path().to_path_buf(), 1, CancelFlag::new());
     assert!(loader.fetch(&[server.url(PATH)], "a.msixvc", &mut |_| {}).is_err());
     assert!(dir.path().join("a.msixvc.part").exists());
 
@@ -76,7 +76,7 @@ fn oversized_part_is_discarded() {
     first.drop_times = 99;
     let server = FakeServer::start(vec![(PATH, first)]);
     let dir = tempfile::tempdir().unwrap();
-    let loader = Downloader::new(FakeServer::agent(), dir.path().to_path_buf(), 1);
+    let loader = Downloader::new(FakeServer::agent(), dir.path().to_path_buf(), 1, CancelFlag::new());
     assert!(loader.fetch(&[server.url(PATH)], "a.msixvc", &mut |_| {}).is_err());
 
     let shorter = Bodies::make(1000, 5);
@@ -157,4 +157,59 @@ fn a_range_answer_that_starts_elsewhere_restarts_from_zero() {
     assert_eq!(std::fs::read(path).unwrap(), body);
     let ranges = gets(&server);
     assert_eq!(ranges.last().unwrap(), &None);
+}
+
+#[test]
+fn a_cancelled_download_stops_keeps_the_part_file_and_returns_cancelled() {
+    let body = Bodies::make(1024 * 1024, 4);
+    let mut route = Route::new(body);
+    route.etag = Some("\"e\"".to_string());
+    let server = FakeServer::start(vec![(PATH, route)]);
+    let dir = tempfile::tempdir().unwrap();
+    let cancel = CancelFlag::new();
+    let loader =
+        Downloader::new(FakeServer::agent(), dir.path().to_path_buf(), Downloader::DEFAULT_ATTEMPTS, cancel.clone());
+
+    let result = loader.fetch(&[server.url(PATH)], "file.bin", &mut |_| cancel.cancel());
+
+    assert!(matches!(result, Err(GdkError::Cancelled)));
+    assert!(dir.path().join("file.bin.part").is_file());
+    assert!(dir.path().join("file.bin.part.meta").is_file());
+    assert_eq!(gets(&server).len(), 1);
+}
+
+#[test]
+fn a_flag_set_before_the_fetch_sends_no_request() {
+    let server = FakeServer::start(vec![(PATH, Route::new(Bodies::make(1000, 2)))]);
+    let dir = tempfile::tempdir().unwrap();
+    let cancel = CancelFlag::new();
+    cancel.cancel();
+    let loader = Downloader::new(FakeServer::agent(), dir.path().to_path_buf(), Downloader::DEFAULT_ATTEMPTS, cancel);
+
+    let result = loader.fetch(&[server.url(PATH)], "file.bin", &mut |_| {});
+
+    assert!(matches!(result, Err(GdkError::Cancelled)));
+    assert!(server.requests().is_empty());
+}
+
+#[test]
+fn a_cancelled_download_resumes_from_its_part_file_once_the_flag_is_reset() {
+    let body = Bodies::make(1024 * 1024, 6);
+    let mut route = Route::new(body.clone());
+    route.etag = Some("\"e\"".to_string());
+    let server = FakeServer::start(vec![(PATH, route)]);
+    let dir = tempfile::tempdir().unwrap();
+    let cancel = CancelFlag::new();
+    let loader =
+        Downloader::new(FakeServer::agent(), dir.path().to_path_buf(), Downloader::DEFAULT_ATTEMPTS, cancel.clone());
+    assert!(matches!(
+        loader.fetch(&[server.url(PATH)], "file.bin", &mut |_| cancel.cancel()),
+        Err(GdkError::Cancelled)
+    ));
+
+    cancel.reset();
+    let path = loader.fetch(&[server.url(PATH)], "file.bin", &mut |_| {}).unwrap();
+
+    assert_eq!(std::fs::read(path).unwrap(), body);
+    assert!(gets(&server).last().unwrap().is_some());
 }

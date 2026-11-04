@@ -1,0 +1,33 @@
+[package]
+name = "amml-launcher-bridge"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+autotests = false
+
+[lints]
+workspace = true
+
+[lib]
+name = "amml_launcher_bridge"
+path = "src/lib.rs"
+
+[dependencies]
+amml-gdk = { path = "../gdk" }
+amml-launcher-core = { path = "../core" }
+amml-registry = { path = "../registry" }
+curia.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+ts-rs.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"

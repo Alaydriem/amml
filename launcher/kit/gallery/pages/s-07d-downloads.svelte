@@ -12,11 +12,7 @@
     import DownloadsSettingsScreen from "../../src/screens/DownloadsSettingsScreen.svelte";
     import { downloadsSettingsEn } from "../../src/text/en/downloadsSettings";
 
-    let limit = $state(SettingsFixtures.downloadsLimit);
     let files = $state(SettingsFixtures.downloadFiles);
-
-    const limitBytes = $derived(Number(limit) * 1_000_000_000);
-
 </script>
 
 <AppFrame>
@@ -33,12 +29,8 @@
         <DownloadsSettingsScreen
             folder={SettingsFixtures.downloadsFolder}
             usedBytes={SettingsFixtures.downloadsUsedBytes}
-            {limitBytes}
-            {limit}
-            limitOptions={SettingsFixtures.downloadLimitOptions}
             {files}
             text={downloadsSettingsEn}
-            onlimitchange={(next) => (limit = next)}
             onremovefile={(id) => (files = files.filter((file) => file.id !== id))}
             onremoveunfinished={() => (files = files.filter((file) => file.state !== "unfinished"))}
         />

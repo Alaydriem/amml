@@ -15,6 +15,8 @@
         TitleBar,
         WizardFooter,
     } from "../../src/components/shell";
+    import { FaultBanner } from "../../src/components/dialogs";
+    import { DialogFixtures } from "../../src/fixtures/dialogs";
     import { ShellFixtures } from "../../src/fixtures/shell";
     import { en } from "../../src/text/en";
 
@@ -86,6 +88,9 @@
         <AppFrame>
             {#snippet titlebar()}
                 <TitleBar text={en.shell.titleBar} registryFetched={ShellFixtures.registryFetched} />
+            {/snippet}
+            {#snippet banner()}
+                <FaultBanner fault={DialogFixtures.faults["operation-failed"]} text={en.faults["operation-failed"]} />
             {/snippet}
             <SettingsLayout>
                 {#snippet nav()}

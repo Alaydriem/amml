@@ -5,6 +5,7 @@ import StatusBar from "../../../src/components/shell/StatusBar.svelte";
 import TitleBar from "../../../src/components/shell/TitleBar.svelte";
 import WizardFooter from "../../../src/components/shell/WizardFooter.svelte";
 import { shellEn } from "../../../src/text/en/shell";
+import FrameHost from "./FrameHost.svelte";
 
 describe("TitleBar", () => {
     it("fills the registry template and names the two icon buttons", () => {
@@ -84,5 +85,31 @@ describe("WizardFooter", () => {
         expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
         await fireEvent.click(screen.getByRole("button", { name: "Skip" }));
         expect(onsecondary).toHaveBeenCalledOnce();
+    });
+});
+
+describe("AppFrame", () => {
+    it("draws the banner snippet between the title bar and the page", () => {
+        render(FrameHost);
+
+        const title = screen.getByTestId("title");
+        const banner = screen.getByTestId("banner");
+        const page = screen.getByTestId("page");
+        expect(title.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(banner.compareDocumentPosition(page) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(page.closest("main")).not.toContainElement(banner);
+    });
+});
+
+describe("SettingsNav selected tab shape", () => {
+    it("squares the left corners of the selected tab only, and leaves the shared row style alone", async () => {
+        const nav = (await import("../../../src/components/shell/SettingsNav.svelte?raw")).default as string;
+        const base = (await import("../../../src/css/base.css?raw")).default as string;
+
+        expect(nav).toMatch(/\.amml-settings-nav__item\.amml-row--selected\s*\{[^}]*border-top-left-radius:\s*0;[^}]*border-bottom-left-radius:\s*0;/);
+        const shared = base.match(/\.amml-row--selected\s*\{[^}]*\}/g) ?? [];
+        expect(shared.join("")).not.toMatch(/radius/);
+        // the tab keeps its round right corners from the item rule
+        expect(nav).toMatch(/\.amml-settings-nav__item\s*\{[^}]*border-radius:\s*var\(--radius-rad-md\)/);
     });
 });

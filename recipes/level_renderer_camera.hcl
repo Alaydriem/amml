@@ -128,3 +128,33 @@ entry "LevelRendererCamera.mActorRenderQueue" {
     max = 1024
   }
 }
+
+entry "LevelRendererCamera.mWireframeMaterial" {
+  kind     = "field"
+  notes    = "Offset of the mce::MaterialPtr of the `wireframe` material in LevelRendererCamera: 2E8h on 6ad79ee4-17d51891a1119914 (26.60). The LevelRendererCamera constructor (0x53841d0, called by the LevelRendererPlayer constructor) builds it: `lea r15,[r14+2E8h]` (r14 holds this), `mov rax,72BE7BFDEE2D2411h` (the FNV-1 64-bit hash of the text `wireframe`) stored as the HashedString of the name, `lea rdx,[rip+..]` (the material group global 0x129c6290, the same group that `name_tag` and `selection_box` use), `lea r8,[rbp+..]; mov rcx,r15; call 0x4de7250` (the MaterialPtr constructor from a group and a name). The material is Position + Color, the color shader, LessEqual depth test, SrcAlpha / 1-SrcAlpha blend factors, no culling and depth write on; the dragon converter always gives it the unlit material under Vibrant Visuals. Recipe 0 is `lea r15,[r14+..]; mov rax,72BE7BFDEE2D2411h`; it reads the displacement of operand 1 of the lea at offset 0. The displacement is a wildcard; the 8 bytes of the hash are kept (`literal_ok`), because the name is the identity of the entry: the other MaterialPtr members of the constructor are built by the same code with other hashes. Range window 200h..400h. The entry has one recipe and a range check (the rule for a field). 26.51 is not derived for this entry."
+
+  recipe {
+    step "pattern" {
+      bytes      = "4D 8D BE ?? ?? ?? ?? 48 B8 11 24 2D EE FD 7B BE 72"
+      literal_ok = [
+        "9: FNV-1 hash of the material name wireframe; the name is the identity of the entry",
+        "10: FNV-1 hash of the material name wireframe; the name is the identity of the entry",
+        "11: FNV-1 hash of the material name wireframe; the name is the identity of the entry",
+        "12: FNV-1 hash of the material name wireframe; the name is the identity of the entry",
+        "13: FNV-1 hash of the material name wireframe; the name is the identity of the entry",
+        "14: FNV-1 hash of the material name wireframe; the name is the identity of the entry",
+        "15: FNV-1 hash of the material name wireframe; the name is the identity of the entry",
+        "16: FNV-1 hash of the material name wireframe; the name is the identity of the entry",
+      ]
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 512
+    max = 1024
+  }
+}

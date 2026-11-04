@@ -17,6 +17,8 @@
         summary: contents,
         text,
         channel,
+        showPreview = true,
+        problem,
         selectedVersion,
         name,
         dataMode,
@@ -54,15 +56,17 @@
         <div class="amml-screen__versions">
             <div class="amml-screen__versions-head">
                 <Eyebrow size="lg">{text.versionLabel}</Eyebrow>
-                <Segmented
-                    label={text.versionLabel}
-                    options={[
-                        { id: "release", label: text.release },
-                        { id: "preview", label: text.preview },
-                    ]}
-                    value={channel}
-                    onchange={(id) => onchannelchange?.(id as Channel)}
-                />
+                {#if showPreview}
+                    <Segmented
+                        label={text.versionLabel}
+                        options={[
+                            { id: "release", label: text.release },
+                            { id: "preview", label: text.preview },
+                        ]}
+                        value={channel}
+                        onchange={(id) => onchannelchange?.(id as Channel)}
+                    />
+                {/if}
             </div>
             <div class="amml-screen__scroll">
                 <VersionList
@@ -81,6 +85,7 @@
                 {takenNames}
                 {folder}
                 canSubmit={selectable}
+                {problem}
                 text={text.form}
                 {onnamechange}
                 {ondatamodechange}

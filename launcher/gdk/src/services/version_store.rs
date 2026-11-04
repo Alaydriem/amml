@@ -71,6 +71,16 @@ impl VersionStore {
         result
     }
 
+    // Removes the folder of one version and nothing else. `false` when the version is not in the store.
+    pub fn remove(&self, version: &GameVersion) -> Result<bool, GdkError> {
+        let path = self.paths.versions().join(version.instance_name());
+        if !path.is_dir() {
+            return Ok(false);
+        }
+        TreeOps::remove(&path)?;
+        Ok(true)
+    }
+
     // Deletes staging folders left behind by an install that was stopped. A folder that cannot be deleted is
     // logged and left; it must not stop an install.
     pub fn clean_stale(&self) -> Result<Vec<PathBuf>, GdkError> {

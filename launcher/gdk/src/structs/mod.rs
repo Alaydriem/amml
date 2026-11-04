@@ -1,4 +1,5 @@
 pub mod amml_paths;
+pub mod cancel_flag;
 pub mod catalogue;
 pub mod catalogue_entry;
 pub mod channel;
@@ -23,6 +24,7 @@ pub mod store_state;
 pub mod version_folder;
 
 pub use amml_paths::AmmlPaths;
+pub use cancel_flag::CancelFlag;
 pub use catalogue::Catalogue;
 pub use catalogue_entry::CatalogueEntry;
 pub use channel::Channel;

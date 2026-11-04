@@ -12,4 +12,6 @@ pub enum CoreProgress {
     InstallingMod { id: String },
     Finishing,
     Done,
+    // the job waits for the manager (true) or got it (false)
+    WaitingForManager { waiting: bool },
 }

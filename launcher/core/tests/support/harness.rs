@@ -90,7 +90,7 @@ impl Harness {
             RegistryCache::new(self.paths.registry_cache(), RegistryCache::BUDGET),
         );
         let downloads: PathBuf = self.paths.gdk().downloads();
-        let downloader = Downloader::new(UreqHttpFetch::agent(), downloads.clone(), 1);
+        let downloader = Downloader::new(UreqHttpFetch::agent(), downloads.clone(), 1, amml_gdk::CancelFlag::new());
         ModCatalogue::new(RegistrySet::new(vec![client]), AssetFetcher::new(downloader, downloads))
     }
 

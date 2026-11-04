@@ -131,3 +131,22 @@ describe("NewInstanceFormRules.canCreate", () => {
         expect(NewInstanceFormRules.canCreate(name, [])).toBe(true);
     });
 });
+
+describe("NewInstanceForm problem", () => {
+    it("shows the problem under the name field and holds Create back while it is set", async () => {
+        const { oncreate } = mount("con", { problem: "Use another name." });
+
+        expect(screen.getByRole("alert")).toHaveTextContent("Use another name.");
+        const create = screen.getByRole("button", { name: "Create" });
+        expect(create).toBeDisabled();
+        await fireEvent.click(create);
+        expect(oncreate).not.toHaveBeenCalled();
+    });
+
+    it("draws no problem line and allows Create for a good name", () => {
+        mount("players");
+
+        expect(screen.queryByRole("alert")).toBeNull();
+        expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
+    });
+});

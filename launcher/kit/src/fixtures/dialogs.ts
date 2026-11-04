@@ -25,6 +25,13 @@ export class DialogFixtures {
         "copy-failed": { kind: "copy-failed", severity: "fault", primaryAction: true },
         "disk-space": { kind: "disk-space", severity: "warn", primaryAction: false },
         "install-interrupted": { kind: "install-interrupted", severity: "info", primaryAction: false },
+        "restore-failed": {
+            kind: "restore-failed",
+            severity: "fault",
+            code: "C:\\amml\\launcher\\downloads\\Microsoft.MinecraftUWP_1.26.60.5.msixvc",
+            primaryAction: false,
+        },
+        "operation-failed": { kind: "operation-failed", severity: "fault", code: "file error: access is denied", primaryAction: false },
     };
 
     /** The banners in the order of the artboard. */
@@ -37,5 +44,7 @@ export class DialogFixtures {
         "copy-failed",
         "disk-space",
         "install-interrupted",
+        "restore-failed",
+        "operation-failed",
     ];
 }

@@ -7,7 +7,9 @@ pub struct SettingsStore {
 }
 
 impl SettingsStore {
-    const KEYS: [&'static str; 3] = ["registries", "preview", "data_dir"];
+    const KEYS: [&'static str; 4] = ["registries", "preview", "data_dir", Self::RETIRED_DOWNLOAD_LIMIT];
+    // a key an older launcher wrote; it is read without error, ignored, and left out of the next save
+    const RETIRED_DOWNLOAD_LIMIT: &'static str = "download_limit_bytes";
 
     pub fn new(paths: LauncherPaths) -> SettingsStore {
         SettingsStore { paths }

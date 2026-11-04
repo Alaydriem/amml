@@ -26,6 +26,8 @@ impl CliProgress {
             CoreProgress::InstallingMod { id } => Some(format!("Installing {id}")),
             CoreProgress::Finishing => Some("Finishing".to_string()),
             CoreProgress::Done => Some("Done".to_string()),
+            CoreProgress::WaitingForManager { waiting: true } => Some("Waiting for another task".to_string()),
+            CoreProgress::WaitingForManager { waiting: false } => None,
         }
     }
 

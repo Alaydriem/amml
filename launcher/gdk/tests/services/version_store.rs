@@ -160,3 +160,28 @@ fn clean_stale_goes_on_when_one_folder_cannot_be_deleted() {
     assert_eq!(removed, vec![rig.versions().join(".staging-free")]);
     assert!(held_dir.exists());
 }
+
+#[test]
+fn removing_a_version_deletes_only_its_folder() {
+    let rig = Rig::new();
+    let other = rig.versions().join("1.26.60.05");
+    std::fs::create_dir_all(&other).unwrap();
+    std::fs::write(other.join("keep.txt"), b"keep").unwrap();
+    let instances = rig.root.path().join("amml").join("instances").join("play");
+    std::fs::create_dir_all(&instances).unwrap();
+    let staging = rig.store.begin().unwrap();
+    rig.store.copy_tree(&rig.source, &staging, true).unwrap();
+    rig.store.commit(&staging, &Rig::version(), rig.exe.clone(), GameFolder::FILES).unwrap();
+
+    assert!(rig.store.remove(&Rig::version()).unwrap());
+
+    assert_eq!(Rig::entries(&rig.versions()), vec!["1.26.60.05"]);
+    assert_eq!(std::fs::read(other.join("keep.txt")).unwrap(), b"keep");
+    assert!(instances.is_dir());
+}
+
+#[test]
+fn removing_a_version_that_is_not_there_returns_false() {
+    let rig = Rig::new();
+    assert!(!rig.store.remove(&Rig::version()).unwrap());
+}

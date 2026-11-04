@@ -50,6 +50,8 @@ pub enum LauncherError {
     BadVersionJson(String),
     #[error("bad launch setting: {0}")]
     BadLaunchSetting(String),
+    #[error("the installer ended with exit code {code:?}")]
+    InstallerFailed { code: Option<i32> },
     #[error("the AMML API of the instance {0} is not known")]
     UnknownApi(String),
 }

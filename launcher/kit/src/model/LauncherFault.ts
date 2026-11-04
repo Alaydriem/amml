@@ -9,7 +9,9 @@ export type LauncherFaultKind =
     | "deploy-refused"
     | "copy-failed"
     | "disk-space"
-    | "install-interrupted";
+    | "install-interrupted"
+    | "restore-failed"
+    | "operation-failed";
 
 export interface LauncherFault {
     kind: LauncherFaultKind;

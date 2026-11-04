@@ -16,7 +16,6 @@ export type { BugReportPanelProps, BugReportPanelText } from "./BugReportPanel";
 export { BugReportPanelRules } from "./BugReportPanel";
 export type { DownloadFileRowProps, DownloadFileRowText } from "./DownloadFileRow";
 export type { DownloadUsageProps, DownloadUsageText } from "./DownloadUsage";
-export { DownloadUsageRules } from "./DownloadUsage";
 export type { InstalledVersionRowProps, InstalledVersionRowText } from "./InstalledVersionRow";
 export { InstalledVersionRowRules } from "./InstalledVersionRow";
 export type { LinkRowProps } from "./LinkRow";

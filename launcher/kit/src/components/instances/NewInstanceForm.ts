@@ -27,6 +27,8 @@ export interface NewInstanceFormProps {
     takenNames: string[];
     /** Folder path the app derives from the name, shown in the hint. */
     folder: string;
+    /** Why the app refuses the name, already in the user's language. It shows under the field and holds Create back. */
+    problem?: string;
     /** Set false to hold Create back for a reason the form does not know (no version chosen). */
     canSubmit?: boolean;
     text: NewInstanceFormText;

@@ -64,3 +64,38 @@ entry "FontHandle.size" {
   }
 
 }
+
+entry "FontHandle.mDefaultFont" {
+  kind     = "field"
+  notes    = "The offset of FontHandle::mDefaultFont (shared_ptr<Font>: the Font at +0, the control block at +8) in FontHandle: 30h on 26.60 (mFontRepository 18h, mDefaultFont 30h, mFontId 40h, mIsDummyHandle 48h). Recipe 0 is the member copy in the body of the ClientInstance virtual getFontHandle (0x65ab760 on 26.60; the anchor of FontHandle.size): `mov rcx,[rbx+..]; mov [rsi+..],rcx; mov [rsi+..],rax; movzx eax,byte ptr [rbx+118h]`, read as the displacement of the store of the Font pointer. The source member offset 118h tells this getter from its two look-alike siblings (slots 89 to 91), so its two bytes are kept (literal_ok), as in FontHandle.size. Recipe 1 is FontHandle.dtor (0xe7f9e0 on 26.60), which first releases the control block of mDefaultFont (`nop; mov rdi,[rsi+..]; test rdi,rdi; je; lock dec dword ptr [rdi+..]; jne`, after the call that cleans up the base), read as the displacement of the load, then `add -8`. They are in two functions. Every other displacement, immediate and branch byte is a wildcard. The range check keeps the value plausible. The recipes were written on 26.60 only; 26.51 was not checked."
+
+  recipe {
+    step "pattern" {
+      bytes  = "48 8B 8B ?? ?? ?? ?? 48 89 4E ?? 48 89 46 ?? 0F B6 83 18 01 ?? ??"
+      offset = 7
+      literal_ok = ["18: member offset 118h of the source object: the two sibling getters read other members", "19: second byte of the same member offset"]
+    }
+    step "operand" {
+      index = 0
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "ref" { entry = "FontHandle.dtor" }
+    step "pattern" {
+      bytes  = "90 48 8B 7E ?? 48 85 FF 74 ?? F0 FF 4F ?? 75"
+      offset = 1
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+    step "add" { value = -8 }
+  }
+
+  check "range" {
+    min = 16
+    max = 96
+  }
+}

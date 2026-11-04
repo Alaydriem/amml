@@ -1,5 +1,5 @@
 use amml_gdk::{
-    AmmlPaths, Catalogue, CatalogueReader, CliApp, CliArgs, CliCommand, CliExit, DeveloperMode, DiskSpace,
+    AmmlPaths, CancelFlag, Catalogue, CatalogueReader, CliApp, CliArgs, CliCommand, CliExit, DeveloperMode, DiskSpace,
     DownloadCache, Downloader, GdkError, InstallService, StoreCheck, WindowsExeCopier, WindowsPackageDeployer,
     WindowsPackageInventory, WindowsProcessInspector,
 };
@@ -31,7 +31,7 @@ impl Launcher {
         let installer = InstallService::new(
             paths.clone(),
             catalogue.clone(),
-            Downloader::new(agent, paths.downloads(), Downloader::DEFAULT_ATTEMPTS),
+            Downloader::new(agent, paths.downloads(), Downloader::DEFAULT_ATTEMPTS, CancelFlag::new()),
             DownloadCache::new(paths.downloads()),
             StoreCheck::new(WindowsPackageInventory::new(), WindowsProcessInspector::new(), DiskSpace::new()),
             WindowsPackageInventory::new(),

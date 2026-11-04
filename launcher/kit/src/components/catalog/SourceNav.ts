@@ -23,7 +23,7 @@ export interface SourceNavProps {
     text: SourceNavText;
     /** Called with the id of the item the user picked. */
     onchange?: (id: string) => void;
-    /** Called with the state the user asks for. */
+    /** Called with the state the user asks for. The toggle shows only when this is set. */
     onshowotheramml?: (show: boolean) => void;
 }
 

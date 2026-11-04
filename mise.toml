@@ -24,11 +24,6 @@ run = [
   "cargo test --doc -p amml-i18n -p amml-ui -p amml-studio-ui -p amml-game",
 ]
 
-[tasks.heavy]
-description = "Waits in the foreground for the AMML heavy lock, runs the command, always releases the lock: mise run heavy -- <owner> <command...>; exits 75 when the lock stays held for 30 minutes"
-dir = "{{config_root}}"
-run = "bash scripts/heavy.sh"
-
 [tasks.derive]
 description = "Derives the address data of one game build: --exe, --recipes, --out, --report, optional --compare and --jobs <dir>"
 dir = "{{config_root}}"
@@ -1354,6 +1349,49 @@ run = "yarn dev"
 description = "Builds the launcher kit gallery into launcher/kit/dist, which proves every component compiles"
 dir = "{{config_root}}/launcher/kit"
 run = "yarn build"
+
+[tasks."launcher-app:install"]
+description = "Installs the launcher app's node packages (launcher/app) with yarn"
+dir = "{{config_root}}/launcher/app"
+run = "yarn install --non-interactive --frozen-lockfile"
+
+[tasks."launcher-app:check"]
+description = "Type-checks the launcher app (routes, stores, presenters, tests) with svelte-check; warnings fail"
+dir = "{{config_root}}/launcher/app"
+run = "yarn svelte-kit sync && yarn svelte-check --tsconfig ./tsconfig.json --fail-on-warnings"
+
+[tasks."launcher-app:test"]
+description = "Runs the launcher app's behaviour tests with Vitest"
+dir = "{{config_root}}/launcher/app"
+run = "yarn vitest run"
+
+[tasks."launcher-app:dev"]
+description = "Runs the launcher app in a window with hot reload (tauri dev); the window needs a person to look at it"
+dir = "{{config_root}}/launcher/app"
+run = "yarn tauri dev"
+
+[tasks."launcher-app:build"]
+description = "Builds the launcher app without an installer: target/release/amml-launcher-app.exe (tauri build --no-bundle)"
+dir = "{{config_root}}/launcher/app"
+run = "yarn tauri build --no-bundle"
+
+[tasks."launcher-app:i18n-extract"]
+description = "Writes launcher/app/i18n/amml-launcher.pot from every I18n call in launcher/app/src"
+dir = "{{config_root}}/launcher/app"
+run = "node --disable-warning=ExperimentalWarning scripts/i18n/extract.mjs"
+
+[tasks."launcher-app:i18n-check"]
+description = "Fails when launcher/app/i18n/amml-launcher.pot is out of date"
+dir = "{{config_root}}/launcher/app"
+run = "node --disable-warning=ExperimentalWarning scripts/i18n/extract.mjs --check"
+
+[tasks."launcher-app:i18n-build"]
+description = "Compiles the shipped .po files and writes the en_XA pseudo pack into launcher/app/src-tauri/resources/i18n"
+dir = "{{config_root}}/launcher/app"
+run = [
+  "cargo run -q -p amml-i18n-tool -- build i18n src-tauri/resources/i18n",
+  "cargo run -q -p amml-i18n-tool -- pseudo i18n/amml-launcher.pot src-tauri/resources/i18n/en_XA.json",
+]
 
 [tasks.package-release]
 description = "Builds release amml.dll and amml-patch and writes amml-<version>-windows-x64.zip, SHA256SUMS.txt and release-meta.env in the repo root: mise run package-release -- --version <v> --game-versions <comma list>"

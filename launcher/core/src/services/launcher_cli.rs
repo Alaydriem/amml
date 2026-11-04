@@ -1,24 +1,18 @@
 use crate::{
-    Adopter, AmmlCommand, AmmlInstaller, AssetFetcher, CliArgs, CliCommand, CliProgress, CoreProgress, DataChoice,
-    DataCommand, DataMigrator, InstanceCommand, InstanceGuard, InstanceManager, InstanceReader, InstanceState,
-    LaunchService, LaunchState, LauncherError, LauncherPaths, LauncherSettings, LazyInstaller, ModCatalogue, ModChange,
-    ModCommand, ModId, ModInstaller, NewInstanceRequest, PreviewSwitch, ProcessGameStarter, ProcessPatcher,
-    RegistryCache, RegistryClient, RegistryCommand, RegistryRef, RegistrySet, RegistryStatus, SettingsCommand,
-    SettingsStore, UpdateChecker, UpdateRow, UpdateStatus, UreqHttpFetch, UrlInspector, WindowsWindowProbe,
+    Adopter, AmmlCommand, CliArgs, CliCommand, CliProgress, CoreProgress, CoreServices, DataCommand, DataMigrator,
+    InstanceCommand, InstanceReader, InstanceState, LaunchService, LaunchState, LauncherError, LauncherPaths,
+    LauncherSettings, ModChange, ModCommand, ModId, NewInstanceRequest, PreviewSwitch, ProcessGameStarter,
+    RegistryCommand, RegistryRef, RegistryStatus, SettingsCommand, SettingsStore, UpdateChecker, UpdateRow,
+    UpdateStatus, UrlInspector, WindowsWindowProbe,
 };
-use amml_gdk::{
-    AmmlPaths, DownloadProgress, Downloader, GameVersion, InstanceService, VersionStore, WindowsProcessInspector,
-};
+use amml_gdk::{AmmlPaths, CancelFlag, DownloadProgress, GameVersion, InstanceService, VersionStore};
 use std::io::Write;
-use std::sync::Arc;
 use std::time::Duration;
-
-type Manager = InstanceManager<LazyInstaller, ProcessPatcher, WindowsProcessInspector, UreqHttpFetch>;
 
 // The `amml-launcher` command line. It writes to the stream it is given, so a test reads its output.
 pub struct LauncherCli {
     paths: LauncherPaths,
-    official: Option<String>,
+    services: CoreServices,
 }
 
 impl LauncherCli {
@@ -47,7 +41,8 @@ impl LauncherCli {
             args.official.as_ref().map(|base| if base.ends_with('/') { base.clone() } else { format!("{base}/") });
         #[cfg(not(debug_assertions))]
         let official = None;
-        Ok(LauncherCli { paths: LauncherPaths::new(AmmlPaths::new(root)), official })
+        let paths = LauncherPaths::new(AmmlPaths::new(root));
+        Ok(LauncherCli { services: CoreServices::new(paths.clone(), official, CancelFlag::new()), paths })
     }
 
     fn exit_code(error: &LauncherError) -> i32 {
@@ -73,7 +68,7 @@ impl LauncherCli {
     }
 
     fn registry(&self, command: &RegistryCommand, out: &mut impl Write) -> Result<i32, LauncherError> {
-        let mut catalogue = self.catalogue()?;
+        let mut catalogue = self.services.catalogue()?;
         match command {
             RegistryCommand::Status => {
                 for client in catalogue.registries_mut().clients_mut() {
@@ -155,15 +150,15 @@ impl LauncherCli {
                 Self::show(&state, out);
             }
             InstanceCommand::New { game, name, preview, amml, own_data } => {
-                let settings = self.settings_in_use()?;
+                let settings = self.services.settings()?;
                 let request = NewInstanceRequest {
                     game: GameVersion::parse(game)?,
                     preview: *preview,
                     name: name.clone(),
                     amml: amml.clone(),
-                    data: Self::data_choice(*own_data, &settings, &self.paths),
+                    data: self.services.data_choice(*own_data, &settings),
                 };
-                let mut manager = self.manager()?;
+                let mut manager = self.services.manager()?;
                 let mut printer = CliProgress::new();
                 let outcome = manager.create(&request, &mut |event| Self::progress(&mut printer, &event, out))?;
                 Self::line(out, format!("Created {} ({})", outcome.state.name, outcome.state.folder.display()));
@@ -172,7 +167,7 @@ impl LauncherCli {
                 }
             }
             InstanceCommand::Delete { name, confirm } => {
-                self.manager()?.delete(name, confirm)?;
+                self.services.manager()?.delete(name, confirm)?;
                 Self::line(out, format!("Deleted {name}"));
             }
             InstanceCommand::Adopt { name: None, .. } => {
@@ -191,7 +186,7 @@ impl LauncherCli {
                 }
             }
             InstanceCommand::Adopt { name: Some(name), own_data } => {
-                let settings = self.settings_in_use()?;
+                let settings = self.services.settings()?;
                 let gdk = self.paths.gdk().clone();
                 let instances = InstanceService::new(gdk.clone(), VersionStore::new(gdk.clone()));
                 let state = Adopter::adopt(
@@ -199,12 +194,14 @@ impl LauncherCli {
                     &instances,
                     &VersionStore::new(gdk),
                     name,
-                    &Self::data_choice(*own_data, &settings, &self.paths),
+                    &self.services.data_choice(*own_data, &settings),
                 )?;
                 Self::line(out, format!("Adopted {}", state.name));
                 let mut printer = CliProgress::new();
-                let added =
-                    self.manager()?.ensure_core_mods(name, &mut |event| Self::progress(&mut printer, &event, out))?;
+                let added = self
+                    .services
+                    .manager()?
+                    .ensure_core_mods(name, &mut |event| Self::progress(&mut printer, &event, out))?;
                 for id in added {
                     Self::line(out, format!("added core mod {id}"));
                 }
@@ -217,6 +214,7 @@ impl LauncherCli {
         let AmmlCommand::Update { instance, to } = command;
         let mut printer = CliProgress::new();
         let version = self
+            .services
             .manager()?
             .update_amml(instance, to.clone(), &mut |event| Self::progress(&mut printer, &event, out))?;
         Self::line(out, format!("AMML {version} is installed in {instance}"));
@@ -224,7 +222,7 @@ impl LauncherCli {
     }
 
     fn mods(&self, command: &ModCommand, out: &mut impl Write) -> Result<i32, LauncherError> {
-        let mut manager = self.manager()?;
+        let mut manager = self.services.manager()?;
         match command {
             ModCommand::Add { instance, target, unofficial_ok } => {
                 let mut printer = CliProgress::new();
@@ -295,7 +293,7 @@ impl LauncherCli {
     }
 
     fn updates(&self, instance: &str, out: &mut impl Write) -> Result<i32, LauncherError> {
-        for row in self.manager()?.check_updates(instance)? {
+        for row in self.services.manager()?.check_updates(instance)? {
             Self::line(
                 out,
                 format!(
@@ -323,7 +321,7 @@ impl LauncherCli {
                 }
             }
             DataCommand::Copy { source } => {
-                let data_dir = self.settings_in_use()?.data_dir(&self.paths);
+                let data_dir = self.services.settings()?.data_dir(&self.paths);
                 let copied = migrator.copy(source, &data_dir, &mut |_| {})?;
                 Self::line(out, format!("Copied {copied} files to {}", data_dir.join("Minecraft Bedrock").display()));
             }
@@ -386,54 +384,6 @@ impl LauncherCli {
             }
         }
         Ok(0)
-    }
-
-    // the settings with the test override applied to the official registry; never saved
-    fn settings_in_use(&self) -> Result<LauncherSettings, LauncherError> {
-        let mut settings = SettingsStore::new(self.paths.clone()).load()?;
-        if let Some(base) = &self.official
-            && let Some(first) = settings.registries.first_mut()
-        {
-            *first = RegistryRef::official_at(base.clone());
-        }
-        Ok(settings)
-    }
-
-    fn data_choice(own_data: bool, settings: &LauncherSettings, paths: &LauncherPaths) -> DataChoice {
-        if own_data { DataChoice::Own } else { DataChoice::Shared(settings.data_dir(paths)) }
-    }
-
-    fn catalogue(&self) -> Result<ModCatalogue<UreqHttpFetch>, LauncherError> {
-        let settings = self.settings_in_use()?;
-        let clients = settings
-            .registries
-            .iter()
-            .map(|registry| {
-                RegistryClient::new(
-                    registry.clone(),
-                    UreqHttpFetch::new(UreqHttpFetch::agent()),
-                    RegistryCache::new(self.paths.registry_cache(), RegistryCache::BUDGET),
-                )
-            })
-            .collect();
-        let downloads = self.paths.gdk().downloads();
-        let downloader = Downloader::new(UreqHttpFetch::agent(), downloads.clone(), Downloader::DEFAULT_ATTEMPTS);
-        Ok(ModCatalogue::new(RegistrySet::new(clients), AssetFetcher::new(downloader, downloads)))
-    }
-
-    fn manager(&self) -> Result<Manager, LauncherError> {
-        let gdk = self.paths.gdk().clone();
-        let guard = InstanceGuard::new(Arc::new(WindowsProcessInspector::new()));
-        Ok(InstanceManager::new(
-            self.paths.clone(),
-            LazyInstaller::new(gdk.clone()),
-            InstanceService::new(gdk.clone(), VersionStore::new(gdk.clone())),
-            VersionStore::new(gdk),
-            self.catalogue()?,
-            AmmlInstaller::new(ProcessPatcher::new(ProcessPatcher::DEFAULT_TIMEOUT), guard.clone()),
-            ModInstaller::new(guard.clone()),
-            guard,
-        ))
     }
 
     fn show(state: &InstanceState, out: &mut impl Write) {

@@ -17,6 +17,8 @@ export interface FirstRunChecksScreenText {
 
 export interface FirstRunChecksScreenProps {
     checks: SystemCheck[];
+    /** Holds Next back, for example until the Store game and Gaming Services are found. Skip stays on. */
+    nextDisabled?: boolean;
     text: FirstRunChecksScreenText;
     /** The action button of a check was pressed. */
     oninstallcheck?: (id: string) => void;

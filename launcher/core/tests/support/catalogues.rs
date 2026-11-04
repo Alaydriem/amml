@@ -24,7 +24,8 @@ impl Catalogues {
     }
 
     pub fn catalogue(clients: Vec<RegistryClient<UreqHttpFetch>>, downloads: &Path) -> ModCatalogue<UreqHttpFetch> {
-        let downloader = Downloader::new(UreqHttpFetch::agent(), downloads.to_path_buf(), 1);
+        let downloader =
+            Downloader::new(UreqHttpFetch::agent(), downloads.to_path_buf(), 1, amml_gdk::CancelFlag::new());
         ModCatalogue::new(RegistrySet::new(clients), AssetFetcher::new(downloader, downloads.to_path_buf()))
     }
 

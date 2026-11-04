@@ -49,3 +49,24 @@ entry "LevelRenderer.mAtlasTexture" {
     max = 464
   }
 }
+
+entry "LevelRenderer.mLevelRendererPlayer" {
+  kind     = "field"
+  notes    = "Offset of the LevelRendererPlayer pointer in LevelRenderer: 480h on 6ad79ee4-17d51891a1119914 (26.60). The object it points to is a LevelRendererPlayer, whose LevelRendererCamera base is at offset 0. Found in LevelRenderer::renderLevel (0x535f980): the body loads `mov rax,[rdi+480h]` (rdi holds this) and reads the camera position and target through it at once: `movss xmm6,[rax+654h]; movsd xmm7,[rax+64Ch]; movss xmm0,[rax+660h]`, then `movsd xmm10,[rax+658h]`. 64Ch is LevelRendererCamera.mCameraPos and 658h is LevelRendererCamera.mCameraTargetPos on this build, so the pointer is the LevelRendererCamera base. InGamePlayScreen::_renderLevel also calls 0x539dc10 on LevelRenderer+480h before it calls renderLevel. Recipe 0 starts at LevelRenderer.renderLevel and scans its function for `mov rax,[rdi+..]; movss xmm6,[rax+..]; movsd xmm7,[rax+..]; movss xmm0,[rax+..]` (the load, then the three camera reads); it reads the displacement of operand 1 of the load at offset 0. Every displacement byte is a wildcard. Range window 400h..500h. The entry has one recipe and a range check (the rule for a field). 26.51 is not derived for this entry; the 26.51 notes of LevelRenderer.renderLevel name the camera object at 468h there."
+
+  recipe {
+    step "ref" { entry = "LevelRenderer.renderLevel" }
+    step "pattern" {
+      bytes = "48 8B 87 ?? ?? ?? ?? F3 0F 10 B0 ?? ?? ?? ?? F2 0F 10 B8 ?? ?? ?? ?? F3 0F 10 80"
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 1024
+    max = 1280
+  }
+}

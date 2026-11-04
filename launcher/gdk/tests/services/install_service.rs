@@ -3,8 +3,8 @@ use crate::support::{
     Route,
 };
 use amml_gdk::{
-    AmmlPaths, CatalogueReader, Channel, DiskSpace, DownloadCache, Downloader, GameVersion, GdkError, InstallJournal,
-    InstallLock, InstallOutcome, InstallRequest, InstallService, JournalStore, StoreCheck, StoreState,
+    AmmlPaths, CancelFlag, CatalogueReader, Channel, DiskSpace, DownloadCache, Downloader, GameVersion, GdkError,
+    InstallJournal, InstallLock, InstallOutcome, InstallRequest, InstallService, JournalStore, StoreCheck, StoreState,
 };
 use std::os::windows::fs::OpenOptionsExt;
 use std::path::PathBuf;
@@ -65,7 +65,7 @@ impl Rig {
         let service = InstallService::new(
             paths.clone(),
             catalogue,
-            Downloader::new(FakeServer::agent(), paths.downloads(), Downloader::DEFAULT_ATTEMPTS),
+            Downloader::new(FakeServer::agent(), paths.downloads(), Downloader::DEFAULT_ATTEMPTS, CancelFlag::new()),
             DownloadCache::new(paths.downloads()),
             check,
             inventory.clone(),

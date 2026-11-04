@@ -4,7 +4,6 @@ import type {
     BugReportLine,
     DownloadFile,
     GameVersion,
-    Option,
     RegistrySource,
     SharedDataStats,
     WorldLocation,
@@ -71,14 +70,6 @@ export class SettingsFixtures {
 
     static readonly downloadsFolder = "%LOCALAPPDATA%\\amml\\launcher\\downloads";
     static readonly downloadsUsedBytes = 3_340_000_000;
-    static readonly downloadsLimitBytes = 10_000_000_000;
-    static readonly downloadsLimit = "10";
-    static readonly downloadLimitOptions: Option[] = [
-        { id: "5", label: "5 GB" },
-        { id: "10", label: "10 GB" },
-        { id: "20", label: "20 GB" },
-        { id: "50", label: "50 GB" },
-    ];
 
     static readonly downloadFiles: DownloadFile[] = [
         {

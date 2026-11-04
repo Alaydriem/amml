@@ -1,11 +1,14 @@
 <script lang="ts">
     import type { AppFrameProps } from "./AppFrame";
 
-    let { titlebar, children, statusbar, scroll = false }: AppFrameProps = $props();
+    let { titlebar, banner, children, statusbar, scroll = false }: AppFrameProps = $props();
 </script>
 
 <div class="amml-frame">
     {@render titlebar()}
+    {#if banner}
+        {@render banner()}
+    {/if}
     <main class="amml-frame__body" class:amml-frame__body--scroll={scroll}>
         {@render children()}
     </main>

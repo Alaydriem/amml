@@ -1,5 +1,5 @@
 use crate::GdkError;
-use crate::structs::{DownloadProgress, RemoteFile};
+use crate::structs::{CancelFlag, DownloadProgress, RemoteFile};
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -9,14 +9,16 @@ pub struct Downloader {
     dir: PathBuf,
     // tries per mirror; each try after the first resumes from the partial file
     attempts: u32,
+    // set by the app; the stream stops before its next read
+    cancel: CancelFlag,
 }
 
 impl Downloader {
     const CHUNK: usize = 64 * 1024;
     pub const DEFAULT_ATTEMPTS: u32 = 3;
 
-    pub fn new(agent: ureq::Agent, dir: PathBuf, attempts: u32) -> Downloader {
-        Downloader { agent, dir, attempts }
+    pub fn new(agent: ureq::Agent, dir: PathBuf, attempts: u32, cancel: CancelFlag) -> Downloader {
+        Downloader { agent, dir, attempts, cancel }
     }
 
     // the size of the file from a HEAD request, trying each mirror in order
@@ -54,6 +56,7 @@ impl Downloader {
         for url in urls {
             match self.fetch_from(url, file_name, max_len, progress) {
                 Ok(path) => return Ok(path),
+                Err(GdkError::Cancelled) => return Err(GdkError::Cancelled),
                 Err(error) => {
                     curia::warn!("download source failed", { file: file_name, error: error.to_string() });
                     last = error.to_string();
@@ -91,6 +94,9 @@ impl Downloader {
         max_len: Option<u64>,
         progress: &mut impl FnMut(DownloadProgress),
     ) -> Result<PathBuf, GdkError> {
+        if self.cancel.is_cancelled() {
+            return Err(GdkError::Cancelled);
+        }
         let dest = self.dir.join(file_name);
         let part = self.dir.join(format!("{file_name}.part"));
         let meta = self.dir.join(format!("{file_name}.part.meta"));
@@ -111,12 +117,16 @@ impl Downloader {
 
         let mut failure = GdkError::Download("no attempt was made".to_string());
         for _ in 0..self.attempts.max(1) {
+            if self.cancel.is_cancelled() {
+                return Err(GdkError::Cancelled);
+            }
             match self.stream(url, &part, &remote, progress) {
                 Ok(()) => {
                     let _ = std::fs::remove_file(&meta);
                     std::fs::rename(&part, &dest)?;
                     return Ok(dest);
                 }
+                Err(GdkError::Cancelled) => return Err(GdkError::Cancelled),
                 Err(error) => failure = error,
             }
         }
@@ -184,6 +194,10 @@ impl Downloader {
         let mut reader = response.into_body().into_reader();
         let mut buffer = vec![0u8; Self::CHUNK];
         loop {
+            if self.cancel.is_cancelled() {
+                file.flush()?;
+                return Err(GdkError::Cancelled);
+            }
             let read = reader.read(&mut buffer).map_err(|error| GdkError::Download(error.to_string()))?;
             if read == 0 {
                 break;

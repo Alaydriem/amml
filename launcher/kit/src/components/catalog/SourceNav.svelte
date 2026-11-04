@@ -56,16 +56,18 @@
         <span class="amml-source-nav__name">{text.fromUrl}</span>
     </button>
     <div class="amml-source-nav__spacer"></div>
-    <div class="amml-source-nav__foot">
-        <Toggle
-            size="sm"
-            label={text.needOtherAmml}
-            labelledby="{uid}-other"
-            checked={showOtherAmml}
-            onchange={(next) => onshowotheramml?.(next)}
-        />
-        <span class="amml-source-nav__foot-text" id="{uid}-other">{text.needOtherAmml}</span>
-    </div>
+    {#if onshowotheramml}
+        <div class="amml-source-nav__foot">
+            <Toggle
+                size="sm"
+                label={text.needOtherAmml}
+                labelledby="{uid}-other"
+                checked={showOtherAmml}
+                onchange={(next) => onshowotheramml?.(next)}
+            />
+            <span class="amml-source-nav__foot-text" id="{uid}-other">{text.needOtherAmml}</span>
+        </div>
+    {/if}
 </nav>
 
 <style>

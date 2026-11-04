@@ -38,6 +38,8 @@ pub enum GdkError {
     BadInstanceName(String),
     #[error("the instance {0} exists already")]
     InstanceExists(String),
+    #[error("the download was cancelled")]
+    Cancelled,
     #[error("file error: {0}")]
     Io(#[from] std::io::Error),
 }
