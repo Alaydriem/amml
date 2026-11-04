@@ -6,7 +6,7 @@ on:
   workflow_call:
     inputs:
       version:
-        description: Release version, Cargo semver; it is also the tag (no v)
+        description: Release version, 26.<game minor>.<mod patch> (26.60.1); it is also the tag (no v). MAJOR.MINOR picks the AMML series; the patch is the mod's own release counter on that line, not the Minecraft build
         required: true
         type: string
       path:
@@ -88,7 +88,7 @@ jobs:
           set -eu
           re='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$'
           if ! [[ "$VERSION" =~ $re ]]; then
-            echo "::error::version '$VERSION' is not Cargo semver (for example 26.60.5)"
+            echo "::error::version '$VERSION' is not Cargo semver (for example 26.60.1)"
             exit 1
           fi
 

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release version, semver from the Minecraft version (26.60.5)
+        description: Release version, 26.<game minor>.<AMML patch> (26.60.1). The patch is the AMML release counter on that game line, not the Minecraft build; the supported game builds go in game_versions
         required: true
         type: string
       game_versions:
@@ -39,7 +39,7 @@ jobs:
           set -eu
           re='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$'
           if ! [[ "$VERSION" =~ $re ]]; then
-            echo "::error::version '$VERSION' is not Cargo semver (for example 26.60.5)"
+            echo "::error::version '$VERSION' is not Cargo semver (for example 26.60.1)"
             exit 1
           fi
 

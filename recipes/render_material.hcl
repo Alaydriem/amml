@@ -61,3 +61,67 @@ entry "RenderMaterial.mDepthWriteMask" {
     max = 512
   }
 }
+
+entry "RenderMaterial.mBlendSource" {
+  kind     = "field"
+  notes    = "Offset of the one-byte mce::BlendTarget blendSource in mce::RenderMaterial: 180h on 6ad79ee4-17d51891a1119914 (26.60). The material JSON parser (0x4df2780) reads it from the material definition key \"blendSrc\": `lea r8,[r12+180h]; lea rax,[rip+..] (\"blendSrc\"); mov [rbp+50h],rax; mov qword ptr [rbp+58h],8; lea rdx,[rbp+50h]; mov rsi,[rbp+80h]; ...; call 0x4df6090`, the enum reader that writes through r8. The next call does the same for \"blendDst\" into +181h. The draw-state builder 0x66b1f30 reads it back only when enableBlend (+185h) is 1: `movzx ecx,byte ptr [rdx+180h]; movzx r9d,byte ptr [rdx+181h]; mov ebx,ecx; xor bl,3` (the first test of the blend table is source One, destination Zero). Recipe 0 is the reader site: `movzx ecx,byte ptr [rdx+..]; movzx r9d,byte ptr [rdx+..]; mov ebx,ecx; xor bl,imm`; it reads the displacement of operand 1 of the first movzx at offset 0. Recipe 1 is the parser site: `lea r8,[r12+..]; lea rax,[rip+..]; mov [rbp+..],rax; mov qword ptr [rbp+..],imm; lea rdx,[rbp+..]; mov rsi,[rbp+..]`; it reads the displacement of operand 1 of the first lea at offset 0. The two recipes are in two functions and share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. Range window 100h..200h. 26.51 is not derived for this entry."
+
+  recipe {
+    step "pattern" {
+      bytes  = "0F B6 8A ?? ?? ?? ?? 44 0F B6 8A ?? ?? ?? ?? 89 CB 80 F3 ??"
+      offset = 0
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "4D 8D 84 24 ?? ?? ?? ?? 48 8D 05 ?? ?? ?? ?? 48 89 45 ?? 48 C7 45 ?? ?? ?? ?? ?? 48 8D 55 ?? 48 8B B5"
+      offset = 0
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 256
+    max = 512
+  }
+}
+
+entry "RenderMaterial.mBlendDestination" {
+  kind     = "field"
+  notes    = "Offset of the one-byte mce::BlendTarget blendDestination in mce::RenderMaterial: 181h on 6ad79ee4-17d51891a1119914 (26.60). The material JSON parser (0x4df2780) reads it from the material definition key \"blendDst\", right after blendSrc: `mov bl,al; lea r8,[r12+181h]; lea rax,[rip+..] (\"blendDst\"); mov [rbp],rax; mov qword ptr [rbp+8],8; mov rdx,rbp; mov rcx,rsi; mov rdi,r8; call 0x4df6090`, the enum reader that writes through r8. The draw-state builder 0x66b1f30 reads it back only when enableBlend (+185h) is 1: `movzx ecx,byte ptr [rdx+180h]; movzx r9d,byte ptr [rdx+181h]; mov ebx,ecx; xor bl,3; mov r10d,r9d; xor r10b,2` (the first test of the blend table is source One, destination Zero). Recipe 0 is the reader site: the same pattern as recipe 0 of mBlendSource; it reads the displacement of operand 1 of the second movzx at offset 7. Recipe 1 is the parser site: `mov bl,al; lea r8,[r12+..]; lea rax,[rip+..]; mov [rbp+..],rax; mov qword ptr [rbp+..],imm; mov rdx,rbp; mov rcx,rsi; mov rdi,r8`; it reads the displacement of operand 1 of the lea at offset 2. The two recipes are in two functions and share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. Range window 100h..200h. 26.51 is not derived for this entry."
+
+  recipe {
+    step "pattern" {
+      bytes  = "0F B6 8A ?? ?? ?? ?? 44 0F B6 8A ?? ?? ?? ?? 89 CB 80 F3 ??"
+      offset = 7
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "88 C3 4D 8D 84 24 ?? ?? ?? ?? 48 8D 05 ?? ?? ?? ?? 48 89 45 ?? 48 C7 45 ?? ?? ?? ?? ?? 48 89 EA 48 89 F1 4C 89 C7"
+      offset = 2
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 256
+    max = 512
+  }
+}
