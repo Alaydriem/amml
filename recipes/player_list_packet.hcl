@@ -127,3 +127,88 @@ entry "PlayerListAddEntry.mXUID" {
     max = 128
   }
 }
+
+entry "PlayerListPacket.mEntries" {
+  kind     = "field"
+  notes    = "The offset of PlayerListPacketPayload::mEntries (std::vector<std::variant<RemoveEntry, AddEntry>>: begin at +0, end at +8) in PlayerListPacket: 30h on 26.60. LegacyClientNetworkHandler::handle(PlayerListPacket) (ClientNetworkHandler.handle.PlayerListPacket, 0x6bdd410 on 26.60) loads the begin and the end and divides the byte span by the element size (PlayerListAddEntry.size), then reloads both after it reserves its own list. Recipe 0 is the first load (`mov rax,[rbp+..] (the packet); mov r14,[rax+..]; mov rdx,[rax+..]; mov rcx,rdx; sub rcx,r14; sar rcx,imm; mov rax,imm64`), read as the displacement of `mov r14,[rax+..]`. Recipe 1 is the reload after the reserve call (`nop; mov rax,[rbp+..]; mov r14,[rax+..]; mov rax,[rax+..]; mov [rbp+..],rax; jmp`), read the same way. Both are in the one handler; they share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. The range check keeps the value plausible. The recipes were written on 26.60 only; 26.51 was not checked."
+
+  recipe {
+    step "pattern" {
+      bytes  = "48 8B 85 ?? ?? ?? ?? 4C 8B 70 ?? 48 8B 50 ?? 48 89 D1 4C 29 F1 48 C1 F9 ?? 48 B8"
+      offset = 7
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "90 48 8B 85 ?? ?? ?? ?? 4C 8B 70 ?? 48 8B 40 ?? 48 89 85 ?? ?? ?? ?? EB"
+      offset = 8
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 16
+    max = 96
+  }
+}
+
+entry "PlayerListAddEntry.mUUID" {
+  kind     = "field"
+  notes    = "The offset of the mce::UUID (16 bytes) in one PlayerListPacketPayload::mEntries element: 8h on 26.60. Both alternatives keep the UUID at the same place: the handler compares [entry+8h] and [entry+10h] with a player's UUID in the AddEntry branch and reads them in the RemoveEntry branch. Recipe 0 is the copy of the entry into the client PlayerListEntry (0x4045d50 on 26.60, called once from LegacyClientNetworkHandler::handle(PlayerListPacket)): mUUID and mId are copied first (`movups xmm0,[rsi+..]; movups [r14+..],xmm0; mov rax,[rsi+..]; mov [r14],rax; lea r9,[rsi+..]; lea rdi,[r14+..]; cmp rdi,r9`), read as the displacement of the movups load. Recipe 1 is the UUID compare in the AddEntry branch of the handler (0x6bdd410 on 26.60: `mov rdx,[r14+..]; xor rdx,[r12+..]; mov r8,[r12+..]; xor r8,[r14+..]; or r8,rdx; jne`), read as the displacement of the first load. They are in two functions. Every displacement, immediate and branch byte is a wildcard. The range check keeps the value plausible. The recipes were written on 26.60 only; 26.51 was not checked."
+
+  recipe {
+    step "pattern" {
+      bytes  = "0F 10 46 ?? 41 0F 11 46 ?? 48 8B 46 ?? 49 89 06 4C 8D 4E ?? 49 8D 7E ?? 4C 39 CF"
+      offset = 0
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "49 8B 56 ?? 49 33 94 24 ?? ?? ?? ?? 4D 8B 84 24 ?? ?? ?? ?? 4D 33 46 ?? 49 09 D0 0F 85"
+      offset = 0
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 0
+    max = 32
+  }
+}
+
+entry "PlayerListAddEntry.mId" {
+  kind     = "field"
+  notes    = "The offset of PlayerListPacketPayload::AddEntry::mId (ActorUniqueID, an int64) in one mEntries element: 18h on 26.60, after mUUID (+8h). One recipe: the copy of the entry into the client PlayerListEntry (0x4045d50 on 26.60, called once from LegacyClientNetworkHandler::handle(PlayerListPacket)), which copies mUUID and then mId into the first word of the client entry (`movups xmm0,[rsi+..]; movups [r14+..],xmm0; mov rax,[rsi+..]; mov [r14],rax; lea r9,[rsi+..]; lea rdi,[r14+..]; cmp rdi,r9`), read as the displacement of `mov rax,[rsi+..]`. Every displacement, immediate and branch byte is a wildcard. The range check keeps the value plausible. The recipe was written on 26.60 only; 26.51 was not checked."
+
+  recipe {
+    step "pattern" {
+      bytes  = "0F 10 46 ?? 41 0F 11 46 ?? 48 8B 46 ?? 49 89 06 4C 8D 4E ?? 49 8D 7E ?? 4C 39 CF"
+      offset = 9
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 8
+    max = 64
+  }
+}

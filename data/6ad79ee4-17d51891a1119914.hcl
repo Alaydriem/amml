@@ -107,6 +107,12 @@ resolved "ActorShaderManager.setEntityConstants" {
   recipes = 2
 }
 
+resolved "AnimationComponent.applyAnimationsCallback" {
+  kind    = "function"
+  value   = "0x6194b40"
+  recipes = 2
+}
+
 resolved "BaseActorRenderContext.ctor" {
   kind    = "function"
   value   = "0x57e1da0"
@@ -566,6 +572,24 @@ resolved "ClientInstance.isShowingMenu" {
 resolved "ClientInstance.isWorldActive" {
   kind    = "vslot"
   value   = "0x9d"
+  recipes = 2
+}
+
+resolved "ClientInstance.mMinecraft" {
+  kind    = "field"
+  value   = "0x1d0"
+  recipes = 2
+}
+
+resolved "ClientInstance.mRealTimer" {
+  kind    = "field"
+  value   = "0xed8"
+  recipes = 2
+}
+
+resolved "ClientInstance.mSimTimer" {
+  kind    = "field"
+  value   = "0xe58"
   recipes = 2
 }
 
@@ -1292,6 +1316,18 @@ resolved "MeshData.dtor" {
 resolved "MeshData.moveAssign" {
   kind    = "function"
   value   = "0x4dee760"
+  recipes = 2
+}
+
+resolved "Minecraft.mRealTimer" {
+  kind    = "field"
+  value   = "0xf0"
+  recipes = 1
+}
+
+resolved "Minecraft.mSimTimer" {
+  kind    = "field"
+  value   = "0xe8"
   recipes = 2
 }
 

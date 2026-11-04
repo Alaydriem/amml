@@ -1,0 +1,114 @@
+/* Launcher kit tokens, exported from the Paper file "AMML". Dark only. */
+
+:root {
+    --font-rad-sans: "Segoe UI", system-ui, sans-serif;
+    --font-rad-mono: Consolas, ui-monospace, monospace;
+
+    --color-spectrum-01: #9f45f0;
+    --color-spectrum-02: #7559fd;
+    --color-spectrum-03: #469cff;
+    --color-spectrum-04: #30cbf3;
+    --color-spectrum-05: #30e4dc;
+    --color-spectrum-06: #46ea74;
+    --color-spectrum-07: #7ceb4d;
+    --color-spectrum-08: #fee237;
+    --color-spectrum-09: #ff9d25;
+    --color-spectrum-10: #ff4b2d;
+
+    --color-rad-void: #1c1132;
+    --color-rad-void-2: #251844;
+    --color-rad-panel: #2f2054;
+    --color-rad-line: #432f6c;
+    --color-rad-line-2: #5b4487;
+    --color-rad-tx: #fbf8ff;
+    --color-rad-dim: #d6cbea;
+    --color-rad-faint: #b3a4d0;
+    --color-rad-brand: #8239d8;
+    --color-rad-brand-lift: #bb8dfa;
+    --color-rad-ok: #5ce383;
+    --color-rad-warn: #ffcf4d;
+    --color-rad-fault: #ff8266;
+    --color-rad-on-brand: #ffffff;
+    --color-rad-sheet: #150d27;
+    --color-rad-brand-hover: #9555dd;
+    --color-rad-hover: #fbf8ff0a;
+    --color-rad-menu-hover: #fbf8ff0f;
+    --color-rad-brand-wash: #8239d824;
+    --color-rad-brand-callout: #8239d81f;
+    --color-rad-brand-tint: #bb8dfa24;
+    --color-rad-brand-edge: #bb8dfa73;
+    --color-rad-ok-tint: #5ce3831f;
+    --color-rad-ok-chip: #5ce38329;
+    --color-rad-ok-edge: #5ce38373;
+    --color-rad-warn-tint: #ffcf4d1f;
+    --color-rad-warn-chip: #ffcf4d29;
+    --color-rad-warn-edge: #ffcf4d8c;
+    --color-rad-fault-wash: #ff82661a;
+    --color-rad-fault-tint: #ff82661f;
+    --color-rad-fault-chip: #ff826626;
+    --color-rad-fault-edge: #ff82668c;
+    --color-rad-nav-ground: #140c268c;
+    --color-rad-scrim: #0a051699;
+    --color-rad-shadow: #0c081799;
+
+    --text-rad-caption: 11px;
+    --text-rad-label: 12px;
+    --text-rad-mono: 13px;
+    --text-rad-small: 14px;
+    --text-rad-body-sm: 15px;
+    --text-rad-body: 16px;
+    --text-rad-lead: 17px;
+    --text-rad-avatar: 18px;
+    --text-rad-title-sm: 19px;
+    --text-rad-title-md: 20px;
+    --text-rad-title: 24px;
+    --text-rad-title-lg: 30px;
+    --text-rad-percent: 32px;
+    --text-rad-page: 34px;
+    --text-rad-hero: 52px;
+    --text-rad-readout: 64px;
+
+    --font-weight-rad-light: 300;
+    --font-weight-rad-regular: 400;
+    --font-weight-rad-strong: 600;
+    --font-weight-rad-heavy: 700;
+
+    --tracking-rad-display: -0.032em;
+    --tracking-rad-page: -0.024em;
+    --tracking-rad-heading: -0.018em;
+    --tracking-rad-title: -0.014em;
+    --tracking-rad-row: -0.01em;
+    --tracking-rad-mono: 0.04em;
+    --tracking-rad-status: 0.08em;
+    --tracking-rad-caps: 0.12em;
+    --tracking-rad-tag: 0.16em;
+    --tracking-rad-brand: 0.18em;
+    --tracking-rad-label: 0.2em;
+
+    --opacity-rad-disabled: 45%;
+
+    --radius-rad-hair: 1px;
+    --radius-rad-2xs: 2px;
+    --radius-rad-swatch: 3px;
+    --radius-rad-xs: 4px;
+    --radius-rad-box: 5px;
+    --radius-rad-sm: 6px;
+    --radius-rad-seg: 7px;
+    --radius-rad-toggle: 8px;
+    --radius-rad-md: 9px;
+    --radius-rad-card: 11px;
+    --radius-rad-lg: 12px;
+    --radius-rad-rail: 13px;
+    --radius-rad-xl: 16px;
+    --radius-rad-pill: 999px;
+}
+
+/* Composites of the tokens above, and the bar heights of the 1280 x 800 frame. */
+:root {
+    --rad-titlebar-height: 70px;
+    --rad-statusbar-height: 64px;
+    --rad-focus-ring: 2px solid var(--color-rad-brand-lift);
+    --rad-focus-offset: 2px;
+    --rad-shadow-menu: 0 12px 32px var(--color-rad-shadow);
+    --rad-shadow-dialog: 0 30px 70px -22px var(--color-rad-shadow);
+}

@@ -87,6 +87,7 @@ fn a_mod_needing_a_newer_api_is_refused_with_version_mismatch() {
         dir: harness.mods().join("@echo").join("ahead"),
         entry: "missing.dll".to_string(),
         api_version: 3,
+        version: None,
         entries: Vec::new(),
     };
     reports.extend(loader.load_all(&[ahead]));

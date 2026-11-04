@@ -17,3 +17,24 @@ entry "ClientEntityWaypoint.vtable" {
     name = ".rdata"
   }
 }
+
+entry "ClientEntityWaypoint.mActorId" {
+  kind     = "field"
+  notes    = "The offset of the ActorUniqueID (an int64) in ClientEntityWaypoint, after the ClientWaypoint part: 78h on 26.60. Slot 7 of ClientEntityWaypoint.vtable (tryGetActorID, 0x25149f0 on 26.60) returns it (`mov rcx,[rcx+78h]`). One recipe: the waypoint factory in the ClientLocatorBar packet function (the same anchor as ClientEntityWaypoint.vtable recipe 0: `mov byte ptr [rax+..],imm; lea rcx,[rip+..]; mov [rax],rcx; mov rcx,[r12+..]; mov [rax+..],rcx; movups [rax+..],xmmN; mov dword ptr [rax+..],imm`), read as the displacement of the store of the actor id. Every displacement, immediate and branch byte is a wildcard. The range check keeps the value plausible. The recipe was written on 26.60 only; 26.51 was not checked."
+
+  recipe {
+    step "pattern" {
+      bytes  = "C6 40 ?? ?? 48 8D 0D ?? ?? ?? ?? 48 89 08 49 8B 4C 24 ?? 48 89 48 ?? 0F 11 ?? ?? ?? ?? ?? C7 80 ?? ?? ?? ?? ?? ?? ?? ??"
+      offset = 19
+    }
+    step "operand" {
+      index = 0
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 96
+    max = 192
+  }
+}

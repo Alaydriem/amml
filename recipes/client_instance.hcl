@@ -789,3 +789,116 @@ entry "ClientInstance.getMinecraftGame" {
     value = 456
   }
 }
+
+entry "ClientInstance.mMinecraft" {
+  kind  = "field"
+  notes = "Offset of `mMinecraft` in ClientInstance: 1D0h in 26.60. The member is a std::unique_ptr<Minecraft> (8 bytes): the client Minecraft object, which the old LeviLamina API returned from ClientInstance::getServerData(). 26.60 has no ClientInstance virtual that only returns it: the one `mov rax,[rcx+1D0h]; ret` body in the exe (0xec69890) is in five other vtables and not in ClientInstance.vtable, so a mod reads the field. ClientInstance::init (slot 3, 0x658be40) calls a std::function factory with the pair {&this+E58h, &this+ED8h} (the two client timers), moves the returned pointer into [this+1D0h] and deletes the old one through its virtual destructor (`mov rax,[rcx]; mov rax,[rax]; mov edx,1; call`). ClientInstance::update (0x65977b0) passes [this+1D0h] to Minecraft::update (0xb82190) right after it advances the two timers; the server update lambda (0x1048dc0) passes [ServerInstance+B8h] to the same function. The ClientInstance slot-26 leaf (0x659eba0) tests [this+1D0h] for null before it reads [[this+1D0h]+E8h] (Minecraft.mSimTimer), so the pointer can be null. Recipe 0 is the store in ClientInstance::init, after the factory call: `mov rdi,[rbp+disp]; mov qword ptr [rbp+disp],imm; mov rcx,[rsi+member]; mov [rsi+member],rdi; test rcx,rcx; je rel8; mov rax,[rcx]; mov rax,[rax]; mov edx,imm; call [guard]`; it reads the displacement of operand 1 of the third instruction (offset 18). Recipe 1 is in ClientInstance::update (ref ClientInstance.update): the end of the real-timer advance and the Minecraft::update call, `xor r8d,r8d; call; nop; mov rcx,[rsi+member]; call`; it reads the displacement of operand 1 of the `mov` (offset 9). It runs past one call, because 26.60 puts a `nop` there; a build without the nop breaks it, and it fails then rather than give a wrong value. The two recipes are in two functions and share no bytes. Every displacement, immediate and branch byte is a wildcard. Both are unique in 26.60 and agree. Check: range 100h..400h. The gate LevelChunk.mSubChunks = 456 ties it to 26.60 (the 26.51 exe was not available; widen it when a later build is added). Value 1D0h on 6ad79ee4-17d51891a1119914 (26.60)."
+
+  recipe {
+    step "pattern" {
+      bytes  = "48 8B BD ?? ?? ?? ?? 48 C7 85 ?? ?? ?? ?? ?? ?? ?? ?? 48 8B 8E ?? ?? ?? ?? 48 89 BE ?? ?? ?? ?? 48 85 C9 74 ?? 48 8B 01 48 8B 00 BA ?? ?? ?? ?? FF 15"
+      offset = 18
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "ref" { entry = "ClientInstance.update" }
+    step "pattern" {
+      bytes  = "45 31 C0 E8 ?? ?? ?? ?? 90 48 8B 8E ?? ?? ?? ?? E8"
+      offset = 9
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 256
+    max = 1024
+  }
+
+  check "entry_is" {
+    entry = "LevelChunk.mSubChunks"
+    value = 456
+  }
+}
+
+entry "ClientInstance.mSimTimer" {
+  kind  = "field"
+  notes = "Offset of the client sim Timer in ClientInstance: E58h in 26.60. The member is an inline Timer (80h bytes), not a pointer: the code passes `lea rcx,[this+E58h]` as the Timer's `this`. The name is inferred: Minecraft.mSimTimer (a Timer&) of the client Minecraft points at it. Evidence: ClientInstance::update (0x65977b0) advances [this+E58h] and then [this+ED8h] with Timer::advanceTime(rcx, 1.0f, false) when its third argument (r14b) is set, then calls Minecraft::update with ClientInstance.mMinecraft; when the argument is clear it only recomputes mAlpha (+8) of both from mLastMs (+30h), mTimeScale (+0Ch), mTicksPerSecond (+0) and mPassedTime (+10h), and checks the std::function at +78h of each Timer (E58h+78h = ED0h, ED8h+78h = F50h). ClientInstance::init (slot 3, 0x658be40) passes {&this+E58h, &this+ED8h} to the Minecraft factory, whose lambda (0x8d3120) puts them in the Minecraft construction arguments at +40h/+48h; the Minecraft constructor (0xb80b30) stores them at Minecraft+E8h/+F0h. So [ClientInstance.mMinecraft + E8h] == this+E58h. Recipe 0 is that pair in ClientInstance::init: `lea rax,[rsi+sim]; mov [rbp+disp],rax; lea rax,[rsi+real]; mov [rbp+disp],rax; mov rax,[r12+disp]; mov rdx,[r12+disp]; lea rcx,[rbp+disp]; lea r8,[rbp+disp]; call [guard]`; it reads the displacement of operand 1 of the first `lea`. Recipe 1 is the first advance in ClientInstance::update (ref ClientInstance.update): `test r14b,r14b; je rel32; lea rcx,[rsi+sim]; movss xmm1,[rip+..]; xor r8d,r8d; call`; it reads the displacement of operand 1 of the `lea` (offset 9). The two recipes are in two functions and share no bytes. Every displacement, immediate and branch byte is a wildcard. Both are unique in 26.60 and agree. Check: range C00h..1400h. The gate LevelChunk.mSubChunks = 456 ties it to 26.60 (the 26.51 exe was not available; widen it when a later build is added). Value E58h on 6ad79ee4-17d51891a1119914 (26.60)."
+
+  recipe {
+    step "pattern" {
+      bytes = "48 8D 86 ?? ?? ?? ?? 48 89 85 ?? ?? ?? ?? 48 8D 86 ?? ?? ?? ?? 48 89 85 ?? ?? ?? ?? 49 8B 44 24 ?? 49 8B 54 24 ?? 48 8D 8D ?? ?? ?? ?? 4C 8D 85 ?? ?? ?? ?? FF 15"
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "ref" { entry = "ClientInstance.update" }
+    step "pattern" {
+      bytes  = "45 84 F6 0F 84 ?? ?? ?? ?? 48 8D 8E ?? ?? ?? ?? F3 0F 10 0D ?? ?? ?? ?? 45 31 C0 E8"
+      offset = 9
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 3072
+    max = 5120
+  }
+
+  check "entry_is" {
+    entry = "LevelChunk.mSubChunks"
+    value = 456
+  }
+}
+
+entry "ClientInstance.mRealTimer" {
+  kind  = "field"
+  notes = "Offset of the client real-time Timer in ClientInstance: ED8h in 26.60, 80h (one Timer) after ClientInstance.mSimTimer. The member is an inline Timer (80h bytes), not a pointer. The name is inferred: Minecraft.mRealTimer (a Timer&) of the client Minecraft points at it. Evidence: ClientInstance::update (0x65977b0) advances it second, right after [this+E58h], with Timer::advanceTime(rcx, 1.0f, false); ClientInstance::init (slot 3, 0x658be40) passes it as the second element of the timer pair to the Minecraft factory, and the Minecraft constructor (0xb80b30) stores it at Minecraft+F0h. Recipe 0 is the pair in ClientInstance::init (see ClientInstance.mSimTimer recipe 0); it reads the displacement of operand 1 of the second `lea` (offset 14). Recipe 1 is the second advance in ClientInstance::update (ref ClientInstance.update): `xor r8d,r8d; call; nop; lea rcx,[rsi+real]; movss xmm1,[rip+..]; xor r8d,r8d; call`; it reads the displacement of operand 1 of the `lea` (offset 9). It runs past one call, because 26.60 puts a `nop` there; a build without the nop breaks it, and it fails then rather than give a wrong value. The two recipes are in two functions and share no bytes. Every displacement, immediate and branch byte is a wildcard. Both are unique in 26.60 and agree. Check: range C00h..1400h. The gate LevelChunk.mSubChunks = 456 ties it to 26.60 (the 26.51 exe was not available; widen it when a later build is added). Value ED8h on 6ad79ee4-17d51891a1119914 (26.60)."
+
+  recipe {
+    step "pattern" {
+      bytes  = "48 8D 86 ?? ?? ?? ?? 48 89 85 ?? ?? ?? ?? 48 8D 86 ?? ?? ?? ?? 48 89 85 ?? ?? ?? ?? 49 8B 44 24 ?? 49 8B 54 24 ?? 48 8D 8D ?? ?? ?? ?? 4C 8D 85 ?? ?? ?? ?? FF 15"
+      offset = 14
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "ref" { entry = "ClientInstance.update" }
+    step "pattern" {
+      bytes  = "45 31 C0 E8 ?? ?? ?? ?? 90 48 8D 8E ?? ?? ?? ?? F3 0F 10 0D ?? ?? ?? ?? 45 31 C0 E8"
+      offset = 9
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 3072
+    max = 5120
+  }
+
+  check "entry_is" {
+    entry = "LevelChunk.mSubChunks"
+    value = 456
+  }
+}

@@ -1,6 +1,6 @@
 use amml_i18n::text::Text;
 
-use super::{ExportChoice, ExportFormat, ExportFrameRate, ExportResolution};
+use super::{ExportChoice, ExportFormat, ExportFrameRate, ExportH265Profile, ExportProResProfile, ExportResolution};
 
 /// What the export dialog shows. The words beside the controls come from the caller: the quality name (as in
 /// "High"), the output folder and file, the note under the settings, the reason of each choice
@@ -15,6 +15,12 @@ pub struct ExportDialogView {
     /// From 0 to 1.
     pub quality: f64,
     pub quality_label: Text,
+    /// `Some` shows the PROFILE row with this profile selected, in place of the quality slider; `None` shows the
+    /// slider.
+    pub pro_res_profile: Option<ExportProResProfile>,
+    /// `Some` shows the PROFILE row (Main or Main 10) before the quality slider. The caller sets at most one of this
+    /// and `pro_res_profile`.
+    pub h265_profile: Option<ExportH265Profile>,
     /// The sidecar switch is on.
     pub sidecar: bool,
     pub folder: Text,

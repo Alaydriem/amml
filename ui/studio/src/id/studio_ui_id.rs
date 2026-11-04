@@ -21,6 +21,8 @@ pub enum StudioUiId {
     RenameDialog,
     /// The export dialog's format, resolution and frame rate controls (their selections slide).
     ExportFormat,
+    ExportProResProfile,
+    ExportH265Profile,
     ExportResolution,
     ExportFrameRate,
     /// The text fields (egui keeps their cursor and focus).

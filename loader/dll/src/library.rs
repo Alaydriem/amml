@@ -35,6 +35,11 @@ impl Library {
         Ok(Self { handle: handle as usize })
     }
 
+    /// The base address the DLL is mapped at.
+    pub fn base(&self) -> usize {
+        self.handle
+    }
+
     /// The export `name` as a function pointer of type `F`, or `None` when the DLL has no such export.
     ///
     /// # Safety

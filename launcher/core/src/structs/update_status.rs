@@ -1,0 +1,13 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UpdateStatus {
+    UpToDate,
+    Available,
+    // the installed version is not known (a mod built from source)
+    Unknown,
+    // no registry lists the mod
+    NotListed,
+    // installed from a URL; never checked
+    Unofficial,
+    // the registry could not be reached and nothing is cached
+    Offline,
+}

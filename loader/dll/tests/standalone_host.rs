@@ -56,3 +56,69 @@ fn start_logs_coverage_defers_the_heap_check_and_works_once() {
     assert!(!log.contains("game heap ok"), "{log}");
     assert!(StandaloneHost::start(&paths, 0x1000).is_err());
 }
+
+struct Instance;
+
+impl Instance {
+    fn layout_with_log(root: &std::path::Path) -> amml::HostPaths {
+        let paths = Probe::standalone_layout(root);
+        std::fs::create_dir_all(&paths.logs).unwrap();
+        LoaderLog::install(&paths.logs).unwrap();
+        paths
+    }
+
+    fn write(paths: &amml::HostPaths, text: &str) {
+        std::fs::create_dir_all(&paths.loader).unwrap();
+        std::fs::write(&paths.instance, text).unwrap();
+    }
+
+    fn log_after_marker(paths: &amml::HostPaths) -> String {
+        curia::info!("marker for the test");
+        LogFile::wait_for(&paths.logs.join("loader.log"), "marker for the test")
+    }
+}
+
+#[test]
+fn install_redirect_without_instance_file_is_none() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Instance::layout_with_log(root.path());
+
+    let redirect = StandaloneHost::install_redirect(&paths);
+
+    assert!(redirect.is_none());
+    let log = Instance::log_after_marker(&paths);
+    assert!(!log.contains("instance.hcl"), "{log}");
+}
+
+#[test]
+fn install_redirect_with_bad_file_is_none_and_logged() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Instance::layout_with_log(root.path());
+    Instance::write(&paths, "data_dir = 3");
+
+    let redirect = StandaloneHost::install_redirect(&paths);
+
+    assert!(redirect.is_none());
+    let log = Instance::log_after_marker(&paths);
+    let lines: Vec<&str> = log.lines().filter(|line| line.contains("instance.hcl")).collect();
+    assert_eq!(lines.len(), 1, "{log}");
+    assert!(lines[0].contains("ERROR"), "{log}");
+}
+
+#[test]
+fn install_redirect_with_data_dir_redirects_this_process_and_creates_the_folder() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Instance::layout_with_log(root.path());
+    let data_dir = root.path().join("data");
+    let escaped = data_dir.to_string_lossy().replace(std::path::MAIN_SEPARATOR, "/");
+    Instance::write(&paths, &format!("data_dir = \"{escaped}\"\nfuture_key = true\n"));
+
+    let redirect = StandaloneHost::install_redirect(&paths);
+
+    assert!(redirect.is_some_and(|redirect| !redirect.slots().is_empty()));
+    assert!(data_dir.is_dir());
+    assert_eq!(std::env::var("APPDATA").unwrap(), data_dir.to_string_lossy());
+    let log = Instance::log_after_marker(&paths);
+    assert!(log.contains("data folder redirected"), "{log}");
+    assert!(log.contains("future_key"), "{log}");
+}

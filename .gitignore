@@ -2,3 +2,9 @@ target/
 reports/
 docs/
 mise.local.toml
+launcher/app/build/
+launcher/app/.svelte-kit/
+launcher/app/node_modules/
+launcher/app/src-tauri/gen/
+**/tests/snapshots/**/*.new.png
+**/tests/snapshots/**/*.diff.png

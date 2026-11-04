@@ -39,6 +39,8 @@ pub fn export() -> ExportDialogView {
         frame_rate: ExportFrameRate::Sixty,
         quality: 0.75,
         quality_label: words("High"),
+        pro_res_profile: None,
+        h265_profile: None,
         sidecar: true,
         folder: words("C:\\Videos\\DejaVu\\"),
         file: words("nether-trip_arrival_4k60.mp4"),

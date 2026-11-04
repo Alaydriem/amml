@@ -1,0 +1,308 @@
+name: Publish
+
+# Adds one AMML or mod release to the registry. The release workflows of alaydriem/amml and of each mod repo send
+# `amml-released` after they create their GitHub release. Run it by hand to retry or to backfill a release.
+on:
+  repository_dispatch:
+    types: [amml-released]
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: amml or mod
+        required: true
+        type: choice
+        options: [amml, mod]
+      repo:
+        description: Repo that made the release, owner/name (for example alaydriem/amml-zoom)
+        required: true
+        type: string
+      namespace:
+        description: Mod namespace (mod only)
+        required: false
+        type: string
+      name:
+        description: Mod name (mod only)
+        required: false
+        type: string
+      version:
+        description: Release version (for example 26.60.1)
+        required: true
+        type: string
+      api_version:
+        description: AMML API version (amml only)
+        required: false
+        type: string
+      game_versions:
+        description: Tested game versions, comma separated (amml only)
+        required: false
+        type: string
+
+# No workflow-level concurrency: GitHub keeps only one pending run per group and cancels the others, which would
+# drop releases. Runs may overlap; each one starts from the current default branch and retries when another run
+# merged first. Only the Pages deploy is serialized (see the deploy job).
+permissions:
+  contents: read
+
+env:
+  AMML_REF: master
+  MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/amml
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    outputs:
+      changed: ${{ steps.add.outputs.changed }}
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Get the GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: alaydriem
+          repositories: amml-registry
+          permission-contents: write
+          permission-pull-requests: write
+
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          path: registry
+
+      - uses: actions/checkout@v7
+        with:
+          repository: alaydriem/amml
+          ref: ${{ env.AMML_REF }}
+          path: amml
+
+      - uses: jdx/mise-action@v2
+        with:
+          working_directory: amml
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            amml/target
+          key: cargo-registry-${{ hashFiles('amml/Cargo.lock', 'amml/rust-toolchain.toml') }}
+          restore-keys: |
+            cargo-registry-
+
+      - name: Build the registry tool
+        working-directory: amml
+        run: mise run build-registry
+
+      # The payload comes from outside this repo, so it is checked against a strict shape and only ever passed
+      # through the environment.
+      - name: Read the release
+        id: release
+        env:
+          EVENT: ${{ github.event_name }}
+          PAYLOAD_KIND: ${{ github.event.client_payload.kind }}
+          PAYLOAD_REPO: ${{ github.event.client_payload.repo }}
+          PAYLOAD_NAMESPACE: ${{ github.event.client_payload.namespace }}
+          PAYLOAD_NAME: ${{ github.event.client_payload.name }}
+          PAYLOAD_VERSION: ${{ github.event.client_payload.version }}
+          PAYLOAD_API_VERSION: ${{ github.event.client_payload.api_version }}
+          PAYLOAD_GAME_VERSIONS: ${{ github.event.client_payload.game_versions }}
+          INPUT_KIND: ${{ inputs.kind }}
+          INPUT_REPO: ${{ inputs.repo }}
+          INPUT_NAMESPACE: ${{ inputs.namespace }}
+          INPUT_NAME: ${{ inputs.name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_API_VERSION: ${{ inputs.api_version }}
+          INPUT_GAME_VERSIONS: ${{ inputs.game_versions }}
+        run: |
+          set -eu
+          if [ "$EVENT" = "repository_dispatch" ]; then
+            kind="$PAYLOAD_KIND"; repo="$PAYLOAD_REPO"; namespace="$PAYLOAD_NAMESPACE"; name="$PAYLOAD_NAME"
+            version="$PAYLOAD_VERSION"; api_version="$PAYLOAD_API_VERSION"; game_versions="$PAYLOAD_GAME_VERSIONS"
+          else
+            kind="$INPUT_KIND"; repo="$INPUT_REPO"; namespace="$INPUT_NAMESPACE"; name="$INPUT_NAME"
+            version="$INPUT_VERSION"; api_version="$INPUT_API_VERSION"; game_versions="$INPUT_GAME_VERSIONS"
+          fi
+          check() {
+            if ! [[ "$2" =~ $3 ]]; then
+              echo "::error::$1 '$2' is not in the expected shape"
+              exit 1
+            fi
+          }
+          check kind "$kind" '^(amml|mod)$'
+          check repo "$repo" '^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$'
+          check version "$version" '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          if [ "$kind" = "mod" ]; then
+            check namespace "$namespace" '^[a-z0-9][a-z0-9_-]*$'
+            check name "$name" '^[a-z0-9][a-z0-9_-]*$'
+          else
+            check api_version "$api_version" '^[1-9][0-9]*$'
+            check game_versions "$game_versions" '^[0-9]+(\.[0-9]+){3}(,[0-9]+(\.[0-9]+){3})*$'
+          fi
+          {
+            echo "kind=$kind"; echo "repo=$repo"; echo "namespace=$namespace"; echo "name=$name"
+            echo "version=$version"; echo "api_version=$api_version"; echo "game_versions=$game_versions"
+          } >> "$GITHUB_OUTPUT"
+
+      # Up to 5 tries. Each try starts from the current default branch, so a run that merged in the meantime is part
+      # of this run's tree; a pull request that cannot merge because the base moved is rebuilt on the new base.
+      # The tool exits 0 when the tree changed and 10 when the release is already listed. The pull request is the
+      # audit record. A failure before the merge leaves it open and publishes nothing.
+      - name: Add the release to the registry
+        id: add
+        working-directory: registry
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          KIND: ${{ steps.release.outputs.kind }}
+          REPO: ${{ steps.release.outputs.repo }}
+          NAMESPACE: ${{ steps.release.outputs.namespace }}
+          NAME: ${{ steps.release.outputs.name }}
+          VERSION: ${{ steps.release.outputs.version }}
+          API_VERSION: ${{ steps.release.outputs.api_version }}
+          GAME_VERSIONS: ${{ steps.release.outputs.game_versions }}
+        run: |
+          set -u
+          tool="$GITHUB_WORKSPACE/amml/target/release/amml-registry"
+          branch="registry/${REPO#*/}-$VERSION"
+          title="Add ${REPO#*/} $VERSION"
+          git config user.name "amml-registry[bot]"
+          git config user.email "amml-registry@users.noreply.github.com"
+          for attempt in 1 2 3 4 5; do
+            echo "try $attempt"
+            git fetch origin "$DEFAULT_BRANCH"
+            git checkout -q -B "$branch" "origin/$DEFAULT_BRANCH"
+            git clean -fdq
+            set +e
+            if [ "$KIND" = "mod" ]; then
+              out=$("$tool" add-mod --tree . --allow mods.hcl --repo "$REPO" \
+                --namespace "$NAMESPACE" --name "$NAME" --version "$VERSION")
+            else
+              out=$("$tool" add-amml --tree . --allow mods.hcl --repo "$REPO" \
+                --version "$VERSION" --api-version "$API_VERSION" --game-versions "$GAME_VERSIONS")
+            fi
+            code=$?
+            set -e
+            echo "$out"
+            case "$code" in
+              0) ;;
+              10)
+                echo "changed=false" >> "$GITHUB_OUTPUT"
+                echo "::notice::$REPO $VERSION is already listed"
+                exit 0
+                ;;
+              *) exit "$code" ;;
+            esac
+            git add -A
+            git commit -q -m "$title"
+            git push --force origin "$branch"
+            number=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
+            if [ -z "$number" ]; then
+              body=$(printf 'Release: https://github.com/%s/releases/tag/%s\n\n%s\n' "$REPO" "$VERSION" "$out")
+              url=$(gh pr create --head "$branch" --title "$title" --body "$body")
+              number="${url##*/}"
+            fi
+            if gh pr merge "$number" --squash --delete-branch; then
+              merged=true
+            else
+              merged=$(gh pr view "$number" --json state --jq '.state == "MERGED"')
+            fi
+            if [ "$merged" = "true" ]; then
+              echo "changed=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::warning::try $attempt did not merge; starting again from $DEFAULT_BRANCH"
+            sleep 10
+          done
+          echo "::error::the pull request for $REPO $VERSION did not merge after 5 tries"
+          exit 1
+
+      # The first free YYYY.MM.DD-N tag; the tag is created by the release job after the deploy.
+      - name: Name the registry release
+        id: tag
+        if: ${{ steps.add.outputs.changed == 'true' }}
+        working-directory: registry
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -eu
+          tool="$GITHUB_WORKSPACE/amml/target/release/amml-registry"
+          existing=$(gh release list --limit 200 --json tagName --jq '.[].tagName' | tr -d '\r' | tr '\n' ' ')
+          # word splitting is intended: one argument per existing tag
+          # shellcheck disable=SC2086
+          tag=$("$tool" next-tag --date "$(date -u +%Y-%m-%d)" --existing $existing)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  # Runs after every successful publish, including "already listed", so a run that merged but failed before the
+  # deploy is healed by running it again.
+  deploy:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # A pending deploy that a newer one cancels loses nothing: the newer deploy checks out the default branch
+    # after every merge so far.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Stage the published tree
+        run: |
+          set -eu
+          mkdir site
+          cp registry.json names.json site/
+          for dir in index mods icons; do
+            if [ -d "$dir" ]; then cp -r "$dir" "site/$dir"; fi
+          done
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: pages
+        uses: actions/deploy-pages@v4
+
+  # A tagged copy of registry.json for audit and rollback. The launcher reads the Pages URL, not this release.
+  release:
+    needs: [publish, deploy]
+    if: ${{ needs.publish.outputs.changed == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      # Overlapping runs can pick the same tag; take the next free number.
+      - name: Create the registry release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.publish.outputs.tag }}
+        run: |
+          set -eu
+          base="${TAG%-*}"
+          number="${TAG##*-}"
+          while gh release view "$base-$number" > /dev/null 2>&1; do
+            number=$((number + 1))
+          done
+          gh release create "$base-$number" registry.json \
+            --title "Registry $base-$number" \
+            --latest \
+            --notes "Snapshot of registry.json after the publish run $GITHUB_RUN_ID."

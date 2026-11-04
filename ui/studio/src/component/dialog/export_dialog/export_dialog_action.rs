@@ -1,4 +1,4 @@
-use super::{ExportFormat, ExportFrameRate, ExportResolution};
+use super::{ExportFormat, ExportFrameRate, ExportH265Profile, ExportProResProfile, ExportResolution};
 
 /// What the export dialog asks for.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -7,6 +7,8 @@ pub enum ExportDialogAction {
     SetResolution(ExportResolution),
     SetFrameRate(ExportFrameRate),
     SetQuality(f64),
+    SetH265Profile(ExportH265Profile),
+    SetProResProfile(ExportProResProfile),
     SetSidecar(bool),
     /// A click on the output field: pick a folder.
     ChooseOutput,

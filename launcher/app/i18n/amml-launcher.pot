@@ -1,0 +1,1562 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Project-Id-Version: amml-launcher\n"
+"MIME-Version: 1.0\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: src/lib/text/NewInstanceTextSet.ts:33
+#: src/lib/text/NewInstanceTextSet.ts:34
+msgid "{count} default mod"
+msgid_plural "{count} default mods"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/text/GameVersionsSettingsTextSet.ts:18
+#: src/lib/text/GameVersionsSettingsTextSet.ts:19
+#: src/lib/text/InstancesTextSet.ts:18
+#: src/lib/text/InstancesTextSet.ts:19
+msgid "{count} instance"
+msgid_plural "{count} instances"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/text/FirstRunAdoptTextSet.ts:17
+#: src/lib/text/FirstRunAdoptTextSet.ts:18
+msgid "{count} mod"
+msgid_plural "{count} mods"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/text/RegistriesSettingsTextSet.ts:15
+#: src/lib/text/RegistriesSettingsTextSet.ts:16
+msgid "{count} mod · {fetched}"
+msgid_plural "{count} mods · {fetched}"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/stores/CatalogStore.svelte.ts:133
+msgid "{count} results in {registries} registries"
+msgstr ""
+
+#: src/lib/text/InstancesTextSet.ts:14
+#: src/lib/text/InstancesTextSet.ts:15
+#: src/lib/text/InstancesTextSet.ts:41
+#: src/lib/text/InstancesTextSet.ts:42
+msgid "{count} update"
+msgid_plural "{count} updates"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/stores/CatalogStore.svelte.ts:139
+msgid "{count} work with api {api}"
+msgstr ""
+
+#: src/lib/text/SharedDataSettingsTextSet.ts:29
+#: src/lib/text/SharedDataSettingsTextSet.ts:30
+msgid "{count} world"
+msgid_plural "{count} worlds"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/text/InstancesTextSet.ts:44
+msgid "{data} · {activity}"
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:114
+msgid "{done} of {total} is kept and the download continues from there."
+msgstr ""
+
+#: src/lib/text/CheckTextSet.ts:39
+msgid "{drive} · {size} per new version"
+msgstr ""
+
+#: src/lib/text/RegistriesSettingsTextSet.ts:18
+msgid "{fetched}"
+msgstr ""
+
+#: src/lib/text/SharedDataSettingsTextSet.ts:32
+msgid "{folder} · {worlds} · {modified}"
+msgstr ""
+
+#: src/lib/text/CheckTextSet.ts:51
+msgid "{free} free"
+msgstr ""
+
+#: src/lib/text/UnitsTextSet.ts:15
+msgid "{hours} h {minutes} min"
+msgstr ""
+
+#: src/lib/text/InstanceDetailTextSet.ts:28
+msgid "{id} · {note}"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:64
+msgid "{id} · {registry}"
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:41
+msgid "{label}: {value}"
+msgstr ""
+
+#: src/lib/text/ActivityTextSet.ts:31
+msgid "{n} d ago"
+msgstr ""
+
+#: src/lib/text/UnitsTextSet.ts:8
+msgid "{n} GB"
+msgstr ""
+
+#: src/lib/text/UnitsTextSet.ts:14
+msgid "{n} h"
+msgstr ""
+
+#: src/lib/text/ActivityTextSet.ts:28
+msgid "{n} h ago"
+msgstr ""
+
+#: src/lib/text/UnitsTextSet.ts:10
+msgid "{n} KB"
+msgstr ""
+
+#: src/lib/text/UnitsTextSet.ts:9
+msgid "{n} MB"
+msgstr ""
+
+#: src/lib/text/UnitsTextSet.ts:11
+msgid "{n} MB/s"
+msgstr ""
+
+#: src/lib/text/UnitsTextSet.ts:13
+msgid "{n} min"
+msgstr ""
+
+#: src/lib/stores/SettingsStore.svelte.ts:346
+#: src/lib/text/ActivityTextSet.ts:25
+msgid "{n} min ago"
+msgstr ""
+
+#: src/lib/text/ActivityTextSet.ts:33
+msgid "{n} mo ago"
+msgstr ""
+
+#: src/lib/text/UnitsTextSet.ts:12
+msgid "{n} s"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:54
+msgid "{name} · {count}"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:81
+msgid "{name} is offline."
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:99
+msgid "{name} is running."
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:61
+msgid "{percent}%"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:61
+msgid "{size} · {checksum}"
+msgstr ""
+
+#: src/lib/text/GameVersionsSettingsTextSet.ts:13
+msgid "{source} · {release} release, {preview} preview"
+msgstr ""
+
+#: src/lib/text/ReportTextSet.ts:31
+msgid "{status}, {ago}"
+msgstr ""
+
+#: src/lib/text/UrlCheckTextSet.ts:53
+msgid "{title} {version}"
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:42
+msgid "{value} · Open"
+msgstr ""
+
+#: src/lib/text/CheckTextSet.ts:28
+msgid "{version} · {package}"
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:14
+msgid "{version} · built {builtOn} · {platform}"
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:11
+msgid "{version} is out"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:70
+msgid "**{count} selected** · {names}"
+msgstr ""
+
+#: src/lib/text/AddModUrlTextSet.ts:20
+msgid "**{label}** · {id}"
+msgstr ""
+
+#: src/lib/text/InstancesTextSet.ts:12
+msgid "**{updates} available** in {instances}. Nothing is installed until you ask."
+msgstr ""
+
+#: src/lib/text/InstallProgressTextSet.ts:25
+msgid "**AMML is creating your new instance. Do not start Minecraft from the Store during this install.** This may take a minute or two to complete."
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:26
+msgid "**Not in any registry.** It installs as unofficial: no checksum, and the launcher never checks it for updates. Only add mods from people you trust."
+msgstr ""
+
+#: src/lib/text/AddModUrlTextSet.ts:18
+msgid "**This installs as unofficial.** Nobody has checked this file, and the launcher never looks for updates to it. Only install mods from people you trust."
+msgstr ""
+
+#: src/lib/text/InstallProgressTextSet.ts:26
+msgid "**Your Store version was put back.** It starts as before. No instance folder was made."
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:55
+msgid "+{count} more in {name}"
+msgstr ""
+
+#: src/lib/text/NewInstanceTextSet.ts:17
+msgid "~{size} download"
+msgstr ""
+
+#: src/lib/text/RegistriesSettingsTextSet.ts:22
+msgid "A registry is a list of mods and AMML versions, with a checksum for each download. The launcher reads them at start and when you press refresh. Mods from other registries show where they came from."
+msgstr ""
+
+#: src/lib/text/ShellTextSet.ts:42
+msgid "About"
+msgstr ""
+
+#: src/lib/text/NewInstanceTextSet.ts:36
+msgid "About {size} on disk."
+msgstr ""
+
+#: src/lib/text/InstallProgressTextSet.ts:22
+msgid "about {time} left"
+msgstr ""
+
+#: src/lib/text/InstanceDetailTextSet.ts:17
+msgid "Actions"
+msgstr ""
+
+#: src/lib/text/InstanceDetailTextSet.ts:27
+msgid "Actions for {title}"
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:28
+#: src/lib/text/DialogsTextSet.ts:37
+msgid "Add"
+msgstr ""
+
+#: src/lib/text/InstanceDetailTextSet.ts:10
+msgid "Add a mod"
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:24
+msgid "Add a mod to {name}"
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:33
+msgid "Add a registry"
+msgstr ""
+
+#: src/lib/text/RegistriesSettingsTextSet.ts:9
+msgid "Add a registry URL"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:11
+msgid "Add mods to **{name}**"
+msgstr ""
+
+#: src/lib/text/FirstRunAdoptTextSet.ts:8
+msgid "Adopt current data"
+msgstr ""
+
+#: src/lib/text/FirstRunChecksTextSet.ts:10
+msgid "Alaydriem's Modded Minecraft Loader (AMML) is a modded Minecraft loader for Minecraft Bedrock edition that provides a modded version switcher and a mod manager."
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:23
+msgid "Alaydriem/amml"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:41
+msgid "All registries"
+msgstr ""
+
+#: src/lib/text/NewInstanceTextSet.ts:15
+msgid "Already in the version store · local copy only"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:14
+#: src/lib/text/InstancesTextSet.ts:35
+msgid "AMML"
+msgstr ""
+
+#: src/lib/text/FirstRunAdoptTextSet.ts:14
+msgid "AMML {amml} · {mods}"
+msgstr ""
+
+#: src/lib/text/NewInstanceTextSet.ts:31
+msgid "AMML {version}"
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:9
+msgid "AMML **Launcher**"
+msgstr ""
+
+#: src/lib/text/FirstRunAdoptTextSet.ts:10
+msgid "AMML can adopt data from your current Minecraft Bedrock install, or for another install found on disk, or create a clean instance without any data"
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:10
+#: src/lib/text/ShellTextSet.ts:9
+msgid "AMML Launcher"
+msgstr ""
+
+#: src/lib/text/ModNoteTextSet.ts:17
+msgid "AMML loader"
+msgstr ""
+
+#: src/lib/stores/SetupStore.svelte.ts:49
+msgid "AMML will create a clean Minecraft Bedrock instance"
+msgstr ""
+
+#: src/lib/text/GameVersionsSettingsTextSet.ts:24
+msgid "An installed version is the clean copy every instance of it is made from. A version in use by an instance cannot be removed. Removing one never touches your Store install."
+msgstr ""
+
+#: src/lib/text/InstancesTextSet.ts:26
+msgid "An instance is one game version with AMML and its mods, in a folder of its own. Make as many as you like. Your Store install is never changed."
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:93
+msgid "Another task is running."
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:15
+msgid "api"
+msgstr ""
+
+#: src/lib/text/ModNoteTextSet.ts:22
+#: src/lib/text/UrlCheckTextSet.ts:30
+msgid "api {api}"
+msgstr ""
+
+#: src/lib/text/InstanceDetailTextSet.ts:15
+msgid "Available"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:10
+#: src/lib/text/FirstRunAdoptTextSet.ts:22
+msgid "Back"
+msgstr ""
+
+#: src/lib/text/SharedDataSettingsTextSet.ts:15
+msgid "Behavior packs"
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:31
+msgid "BSD 3-Clause"
+msgstr ""
+
+#: src/lib/text/GameVersionsSettingsTextSet.ts:8
+msgid "Builds"
+msgstr ""
+
+#: src/lib/text/RegistriesSettingsTextSet.ts:11
+msgid "Built in"
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:63
+msgid "cached"
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:29
+#: src/lib/text/DialogsTextSet.ts:38
+#: src/lib/text/DialogsTextSet.ts:60
+#: src/lib/text/NewInstanceTextSet.ts:26
+msgid "Cancel"
+msgstr ""
+
+#: src/lib/text/InstallProgressTextSet.ts:27
+msgid "Cancel install"
+msgstr ""
+
+#: src/lib/text/AddModUrlTextSet.ts:15
+msgid "Check"
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:66
+msgid "Check again"
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:31
+msgid "Check the Store install"
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:15
+msgid "Check the Store version"
+msgstr ""
+
+#: src/lib/text/ReportTextSet.ts:45
+msgid "checking"
+msgstr ""
+
+#: src/lib/text/RegistriesSettingsTextSet.ts:21
+msgid "Checking"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:62
+#: src/lib/text/UrlCheckTextSet.ts:44
+msgid "checksum"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:72
+msgid "Clear"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:97
+msgid "Clear search"
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:100
+msgid "Close the game first. The launcher ends only games it started."
+msgstr ""
+
+#: src/lib/text/CheckTextSet.ts:35
+msgid "Controllers and some mods need it"
+msgstr ""
+
+#: src/lib/stores/FaultActions.ts:54
+msgid "Copied"
+msgstr ""
+
+#: src/lib/text/SharedDataSettingsTextSet.ts:26
+msgid "Copy"
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:40
+msgid "Copy all"
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:42
+#: src/lib/text/FaultTextSet.ts:83
+msgid "Copy details"
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:49
+msgid "Copy failed at {copied} of {expected} files."
+msgstr ""
+
+#: src/lib/text/FirstRunAdoptTextSet.ts:12
+msgid "Copy into shared data"
+msgstr ""
+
+#: src/lib/text/SharedDataSettingsTextSet.ts:24
+msgid "Copy worlds in"
+msgstr ""
+
+#: src/lib/text/SharedDataSettingsTextSet.ts:33
+msgid "Copying never moves or deletes the source, and never overwrites a world already in the shared folder."
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:23
+msgid "Copying the game executable"
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:25
+msgid "Copying the game files"
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:48
+msgid "Copying the game files failed."
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:45
+msgid "Copying worlds"
+msgstr ""
+
+#: src/lib/text/InstanceDetailTextSet.ts:21
+msgid "Core"
+msgstr ""
+
+#: src/lib/text/InstanceDetailTextSet.ts:8
+msgid "Core · {core} · Mods · {mods}"
+msgstr ""
+
+#: src/lib/text/ModNoteTextSet.ts:18
+msgid "core, always on"
+msgstr ""
+
+#: src/lib/text/InstallProgressTextSet.ts:10
+msgid "Could not create **{name}**"
+msgstr ""
+
+#: src/lib/text/NewInstanceTextSet.ts:27
+msgid "Create"
+msgstr ""
+
+#: src/lib/text/NewInstanceTextSet.ts:9
+msgid "Create a new **instance**"
+msgstr ""
+
+#: src/lib/text/InstallProgressTextSet.ts:9
+msgid "Creating **{name}**"
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:35
+msgid "Creating the instance"
+msgstr ""
+
+#: src/lib/text/InstancesTextSet.ts:59
+#: src/lib/text/InstancesTextSet.ts:68
+msgid "Delete"
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:17
+msgid "Delete {name}?"
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:21
+msgid "Delete folder"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:65
+msgid "Details load when you select a mod. Older versions are on the source page."
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:46
+msgid "Developer Mode"
+msgstr ""
+
+#: src/lib/text/CheckTextSet.ts:20
+msgid "Disk space"
+msgstr ""
+
+#: src/lib/text/InstallProgressTextSet.ts:13
+msgid "Done"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:59
+msgid "Download"
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:19
+msgid "Download {version}"
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:37
+msgid "Download AMML"
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:34
+msgid "Download failed on both mirrors."
+msgstr ""
+
+#: src/lib/text/InstallProgressTextSet.ts:21
+msgid "Download progress"
+msgstr ""
+
+#: src/lib/text/DownloadsDetailTextSet.ts:14
+msgid "Downloaded · {ago}"
+msgstr ""
+
+#: src/lib/text/UrlCheckTextSet.ts:18
+msgid "Downloaded the zip"
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:17
+msgid "Downloading your installed version"
+msgstr ""
+
+#: src/lib/text/ShellTextSet.ts:38
+msgid "Downloads"
+msgstr ""
+
+#: src/lib/text/DownloadsSettingsTextSet.ts:9
+msgid "Downloads folder"
+msgstr ""
+
+#: src/lib/text/SharedDataSettingsTextSet.ts:10
+msgid "Every instance set to Shared reads and writes here."
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:44
+#: src/lib/text/ReportTextSet.ts:43
+#: src/lib/text/StepTextSet.ts:59
+msgid "failed"
+msgstr ""
+
+#: src/lib/text/InstallProgressTextSet.ts:16
+msgid "Failed"
+msgstr ""
+
+#: src/lib/text/RegistriesSettingsTextSet.ts:19
+msgid "Fetch failed"
+msgstr ""
+
+#: src/lib/text/DownloadsSettingsTextSet.ts:11
+msgid "Files · {count}"
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:41
+msgid "Finishing"
+msgstr ""
+
+#: src/lib/text/NewInstanceTextSet.ts:22
+msgid "Folder: {folder}"
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:39
+msgid "For a bug report"
+msgstr ""
+
+#: src/lib/text/CheckTextSet.ts:53
+msgid "Found"
+msgstr ""
+
+#: src/lib/text/ModNoteTextSet.ts:21
+msgid "from a URL"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:42
+msgid "From a URL"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:13
+#: src/lib/text/InstancesTextSet.ts:34
+msgid "Game"
+msgstr ""
+
+#: src/lib/text/InstancesTextSet.ts:72
+msgid "Game {game} · {data} · {folder}"
+msgstr ""
+
+#: src/lib/text/NewInstanceTextSet.ts:10
+msgid "Game version"
+msgstr ""
+
+#: src/lib/text/NewInstanceTextSet.ts:13
+#: src/lib/text/ShellTextSet.ts:30
+msgid "Game versions"
+msgstr ""
+
+#: src/lib/text/CheckTextSet.ts:16
+msgid "GameInput"
+msgstr ""
+
+#: src/lib/text/CheckTextSet.ts:14
+msgid "Gaming Services"
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:22
+msgid "Gaming Services is missing."
+msgstr ""
+
+#: src/lib/text/FirstRunChecksTextSet.ts:8
+msgid "Get started - AMML"
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:17
+msgid "GitHub"
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:27
+msgid "GitHub issues"
+msgstr ""
+
+#: src/lib/text/UrlCheckTextSet.ts:21
+msgid "Holds one mod, and its amml.hcl matches the folder"
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:35
+msgid "https://example.github.io/registry/"
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:12
+msgid "If you say no, the install stops and your Store version is put back."
+msgstr ""
+
+#: src/lib/text/InstallProgressTextSet.ts:14
+msgid "In progress"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:77
+#: src/lib/text/CheckTextSet.ts:61
+msgid "Install"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:74
+#: src/lib/text/AddModBrowseTextSet.ts:75
+msgid "Install {count} mod"
+msgid_plural "Install {count} mods"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/text/CheckTextSet.ts:27
+msgid "Install Minecraft Bedrock from the Microsoft Store"
+msgstr ""
+
+#: src/lib/text/InstallProgressTextSet.ts:11
+msgid "Install steps"
+msgstr ""
+
+#: src/lib/text/AddModUrlTextSet.ts:21
+#: src/lib/text/DialogsTextSet.ts:30
+msgid "Install unofficial"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:49
+#: src/lib/text/InstanceDetailTextSet.ts:14
+#: src/lib/text/NewInstanceTextSet.ts:16
+msgid "Installed"
+msgstr ""
+
+#: src/lib/text/GameVersionsSettingsTextSet.ts:15
+msgid "Installed versions · {size}"
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:52
+msgid "Installing {id}"
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:21
+msgid "Installing {version}"
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:39
+msgid "Installing AMML"
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:47
+msgid "Installing GameInput"
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:43
+msgid "Installing the mod"
+msgstr ""
+
+#: src/lib/text/NewInstanceTextSet.ts:30
+msgid "Installs **{amml}** and **{mods}**."
+msgstr ""
+
+#: src/lib/text/NewInstanceTextSet.ts:21
+msgid "Instance name"
+msgstr ""
+
+#: src/lib/text/InstallProgressTextSet.ts:8
+#: src/lib/text/InstancesTextSet.ts:23
+#: src/lib/text/InstancesTextSet.ts:67
+#: src/lib/text/NewInstanceTextSet.ts:8
+#: src/lib/text/ShellTextSet.ts:20
+msgid "Instances"
+msgstr ""
+
+#: src/lib/text/InstancesTextSet.ts:8
+msgid "Instances · {count}"
+msgstr ""
+
+#: src/lib/text/FirstRunAdoptTextSet.ts:11
+msgid "Instances found · adopted as they are"
+msgstr ""
+
+#: src/lib/text/NewInstanceTextSet.ts:29
+msgid "instances\\{name}"
+msgstr ""
+
+#: src/lib/stores/SettingsStore.svelte.ts:346
+msgid "just now"
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:20
+#: src/lib/text/DialogsTextSet.ts:48
+msgid "Keep it"
+msgstr ""
+
+#: src/lib/text/FirstRunAdoptTextSet.ts:9
+msgid "Keep your instances. **Share your worlds.**"
+msgstr ""
+
+#: src/lib/text/DownloadsSettingsTextSet.ts:14
+msgid "Kept"
+msgstr ""
+
+#: src/lib/text/ActivityTextSet.ts:16
+msgid "last played {ago}"
+msgstr ""
+
+#: src/lib/text/InstancesTextSet.ts:37
+#: src/lib/text/InstancesTextSet.ts:70
+msgid "Launch"
+msgstr ""
+
+#: src/lib/text/InstancesTextSet.ts:9
+msgid "Launch **AMML.**"
+msgstr ""
+
+#: src/lib/text/ShellTextSet.ts:16
+msgid "launcher {version} · data {dataPath}"
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:30
+msgid "Licence"
+msgstr ""
+
+#: src/lib/text/AddModUrlTextSet.ts:14
+msgid "Link to the release zip"
+msgstr ""
+
+#: src/lib/text/UrlCheckTextSet.ts:42
+msgid "Listed in one of your registries"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:66
+msgid "loading {document}"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:52
+msgid "loading {from}–{to}"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:53
+msgid "Loading more mods"
+msgstr ""
+
+#: src/lib/text/ModNoteTextSet.ts:20
+msgid "local"
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:48
+msgid "Logs"
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:16
+msgid "Made by {name}"
+msgstr ""
+
+#: src/lib/text/CheckTextSet.ts:12
+msgid "Minecraft from the Store"
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:14
+msgid "Minecraft is not installed from the Store."
+msgstr ""
+
+#: src/lib/text/CheckTextSet.ts:18
+msgid "Minecraft Preview"
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:28
+msgid "Minecraft Preview is not installed."
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:48
+#: src/lib/text/InstancesTextSet.ts:36
+msgid "Mods"
+msgstr ""
+
+#: src/lib/text/InstanceDetailTextSet.ts:19
+msgid "Mods in this instance"
+msgstr ""
+
+#: src/lib/text/InstancesTextSet.ts:47
+msgid "More actions"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:25
+#: src/lib/text/InstanceDetailTextSet.ts:13
+msgid "Name"
+msgstr ""
+
+#: src/lib/text/CheckTextSet.ts:33
+msgid "Needed to install game versions"
+msgstr ""
+
+#: src/lib/text/CheckTextSet.ts:54
+#: src/lib/text/FirstRunChecksTextSet.ts:14
+msgid "Needs attention"
+msgstr ""
+
+#: src/lib/text/GameVersionsSettingsTextSet.ts:10
+msgid "Needs Minecraft Preview from the Store. Few mods support them."
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:9
+msgid "Needs your OK"
+msgstr ""
+
+#: src/lib/stores/SettingsStore.svelte.ts:229
+msgid "never"
+msgstr ""
+
+#: src/lib/text/ActivityTextSet.ts:18
+msgid "never played"
+msgstr ""
+
+#: src/lib/text/InstancesTextSet.ts:10
+msgid "New instance"
+msgstr ""
+
+#: src/lib/text/FirstRunAdoptTextSet.ts:23
+#: src/lib/text/FirstRunChecksTextSet.ts:19
+msgid "Next"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:63
+#: src/lib/text/UrlCheckTextSet.ts:38
+msgid "no checksum"
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:53
+msgid "No instance folder was made. Your Store version was put back."
+msgstr ""
+
+#: src/lib/text/GameVersionsSettingsTextSet.ts:21
+msgid "No instances"
+msgstr ""
+
+#: src/lib/text/InstancesTextSet.ts:25
+msgid "No instances yet."
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:86
+msgid "No list"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:85
+msgid "No list · last tried {fetched}"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:89
+msgid "No mods in {name} match “{query}”."
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:90
+msgid "No mods match “{query}”."
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:51
+msgid "Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft. The game is installed from your own Store licence."
+msgstr ""
+
+#: src/lib/text/ReportTextSet.ts:27
+msgid "not checked yet"
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:58
+msgid "Not enough space on {drive}."
+msgstr ""
+
+#: src/lib/text/CheckTextSet.ts:55
+msgid "Not found"
+msgstr ""
+
+#: src/lib/text/UrlCheckTextSet.ts:36
+msgid "Not in any of your registries"
+msgstr ""
+
+#: src/lib/text/ReportTextSet.ts:18
+msgid "not installed"
+msgstr ""
+
+#: src/lib/text/CheckTextSet.ts:55
+msgid "Not installed"
+msgstr ""
+
+#: src/lib/text/NewInstanceTextSet.ts:18
+msgid "Not supported"
+msgstr ""
+
+#: src/lib/text/FirstRunAdoptTextSet.ts:21
+msgid "Nothing is moved or deleted. You can change this later in Settings."
+msgstr ""
+
+#: src/lib/text/ReportTextSet.ts:19
+msgid "Off"
+msgstr ""
+
+#: src/lib/text/ModNoteTextSet.ts:19
+msgid "official"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:43
+#: src/lib/text/ReportTextSet.ts:41
+msgid "offline"
+msgstr ""
+
+#: src/lib/text/RegistriesSettingsTextSet.ts:20
+msgid "Offline"
+msgstr ""
+
+#: src/lib/text/ReportTextSet.ts:37
+msgid "ok"
+msgstr ""
+
+#: src/lib/text/InstanceDetailTextSet.ts:12
+#: src/lib/text/ReportTextSet.ts:19
+msgid "On"
+msgstr ""
+
+#: src/lib/text/SharedDataSettingsTextSet.ts:16
+msgid "On disk"
+msgstr ""
+
+#: src/lib/text/CheckTextSet.ts:37
+msgid "Only for preview builds"
+msgstr ""
+
+#: src/lib/text/SharedDataSettingsTextSet.ts:11
+msgid "Open"
+msgstr ""
+
+#: src/lib/text/InstancesTextSet.ts:55
+#: src/lib/text/InstancesTextSet.ts:69
+msgid "Open folder"
+msgstr ""
+
+#: src/lib/text/CheckTextSet.ts:63
+#: src/lib/text/FaultTextSet.ts:18
+#: src/lib/text/FaultTextSet.ts:24
+#: src/lib/text/FaultTextSet.ts:30
+msgid "Open the Store"
+msgstr ""
+
+#: src/lib/text/FirstRunChecksTextSet.ts:15
+msgid "Optional"
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:27
+msgid "Or from the registry"
+msgstr ""
+
+#: src/lib/text/InstancesTextSet.ts:74
+msgid "own data folder"
+msgstr ""
+
+#: src/lib/text/InstancesTextSet.ts:46
+msgid "Own data folder"
+msgstr ""
+
+#: src/lib/text/NewInstanceTextSet.ts:25
+#: src/lib/text/SharedDataSettingsTextSet.ts:22
+msgid "Own folder"
+msgstr ""
+
+#: src/lib/text/FirstRunChecksTextSet.ts:13
+msgid "Passed"
+msgstr ""
+
+#: src/lib/text/AddModUrlTextSet.ts:13
+msgid "Paste a link to a mod's release zip. If the link is in a registry, it installs as that registry's mod."
+msgstr ""
+
+#: src/lib/text/NewInstanceTextSet.ts:12
+msgid "Preview"
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:29
+msgid "Preview builds install from the Preview app's licence."
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:19
+msgid "Project"
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:80
+msgid "Put it back with the command in the details, or reinstall Minecraft from the Store."
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:29
+msgid "Putting your Store version back"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:29
+msgid "Recently updated"
+msgstr ""
+
+#: src/lib/text/GameVersionsSettingsTextSet.ts:14
+msgid "Refresh"
+msgstr ""
+
+#: src/lib/text/ShellTextSet.ts:10
+msgid "Refresh registries"
+msgstr ""
+
+#: src/lib/text/RegistriesSettingsTextSet.ts:8
+#: src/lib/text/ShellTextSet.ts:26
+msgid "Registries"
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:47
+msgid "Registry"
+msgstr ""
+
+#: src/lib/text/ShellTextSet.ts:13
+msgid "Registry · {fetched}"
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:34
+msgid "Registry address"
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:25
+msgid "Registry id or zip URL"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:84
+msgid "Registry settings"
+msgstr ""
+
+#: src/lib/text/NewInstanceTextSet.ts:11
+msgid "Release"
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:49
+#: src/lib/text/DialogsTextSet.ts:61
+#: src/lib/text/DownloadsSettingsTextSet.ts:15
+#: src/lib/text/GameVersionsSettingsTextSet.ts:22
+#: src/lib/text/InstanceDetailTextSet.ts:37
+#: src/lib/text/RegistriesSettingsTextSet.ts:12
+msgid "Remove"
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:46
+msgid "Remove {title}?"
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:56
+msgid "Remove {version}?"
+msgstr ""
+
+#: src/lib/text/DownloadsSettingsTextSet.ts:12
+msgid "Remove unfinished"
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:27
+msgid "Removing {version} from the Store install"
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:26
+msgid "Report a problem"
+msgstr ""
+
+#: src/lib/stores/SettingsStore.svelte.ts:328
+msgid "Report copied"
+msgstr ""
+
+#: src/lib/text/SharedDataSettingsTextSet.ts:14
+msgid "Resource packs"
+msgstr ""
+
+#: src/lib/text/InstancesTextSet.ts:21
+msgid "Review"
+msgstr ""
+
+#: src/lib/text/InstancesTextSet.ts:38
+#: src/lib/text/InstancesTextSet.ts:71
+msgid "Running"
+msgstr ""
+
+#: src/lib/text/ActivityTextSet.ts:13
+msgid "running since {time}"
+msgstr ""
+
+#: src/lib/text/ReportTextSet.ts:39
+msgid "saved copy"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:37
+msgid "Search {name}"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:38
+msgid "Search all registries"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:96
+msgid "Search every registry"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:95
+msgid "Search looks at names, ids and tags, not descriptions."
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:92
+#: src/lib/text/AddModBrowseTextSet.ts:93
+msgid "Search looks at names, ids and tags, not descriptions. {count} mod in your other registries matches."
+msgid_plural "Search looks at names, ids and tags, not descriptions. {count} mods in your other registries match."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:20
+msgid "Search mods"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:51
+msgid "Select {title}"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:67
+msgid "Select a mod to see what it does, who made it and how big the download is."
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:49
+msgid "Setting up your data"
+msgstr ""
+
+#: src/lib/text/ShellTextSet.ts:11
+msgid "Settings"
+msgstr ""
+
+#: src/lib/text/ShellTextSet.ts:21
+msgid "Settings sections"
+msgstr ""
+
+#: src/lib/text/ShellTextSet.ts:12
+msgid "Setup · {current} of {total}"
+msgstr ""
+
+#: src/lib/text/NewInstanceTextSet.ts:24
+#: src/lib/text/SharedDataSettingsTextSet.ts:21
+msgid "Shared"
+msgstr ""
+
+#: src/lib/text/InstancesTextSet.ts:73
+msgid "shared data"
+msgstr ""
+
+#: src/lib/text/InstancesTextSet.ts:45
+#: src/lib/text/ShellTextSet.ts:34
+msgid "Shared data"
+msgstr ""
+
+#: src/lib/text/SharedDataSettingsTextSet.ts:9
+msgid "Shared folder"
+msgstr ""
+
+#: src/lib/text/InstanceDetailTextSet.ts:33
+msgid "Show in folder"
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:75
+#: src/lib/text/FaultTextSet.ts:89
+#: src/lib/text/InstallProgressTextSet.ts:29
+msgid "Show log"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:45
+msgid "Show mods that need another AMML"
+msgstr ""
+
+#: src/lib/text/GameVersionsSettingsTextSet.ts:11
+#: src/lib/text/GameVersionsSettingsTextSet.ts:9
+msgid "Show preview builds"
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:95
+msgid "Show progress"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:33
+msgid "Size"
+msgstr ""
+
+#: src/lib/text/FirstRunChecksTextSet.ts:18
+msgid "Skip"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:21
+msgid "Sort by"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:40
+#: src/lib/text/AddModBrowseTextSet.ts:60
+msgid "Source"
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:22
+msgid "Source code"
+msgstr ""
+
+#: src/lib/stores/SetupStore.svelte.ts:48
+msgid "Start from scratch"
+msgstr ""
+
+#: src/lib/text/InstanceDetailTextSet.ts:16
+msgid "Status"
+msgstr ""
+
+#: src/lib/text/InstallProgressTextSet.ts:18
+msgid "Step {current} of {total}"
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:13
+msgid "Stop install"
+msgstr ""
+
+#: src/lib/text/InstallProgressTextSet.ts:19
+msgid "Stopped at step {current} of {total}"
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:45
+msgid "Store Bedrock"
+msgstr ""
+
+#: src/lib/text/ShellTextSet.ts:17
+msgid "Store Bedrock {version} registered"
+msgstr ""
+
+#: src/lib/stores/SettingsStore.svelte.ts:275
+#: src/lib/stores/SetupStore.svelte.ts:45
+msgid "Store Minecraft"
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:35
+msgid "Tauri, Svelte, fonts"
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:87
+msgid "That did not work."
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:88
+msgid "The details are below."
+msgstr ""
+
+#: src/lib/text/FirstRunChecksTextSet.ts:17
+msgid "The install button may ask for admin permissions to apply and install AMML"
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:70
+msgid "The last install was cut off."
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:82
+msgid "The launcher could not reach **{url}** and has no saved copy of it. Mods from your other registries still install."
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:71
+msgid "The launcher finished putting your Store version {version} back. It starts as before."
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:15
+msgid "The launcher needs your Store copy to install versions. Install it from the Microsoft Store or the Xbox app, then check again."
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:57
+msgid "The launcher removes **versions\\{version}**. Instances made from it keep working. A new instance of this version downloads it again."
+msgstr ""
+
+#: src/lib/text/UrlCheckTextSet.ts:14
+msgid "The link uses https"
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:34
+msgid "Third-party notices"
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:47
+msgid "This deletes **{id}** and its settings from this instance."
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:18
+msgid "This deletes the folder below, with its AMML, mods and mod settings."
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:59
+msgid "This install needs {needed} at once for the download, the copy and the instance. {free} is free."
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:19
+msgid "This instance keeps its own worlds in that folder. They are deleted too."
+msgstr ""
+
+#: src/lib/text/FirstRunChecksTextSet.ts:11
+msgid "This PC"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:78
+msgid "Tick mods to install several at once."
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:83
+#: src/lib/text/FaultTextSet.ts:101
+#: src/lib/text/FaultTextSet.ts:36
+#: src/lib/text/FaultTextSet.ts:54
+#: src/lib/text/InstallProgressTextSet.ts:28
+msgid "Try again"
+msgstr ""
+
+#: src/lib/text/InstanceDetailTextSet.ts:26
+msgid "Turn {title} on or off"
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:14
+msgid "Turn it on"
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:10
+msgid "Turn on Developer Mode?"
+msgstr ""
+
+#: src/lib/text/DownloadsDetailTextSet.ts:12
+msgid "Unfinished · resumes on the next install"
+msgstr ""
+
+#: src/lib/text/ReportTextSet.ts:15
+msgid "unknown"
+msgstr ""
+
+#: src/lib/text/FirstRunAdoptTextSet.ts:15
+msgid "unknown version"
+msgstr ""
+
+#: src/lib/text/InstanceDetailTextSet.ts:24
+msgid "Unofficial"
+msgstr ""
+
+#: src/lib/text/InstanceDetailTextSet.ts:22
+#: src/lib/text/InstancesTextSet.ts:39
+msgid "Up to date"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:50
+#: src/lib/text/InstanceDetailTextSet.ts:23
+msgid "Update"
+msgstr ""
+
+#: src/lib/text/InstanceDetailTextSet.ts:9
+msgid "Update all ({count})"
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:12
+msgid "Update and restart"
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:36
+msgid "Use an https:// address."
+msgstr ""
+
+#: src/lib/text/NameProblemTextSet.ts:9
+msgid "Use another name. A name cannot start with a dot, hold \\ / : * ? \" < > |, or be a Windows device name such as CON."
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:58
+msgid "Version for api {api}"
+msgstr ""
+
+#: src/lib/text/GameVersionsSettingsTextSet.ts:12
+msgid "Version list"
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:94
+msgid "Wait for it to end, then try again."
+msgstr ""
+
+#: src/lib/text/InstallProgressTextSet.ts:15
+msgid "Waiting"
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:33
+msgid "Waiting for another task to end"
+msgstr ""
+
+#: src/lib/text/FirstRunChecksTextSet.ts:9
+msgid "Welcome to AMML!"
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:112
+msgid "What came down is kept and the download continues from there."
+msgstr ""
+
+#: src/lib/text/AddModUrlTextSet.ts:16
+msgid "What the launcher checked"
+msgstr ""
+
+#: src/lib/text/SharedDataSettingsTextSet.ts:19
+msgid "Where each instance keeps its worlds"
+msgstr ""
+
+#: src/lib/text/AboutSettingsTextSet.ts:44
+msgid "Windows"
+msgstr ""
+
+#: src/lib/text/ReportTextSet.ts:16
+msgid "Windows {version}"
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:23
+msgid "Windows needs it to install game versions. It is free in the Microsoft Store."
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:40
+msgid "Windows refused to install {version}."
+msgstr ""
+
+#: src/lib/text/DialogsTextSet.ts:11
+msgid "Windows would not let the launcher copy **{file}** for {version}. With Developer Mode on, it can. Windows asks for admin rights once."
+msgstr ""
+
+#: src/lib/stores/SettingsStore.svelte.ts:313
+msgid "Windows x64"
+msgstr ""
+
+#: src/lib/text/UrlCheckTextSet.ts:28
+msgid "Works with this instance's AMML"
+msgstr ""
+
+#: src/lib/text/SharedDataSettingsTextSet.ts:13
+msgid "Worlds"
+msgstr ""
+
+#: src/lib/text/NewInstanceTextSet.ts:23
+msgid "Worlds and packs"
+msgstr ""
+
+#: src/lib/text/DownloadsDetailTextSet.ts:10
+msgid "Your Store version · kept for the restore step"
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:79
+msgid "Your Store version was not put back."
+msgstr ""
+
+#: src/lib/text/FaultTextSet.ts:41
+msgid "Your Store version was put back and starts as before."
+msgstr ""
+
+#: src/lib/text/UnitsTextSet.ts:16
+msgctxt "number format"
+msgid "en-US"
+msgstr ""
+
+#: src/lib/text/InstallProgressTextSet.ts:23
+msgctxt "separator"
+msgid " · "
+msgstr ""
+
+#: src/lib/text/InstanceDetailTextSet.ts:25
+msgctxt "separator"
+msgid "—"
+msgstr ""
+
+#: src/lib/text/AddModBrowseTextSet.ts:71
+msgctxt "separator"
+msgid ", "
+msgstr ""
+
+#: src/lib/text/ShellTextSet.ts:46
+msgctxt "separator"
+msgid "·"
+msgstr ""

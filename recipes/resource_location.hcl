@@ -20,3 +20,26 @@ entry "ResourceLocation.ctor" {
 
   check "function_start" {}
 }
+
+entry "ResourceLocation.size" {
+  kind     = "field"
+  notes    = "sizeof(ResourceLocation): 38h on 26.60 (+0 mFileSystem, +8 mPath std::string, +28h mPathHash, +30h mFullHash). It is the size of the buffer the one-argument constructor builds into, and the size check of the ResourceLocation mirror of a mod. One recipe: the end of ResourceLocation.ctor (0x3946b0 on 26.60), which stores the path hash, then folds the file system into the full hash and stores it (`mov [rsi+..],rcx; movzx eax,byte ptr [rsi]; xor rax,r14; imul rax,rbx; xor rax,rcx; mov [rsi+..],rax`), read as the displacement of the last store (mFullHash, the last member, 8 bytes), then `add 8`. The pattern is scanned in the constructor only. Every displacement, immediate and branch byte is a wildcard. The range check keeps the value plausible. The recipe was written on 26.60 only; 26.51 was not checked."
+
+  recipe {
+    step "ref" { entry = "ResourceLocation.ctor" }
+    step "pattern" {
+      bytes  = "48 89 4E ?? 0F B6 06 4C 31 F0 48 0F AF C3 48 31 C8 48 89 46 ??"
+      offset = 17
+    }
+    step "operand" {
+      index = 0
+      kind  = "displacement"
+    }
+    step "add" { value = 8 }
+  }
+
+  check "range" {
+    min = 32
+    max = 128
+  }
+}

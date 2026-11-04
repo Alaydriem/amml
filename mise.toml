@@ -24,11 +24,6 @@ run = [
   "cargo test --doc -p amml-i18n -p amml-ui -p amml-studio-ui -p amml-game",
 ]
 
-[tasks.heavy]
-description = "Waits in the foreground for the AMML heavy lock, runs the command, always releases the lock: mise run heavy -- <owner> <command...>; exits 75 when the lock stays held for 30 minutes"
-dir = "{{config_root}}"
-run = "bash scripts/heavy.sh"
-
 [tasks.derive]
 description = "Derives the address data of one game build: --exe, --recipes, --out, --report, optional --compare and --jobs <dir>"
 dir = "{{config_root}}"
@@ -1329,3 +1324,108 @@ done
 echo "$results"
 exit $failed
 '''
+
+[tasks."launcher-kit:install"]
+description = "Installs the launcher UI kit's node packages (launcher/kit) with yarn"
+dir = "{{config_root}}/launcher/kit"
+run = "yarn install --non-interactive --frozen-lockfile"
+
+[tasks."launcher-kit:check"]
+description = "Type-checks every launcher kit component, screen and gallery page with svelte-check; warnings fail"
+dir = "{{config_root}}/launcher/kit"
+run = "yarn run typecheck"
+
+[tasks."launcher-kit:test"]
+description = "Runs the launcher kit's behaviour tests with Vitest"
+dir = "{{config_root}}/launcher/kit"
+run = "yarn test"
+
+[tasks."launcher-kit:dev"]
+description = "Serves the launcher kit gallery (every screen and component sheet) on port 1440"
+dir = "{{config_root}}/launcher/kit"
+run = "yarn dev"
+
+[tasks."launcher-kit:build"]
+description = "Builds the launcher kit gallery into launcher/kit/dist, which proves every component compiles"
+dir = "{{config_root}}/launcher/kit"
+run = "yarn build"
+
+[tasks."launcher-app:install"]
+description = "Installs the launcher app's node packages (launcher/app) with yarn"
+dir = "{{config_root}}/launcher/app"
+run = "yarn install --non-interactive --frozen-lockfile"
+
+[tasks."launcher-app:check"]
+description = "Type-checks the launcher app (routes, stores, presenters, tests) with svelte-check; warnings fail"
+dir = "{{config_root}}/launcher/app"
+run = "yarn svelte-kit sync && yarn svelte-check --tsconfig ./tsconfig.json --fail-on-warnings"
+
+[tasks."launcher-app:test"]
+description = "Runs the launcher app's behaviour tests with Vitest"
+dir = "{{config_root}}/launcher/app"
+run = "yarn vitest run"
+
+[tasks."launcher-app:dev"]
+description = "Runs the launcher app in a window with hot reload (tauri dev); the window needs a person to look at it"
+dir = "{{config_root}}/launcher/app"
+run = "yarn tauri dev"
+
+[tasks."launcher-app:build"]
+description = "Builds the launcher app without an installer: target/release/amml-launcher-app.exe (tauri build --no-bundle)"
+dir = "{{config_root}}/launcher/app"
+run = "yarn tauri build --no-bundle"
+
+[tasks."launcher-app:i18n-extract"]
+description = "Writes launcher/app/i18n/amml-launcher.pot from every I18n call in launcher/app/src"
+dir = "{{config_root}}/launcher/app"
+run = "node --disable-warning=ExperimentalWarning scripts/i18n/extract.mjs"
+
+[tasks."launcher-app:i18n-check"]
+description = "Fails when launcher/app/i18n/amml-launcher.pot is out of date"
+dir = "{{config_root}}/launcher/app"
+run = "node --disable-warning=ExperimentalWarning scripts/i18n/extract.mjs --check"
+
+[tasks."launcher-app:i18n-build"]
+description = "Compiles the shipped .po files and writes the en_XA pseudo pack into launcher/app/src-tauri/resources/i18n"
+dir = "{{config_root}}/launcher/app"
+run = [
+  "cargo run -q -p amml-i18n-tool -- build i18n src-tauri/resources/i18n",
+  "cargo run -q -p amml-i18n-tool -- pseudo i18n/amml-launcher.pot src-tauri/resources/i18n/en_XA.json",
+]
+
+[tasks.package-release]
+description = "Builds release amml.dll and amml-patch and writes amml-<version>-windows-x64.zip, SHA256SUMS.txt and release-meta.env in the repo root: mise run package-release -- --version <v> --game-versions <comma list>"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--version <version>" help="Release version, Cargo semver (26.60.5)"
+flag "--game-versions <game_versions>" help="Tested game versions, comma separated (1.26.60.5)"
+'''
+run = 'bash scripts/package-release.sh "${usage_version:-}" "${usage_game_versions:-}"'
+
+[tasks.build-folder-trace]
+description = "Builds the release loader with the folder-trace feature (it logs every folder request the game makes) and copies it to target/operator/amml-folder-trace.dll; never ships"
+dir = "{{config_root}}"
+shell = "bash -c"
+run = '''
+set -e
+cargo build --release -p amml-loader --features folder-trace
+mkdir -p target/operator
+cp target/release/amml.dll target/operator/amml-folder-trace.dll
+echo "built target/operator/amml-folder-trace.dll"
+'''
+
+[tasks.build-registry]
+description = "Builds the amml-registry CLI (release): the registry publish workflow and the mod release lint run target/release/amml-registry"
+dir = "{{config_root}}"
+run = "cargo build --release -p amml-registry"
+
+[tasks.gdk]
+description = "The Store-route installer CLI: gdk list [--preview], install <version> [--preview], instance <version> <name>, seed <instance dir>, recover, status"
+dir = "{{config_root}}"
+run = "cargo run --release -p amml-gdk --"
+
+[tasks.launcher]
+description = "The launcher core CLI: registry, instance, amml, mod, updates, data, launch and settings commands (amml-launcher --help)"
+dir = "{{config_root}}"
+run = "cargo run --release -p amml-launcher-core --bin amml-launcher --"

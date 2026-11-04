@@ -418,7 +418,35 @@ msgid "ProRes 422"
 msgstr ""
 
 #. A video format name; keep the codec name
+msgid "ProRes 422 HQ"
+msgstr ""
+
+#. A video format name; keep the codec name
 msgid "PNG seq."
+msgstr ""
+
+#. A row label in the export dialog, written in capitals
+msgid "PROFILE"
+msgstr ""
+
+#. A ProRes 422 profile in the export dialog: Standard, or HQ (higher quality, bigger files)
+msgid "Standard"
+msgstr ""
+
+#. A ProRes 422 profile in the export dialog: Standard, or HQ (higher quality, bigger files)
+msgid "HQ"
+msgstr ""
+
+#. An H.265 profile in the export dialog: Main (8 bit), or Main 10 (10 bit, smoother gradients)
+msgid "Main"
+msgstr ""
+
+#. An H.265 profile in the export dialog: Main (8 bit), or Main 10 (10 bit, smoother gradients)
+msgid "Main 10"
+msgstr ""
+
+#. A video format name; keep the codec name
+msgid "H.265 Main 10"
 msgstr ""
 
 msgid "1080p"

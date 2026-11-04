@@ -72,3 +72,35 @@ entry "TextureGroup.unloadTexture" {
 
   check "function_start" {}
 }
+
+entry "TextureGroup.textureGroupBase" {
+  kind     = "field"
+  notes    = "The offset of the TextureGroupBase subobject in mce::TextureGroup: 18h on 26.60. TextureGroup.getTexture is the TextureGroupBase override and is called on TextureGroup+18h; TextureGroup.uploadTexture and TextureGroup.unloadTexture take the TextureGroup itself. Recipe 0 is the getTexture call in HudLocatorBarRenderer.render (the anchor of TextureGroup.getTexture recipe 0: `add r14,imm8; mov byte ptr [rsp+..],imm; mov qword ptr [rsp+..],imm; mov rcx,r14; lea rdx,[rbp+..]; mov r8,r12; xor r9d,r9d; call`), read as the immediate of the add. Recipe 1 is the getTexture call in the image upload helper (0x64db900 on 26.60; the anchor of TextureGroup.getTexture recipe 1: `mov rcx,[rdi+..]; add rcx,imm8; mov byte ptr [rsp+..],imm; ...; call`), read the same way. They are in two functions. Every displacement, immediate and branch byte is a wildcard. The range check keeps the value plausible. The recipes were written on 26.60 only; 26.51 was not checked."
+
+  recipe {
+    step "pattern" {
+      bytes  = "49 83 C6 ?? C6 44 24 ?? ?? 48 C7 44 24 ?? ?? ?? ?? ?? 4C 89 F1 48 8D 95 ?? ?? ?? ?? 4D 89 E0 45 31 C9 E8"
+      offset = 0
+    }
+    step "operand" {
+      index = 1
+      kind  = "immediate"
+    }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "48 8B 4F ?? 48 83 C1 ?? C6 44 24 ?? ?? 48 C7 44 24 ?? ?? ?? ?? ?? 48 8D 55 ?? 49 89 D8 45 31 C9 E8"
+      offset = 4
+    }
+    step "operand" {
+      index = 1
+      kind  = "immediate"
+    }
+  }
+
+  check "range" {
+    min = 8
+    max = 64
+  }
+}

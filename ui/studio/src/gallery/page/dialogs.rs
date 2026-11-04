@@ -3,8 +3,9 @@ use egui::{Id, Ui, vec2};
 use super::{BarRows, TimelineSamples, ViewerSamples};
 use crate::component::dialog::{
     ConfirmDialog, ConfirmDialogView, CoverageFilter, CoverageGroup, CoveragePanel, CoveragePanelView, CoverageRow,
-    ExportDialog, ExportDialogView, ExportFormat, ExportFrameRate, ExportResolution, JobStatus, RenameDialog,
-    RenderJobRow, RenderProgressCard, RenderProgressView, RenderQueue, RenderQueueView,
+    ExportDialog, ExportDialogView, ExportFormat, ExportFrameRate, ExportH265Profile, ExportProResProfile,
+    ExportResolution, JobStatus, RenameDialog, RenderJobRow, RenderProgressCard, RenderProgressView, RenderQueue,
+    RenderQueueView,
 };
 use crate::gallery::GalleryState;
 use crate::id::StudioUiId;
@@ -50,6 +51,8 @@ impl DialogsPage {
             frame_rate: ExportFrameRate::Sixty,
             quality: 0.75,
             quality_label: Self::words("High"),
+            pro_res_profile: None,
+            h265_profile: None,
             sidecar: true,
             folder: Self::words("C:\\Users\\…\\Videos\\DejaVu\\"),
             file: Self::words("nether-trip_arrival_4k60.mp4"),
@@ -59,6 +62,54 @@ impl DialogsPage {
         };
         BarRows::page(ui, |ui| {
             Self::sheet(ui, "EXPORT SCENE", |ui| {
+                ui.vertical(|ui| ExportDialog::new(&view).show_card(ui));
+            });
+        });
+    }
+
+    pub fn export_pro_res(ui: &mut Ui, _state: &mut GalleryState) {
+        let view = ExportDialogView {
+            subtitle: Self::words("Arrival · 00:00:28.80 → 00:00:37.40 · output 6.2 s"),
+            format: ExportFormat::ProRes422,
+            resolution: ExportResolution::Uhd,
+            frame_rate: ExportFrameRate::Sixty,
+            quality: 0.75,
+            quality_label: Self::words("High"),
+            pro_res_profile: Some(ExportProResProfile::Hq),
+            h265_profile: None,
+            sidecar: true,
+            folder: Self::words("C:\\Users\\…\\Videos\\DejaVu\\"),
+            file: Self::words("nether-trip_arrival_4k60.mov"),
+            note: Self::words("Not rendered yet. Video only: audio is not exported."),
+            unavailable: Vec::new(),
+            render_blocked: None,
+        };
+        BarRows::page(ui, |ui| {
+            Self::sheet(ui, "EXPORT SCENE, PRORES 422", |ui| {
+                ui.vertical(|ui| ExportDialog::new(&view).show_card(ui));
+            });
+        });
+    }
+
+    pub fn export_h265_profile(ui: &mut Ui, _state: &mut GalleryState) {
+        let view = ExportDialogView {
+            subtitle: Self::words("Arrival · 00:00:28.80 → 00:00:37.40 · output 6.2 s"),
+            format: ExportFormat::H265,
+            resolution: ExportResolution::Uhd,
+            frame_rate: ExportFrameRate::Sixty,
+            quality: 0.75,
+            quality_label: Self::words("High"),
+            pro_res_profile: None,
+            h265_profile: Some(ExportH265Profile::Main10),
+            sidecar: true,
+            folder: Self::words("C:\\Users\\…\\Videos\\DejaVu\\"),
+            file: Self::words("nether-trip_arrival_4k60.mp4"),
+            note: Self::words("Not rendered yet. Video only: audio is not exported."),
+            unavailable: Vec::new(),
+            render_blocked: None,
+        };
+        BarRows::page(ui, |ui| {
+            Self::sheet(ui, "EXPORT SCENE, H.265 MAIN 10", |ui| {
                 ui.vertical(|ui| ExportDialog::new(&view).show_card(ui));
             });
         });

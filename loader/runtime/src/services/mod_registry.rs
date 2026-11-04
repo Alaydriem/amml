@@ -106,13 +106,24 @@ impl ModRegistry {
     }
 
     fn spec(dir: &Path, body: &Body) -> Result<ModSpec, String> {
-        if body.blocks().next().is_some() {
-            return Err("the manifest takes attributes only, not blocks".to_string());
+        let mut listing_seen = false;
+        for block in body.blocks() {
+            if block.identifier() != "listing" {
+                return Err(format!("unknown block `{}`", block.identifier()));
+            }
+            if !block.labels().is_empty() {
+                return Err("`listing` takes no labels".to_string());
+            }
+            if listing_seen {
+                return Err("only one `listing` block is allowed".to_string());
+            }
+            listing_seen = true;
         }
         let mut namespace = None;
         let mut name = None;
         let mut entry = None;
         let mut api_version = None;
+        let mut version = None;
         let mut entries = Vec::new();
         for attribute in body.attributes() {
             let key = attribute.key();
@@ -120,6 +131,7 @@ impl ModRegistry {
                 ("namespace", Expression::String(text)) => namespace = Some(text.clone()),
                 ("name", Expression::String(text)) => name = Some(text.clone()),
                 ("entry", Expression::String(text)) => entry = Some(text.clone()),
+                ("version", Expression::String(text)) => version = Some(text.clone()),
                 ("api_version", Expression::Number(number)) => {
                     let version = number.as_u64().and_then(|value| u32::try_from(value).ok());
                     api_version = Some(version.ok_or("`api_version` must be a whole number")?);
@@ -135,7 +147,7 @@ impl ModRegistry {
                         entries.push(EntryId(id.clone()));
                     }
                 }
-                ("namespace" | "name" | "entry" | "api_version" | "entries", _) => {
+                ("namespace" | "name" | "entry" | "api_version" | "entries" | "version", _) => {
                     return Err(format!("`{key}` has the wrong type"));
                 }
                 _ => return Err(format!("unknown attribute `{key}`")),
@@ -173,7 +185,7 @@ impl ModRegistry {
         }
         entries.sort();
         entries.dedup();
-        Ok(ModSpec { namespace, name, dir: dir.to_path_buf(), entry, api_version, entries })
+        Ok(ModSpec { namespace, name, dir: dir.to_path_buf(), entry, api_version, version, entries })
     }
 
     /// The `(namespace, name)` of a `@<namespace>/<name>` folder, without the `@`.

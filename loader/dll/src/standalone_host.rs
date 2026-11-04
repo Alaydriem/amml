@@ -1,7 +1,9 @@
 use amml_data::EntryId;
 use amml_runtime::{CacheSource, DeriveSource, EntryTable, HostResolver};
 
-use crate::{HeapCheck, HostError, HostInputs, HostPaths, HostProcess, HostStartup, LoaderLog};
+use crate::{
+    FolderRedirect, HeapCheck, HostError, HostInputs, HostPaths, HostProcess, HostStartup, InstanceSettings, LoaderLog,
+};
 
 /// The host where AMML starts itself, with no LeviLamina: the exe entry-point detour runs `run`
 /// once, before the game's own start-up code.
@@ -28,11 +30,50 @@ impl StandaloneHost {
             exe: paths.exe.display().to_string(),
             module_base: format!("{module_base:#x}")
         });
+        // The redirect has no `Drop`: it stays in place for the life of the process.
+        let _redirect = Self::install_redirect(&paths);
         match Self::start(&paths, module_base) {
             Ok(()) => HostStartup::enable(),
             Err(error) => {
                 curia::error!("the loader did not start", { error: error.to_string() });
                 false
+            }
+        }
+    }
+
+    /// Reads `amml/instance.hcl` and, when it sets `data_dir`, makes the game see that folder as its
+    /// roaming data folder. No file, a file without `data_dir`, or any error gives `None` and the
+    /// game keeps `%APPDATA%`; an error is logged and never stops the host.
+    pub fn install_redirect(paths: &HostPaths) -> Option<FolderRedirect> {
+        let (settings, unknown) = match InstanceSettings::load_with_unknown(&paths.instance, &paths.game) {
+            Ok(loaded) => loaded,
+            Err(error) => {
+                curia::error!("instance file not accepted, the game keeps its data folder", {
+                    error: error.to_string()
+                });
+                return None;
+            }
+        };
+        for key in unknown {
+            curia::warn!("unknown key in instance.hcl", { key: key });
+        }
+        let data_dir = settings.data_dir?;
+        // SAFETY: the base is the running exe's own module, which stays mapped for the life of the process.
+        let installed = unsafe { FolderRedirect::install(HostProcess::module_base() as usize, &data_dir) };
+        match installed {
+            Ok(redirect) => {
+                curia::info!("data folder redirected", {
+                    data_dir: data_dir.display().to_string(),
+                    imports: redirect.slots().len()
+                });
+                Some(redirect)
+            }
+            Err(error) => {
+                curia::error!("data folder redirect failed, the game keeps its data folder", {
+                    data_dir: data_dir.display().to_string(),
+                    error: error.to_string()
+                });
+                None
             }
         }
     }

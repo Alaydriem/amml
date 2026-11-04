@@ -127,6 +127,16 @@ fn snapshot_export_dialog() {
 }
 
 #[test]
+fn snapshot_export_dialog_pro_res() {
+    PageSnapshot::check(GalleryPage::ExportDialogProRes);
+}
+
+#[test]
+fn snapshot_export_dialog_h265_profile() {
+    PageSnapshot::check(GalleryPage::ExportDialogH265Profile);
+}
+
+#[test]
 fn snapshot_render_queue() {
     PageSnapshot::check(GalleryPage::RenderQueue);
 }

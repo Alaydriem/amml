@@ -132,7 +132,14 @@ pub enum StudioUiMessage {
     FormatH264,
     FormatH265,
     FormatProRes,
+    FormatProResHq,
     FormatPng,
+    ProfileLabel,
+    ProResStandard,
+    ProResHq,
+    H265Main,
+    H265Main10,
+    FormatH265Main10,
     Resolution1080,
     Resolution1440,
     Resolution4K,
@@ -272,7 +279,14 @@ impl Message for StudioUiMessage {
         Self::FormatH264,
         Self::FormatH265,
         Self::FormatProRes,
+        Self::FormatProResHq,
         Self::FormatPng,
+        Self::ProfileLabel,
+        Self::ProResStandard,
+        Self::ProResHq,
+        Self::H265Main,
+        Self::H265Main10,
+        Self::FormatH265Main10,
         Self::Resolution1080,
         Self::Resolution1440,
         Self::Resolution4K,
@@ -413,7 +427,14 @@ impl Message for StudioUiMessage {
             Self::FormatH264 => "H.264",
             Self::FormatH265 => "H.265",
             Self::FormatProRes => "ProRes 422",
+            Self::FormatProResHq => "ProRes 422 HQ",
             Self::FormatPng => "PNG seq.",
+            Self::ProfileLabel => "PROFILE",
+            Self::ProResStandard => "Standard",
+            Self::ProResHq => "HQ",
+            Self::H265Main => "Main",
+            Self::H265Main10 => "Main 10",
+            Self::FormatH265Main10 => "H.265 Main 10",
             Self::Resolution1080 => "1080p",
             Self::Resolution1440 => "1440p",
             Self::Resolution4K => "4K",
@@ -468,10 +489,20 @@ impl Message for StudioUiMessage {
             | Self::ResolutionLabel
             | Self::FrameRateLabel
             | Self::QualityLabel
+            | Self::ProfileLabel
             | Self::SidecarLabel
             | Self::OutputLabel => Some("A row label in the export dialog, written in capitals"),
-            Self::FormatH264 | Self::FormatH265 | Self::FormatProRes | Self::FormatPng => {
-                Some("A video format name; keep the codec name")
+            Self::FormatH264
+            | Self::FormatH265
+            | Self::FormatProRes
+            | Self::FormatProResHq
+            | Self::FormatH265Main10
+            | Self::FormatPng => Some("A video format name; keep the codec name"),
+            Self::H265Main | Self::H265Main10 => {
+                Some("An H.265 profile in the export dialog: Main (8 bit), or Main 10 (10 bit, smoother gradients)")
+            }
+            Self::ProResStandard | Self::ProResHq => {
+                Some("A ProRes 422 profile in the export dialog: Standard, or HQ (higher quality, bigger files)")
             }
             Self::RailRecording | Self::RailPaused => {
                 Some("The capture timer's tag, written in capitals: recording, or paused")

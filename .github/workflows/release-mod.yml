@@ -6,7 +6,7 @@ on:
   workflow_call:
     inputs:
       version:
-        description: Release version, Cargo semver; it is also the tag (no v)
+        description: Release version, 26.<game minor>.<mod patch> (26.60.1); it is also the tag (no v). MAJOR.MINOR picks the AMML series; the patch is the mod's own release counter on that line, not the Minecraft build
         required: true
         type: string
       path:
@@ -51,6 +51,11 @@ on:
         required: false
         type: string
         default: ""
+      registry:
+        description: Publish to the registry. Writes the mod version into amml.hcl, lints the manifest and listing, and notifies the registry. Turn it on once the mod amml.hcl has a listing block and AMML with the listing-aware loader is released
+        required: false
+        type: boolean
+        default: false
       private_repos:
         description: Comma-separated alaydriem repo names that cargo fetches with the GitHub App token; empty means none. The caller also passes its secrets (secrets inherit)
         required: false
@@ -83,7 +88,7 @@ jobs:
           set -eu
           re='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$'
           if ! [[ "$VERSION" =~ $re ]]; then
-            echo "::error::version '$VERSION' is not Cargo semver (for example 26.60.5)"
+            echo "::error::version '$VERSION' is not Cargo semver (for example 26.60.1)"
             exit 1
           fi
 
@@ -136,6 +141,15 @@ jobs:
           repository: alaydriem/amml
           ref: ${{ steps.refs.outputs.amml }}
           path: amml
+
+      # The release lint is the amml-registry tool from amml master, so it applies the same listing rules as the
+      # registry publish run, whichever amml ref the mod is built against.
+      - uses: actions/checkout@v7
+        if: ${{ inputs.registry }}
+        with:
+          repository: alaydriem/amml
+          ref: master
+          path: amml-tools
 
       - uses: actions/checkout@v7
         if: ${{ inputs.modmanager }}
@@ -227,6 +241,60 @@ jobs:
           PACKAGE_TASK: ${{ inputs.package_task }}
         run: mise run "$PACKAGE_TASK"
 
+      # The loader reads `version` from amml.hcl; the release version is the only source of it.
+      - name: Write the mod version
+        if: ${{ inputs.registry }}
+        env:
+          VERSION: ${{ inputs.version }}
+          NAMESPACE: ${{ inputs.namespace }}
+          MOD_NAME: ${{ inputs.name }}
+        run: |
+          set -eu
+          manifest="dist/@$NAMESPACE/$MOD_NAME/amml.hcl"
+          test -f "$manifest"
+          if grep -qE '^version[[:space:]]*=' "$manifest"; then
+            sed -E -i "s/^version[[:space:]]*=.*/version     = \"$VERSION\"/" "$manifest"
+          else
+            if [ -n "$(tail -c 1 "$manifest")" ]; then
+              printf '\n' >> "$manifest"
+            fi
+            printf 'version     = "%s"\n' "$VERSION" >> "$manifest"
+          fi
+          count=$(grep -cE '^version[[:space:]]*=' "$manifest" || true)
+          if [ "$count" != "1" ] || ! grep -qE "^version[[:space:]]*=[[:space:]]*\"$VERSION\"" "$manifest"; then
+            echo "::error::$manifest does not have exactly one version = \"$VERSION\" line"
+            exit 1
+          fi
+
+      - uses: actions/cache@v6
+        if: ${{ inputs.registry }}
+        with:
+          path: amml-tools/target
+          key: registry-tool-${{ hashFiles('amml-tools/Cargo.lock', 'amml-tools/rust-toolchain.toml') }}
+          restore-keys: |
+            registry-tool-
+
+      - name: Build the registry tool
+        if: ${{ inputs.registry }}
+        working-directory: ${{ github.workspace }}/amml-tools
+        env:
+          MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/amml-tools
+        run: |
+          mise install
+          mise run build-registry
+
+      - name: Lint the manifest
+        if: ${{ inputs.registry }}
+        env:
+          VERSION: ${{ inputs.version }}
+          NAMESPACE: ${{ inputs.namespace }}
+          MOD_NAME: ${{ inputs.name }}
+        run: |
+          set -eu
+          "$GITHUB_WORKSPACE/amml-tools/target/release/amml-registry" lint-manifest \
+            "dist/@$NAMESPACE/$MOD_NAME/amml.hcl" \
+            --version "$VERSION" --namespace "$NAMESPACE" --name "$MOD_NAME"
+
       - name: Zip and checksum
         env:
           VERSION: ${{ inputs.version }}
@@ -260,3 +328,59 @@ jobs:
             --latest=true \
             --generate-notes \
             --notes "$notes"
+
+  # Tells the registry about the release. A failure here fails this job only; the release above stays as it is.
+  notify-registry:
+    needs: release
+    if: ${{ inputs.registry }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check the App secrets
+        id: app
+        env:
+          APP_ID: ${{ secrets.APP_ID }}
+        run: |
+          set -eu
+          if [ -n "$APP_ID" ]; then
+            echo "notify=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "notify=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::registry not notified: no App secrets"
+          fi
+
+      - name: Get the GitHub App token
+        id: app-token
+        if: ${{ steps.app.outputs.notify == 'true' }}
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: alaydriem
+          repositories: amml-registry
+          permission-contents: write
+
+      - name: Send the release to the registry
+        if: ${{ steps.app.outputs.notify == 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ inputs.version }}
+          NAMESPACE: ${{ inputs.namespace }}
+          MOD_NAME: ${{ inputs.name }}
+        run: |
+          set -eu
+          case "$VERSION" in
+            *-*)
+              echo "::notice::pre-release $VERSION is not sent to the registry"
+              exit 0
+              ;;
+          esac
+          gh api repos/alaydriem/amml-registry/dispatches \
+            -f event_type=amml-released \
+            -f "client_payload[kind]=mod" \
+            -f "client_payload[repo]=$GITHUB_REPOSITORY" \
+            -f "client_payload[namespace]=$NAMESPACE" \
+            -f "client_payload[name]=$MOD_NAME" \
+            -f "client_payload[version]=$VERSION"

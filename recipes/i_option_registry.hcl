@@ -113,3 +113,68 @@ entry "IOptionRegistry.getViewDistanceChunks" {
     max = 67
   }
 }
+
+entry "IOptionRegistry.isGraphicsModeDeferred" {
+  kind     = "vslot"
+  notes    = "Slot of bool IOptionRegistry::isGraphicsModeDeferred() const (name from its behaviour, no header) in the OptionRegistry.vtable global: 75 on 26.60. It returns true when the GRAPHICS_MODE option (id 2BFh) holds GraphicsMode 2, the Deferred (Vibrant Visuals) mode: `get(2BFh)` through IOptionsReader slot 1, the override walk over [opt+8]+238h, then `cmp dword ptr [rax+18h],2; sete al`. GraphicsMode values from the graphics-mode radio table in the video settings screen (0x51cd350 on 26.60): #graphics_mode_radio_simple 0, _fancy 1, _deferred 2, _ray_traced 3. The option id name comes from the OptionID name table (string views, 16 bytes each; id 2BFh = GRAPHICS_MODE, 242h = DEFERRED_VIEW_DISTANCE, 241h = RAY_TRACING_VIEW_DISTANCE). It reads the option only: no device or platform check (see IOptionRegistry.isDeferredRenderingEnabled). Slot 74 is the ray-traced twin (a device check and mode 3), 76 is isDeferredRenderingEnabled, 77 returns the GRAPHICS_QUALITY_PRESET_MODE int (2C1h). Recipe 0 is the body (`sub rsp,..`, stack cookie, `mov rax,[rcx]; mov rax,[rax+8]; lea rdx,[rsp+..]; mov r8d,2BFh; call [guard]`, the override walk, `cmp dword ptr [rax+disp8],imm8; sete al`), then slot_of OptionRegistry.vtable; four bytes are kept, the option id 2BFh, because the getters of other options have the same code (0x5aff230 tests option 130h). Recipe 1 is the call site in isDeferredRenderingEnabled (slot 76): `mov ebx,eax; mov rax,[rsi]; mov rax,[rax+disp32]; mov rcx,rsi; call [guard]; mov esi,eax` after the device-capability call; it reads that displacement and turns it into a slot. The two recipes are in two functions. Every other immediate, displacement and branch byte is a wildcard. Both are unique in 26.60 and agree. 26.51 was not derived (no exe on this machine); treat the entry as optional. Value: slot 75 (0x5b6ede0) in 26.60."
+
+  recipe {
+    step "pattern" {
+      bytes      = "48 83 EC ?? 48 8B 05 ?? ?? ?? ?? 48 31 E0 48 89 44 24 ?? 48 8B 01 48 8B 40 ?? 48 8D 54 24 ?? 41 B8 BF 02 00 00 FF 15 ?? ?? ?? ?? 48 8B 4C 24 ?? 48 89 C8 48 8B 49 ?? 48 8B 89 ?? ?? ?? ?? 48 85 C9 75 ?? 83 78 ?? ?? 0F 94 C0"
+      literal_ok = [
+        "33: option id 2BFh (GRAPHICS_MODE) passed to IOptionsReader::get: the getters of other options have the same code with other ids",
+        "34: option id 2BFh (GRAPHICS_MODE) passed to IOptionsReader::get: the getters of other options have the same code with other ids",
+        "35: option id 2BFh (GRAPHICS_MODE) passed to IOptionsReader::get: the getters of other options have the same code with other ids",
+        "36: option id 2BFh (GRAPHICS_MODE) passed to IOptionsReader::get: the getters of other options have the same code with other ids",
+      ]
+    }
+    step "slot_of" { vtable = "OptionRegistry.vtable" }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "48 89 CE 48 8B 81 ?? ?? ?? ?? 48 85 C0 0F 84 ?? ?? ?? ?? 80 38 ?? 75 ?? C7 04 25 ?? ?? ?? ?? ?? ?? ?? ?? 48 8B 8E ?? ?? ?? ?? 48 8B 01 48 8B 40 ?? FF 15 ?? ?? ?? ?? 89 C3 48 8B 06 48 8B 80 ?? ?? ?? ?? 48 89 F1 FF 15 ?? ?? ?? ?? 89 C6"
+      offset = 60
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+    step "displacement_to_slot" {}
+  }
+
+  check "range" {
+    min = 65
+    max = 85
+  }
+}
+
+entry "IOptionRegistry.isDeferredRenderingEnabled" {
+  kind     = "vslot"
+  notes    = "Slot of bool IOptionRegistry::isDeferredRenderingEnabled() const (name from its behaviour, no header) in the OptionRegistry.vtable global: 76 on 26.60. It returns true only when all three hold: the device capability object at this+1B68h says deferred is supported (its vfn at 10h), isGraphicsModeDeferred (slot 75: GRAPHICS_MODE == 2, Deferred / Vibrant Visuals) and a ServiceLocator object (the global read under its lock at 0x128c3038..48, 261 references; its vfn 8 then vfn 230h) agrees. getViewDistanceChunks (slot 59) uses it to choose DEFERRED_VIEW_DISTANCE (242h); the ray-traced test before it (slot 74) picks RAY_TRACING_VIEW_DISTANCE (241h). The body first checks the NonOwnerPointer at this+1B58h and traps (`mov dword ptr [0],0DEADC0DEh`) when it is null or dead; slot 59 runs the same trap on every view-distance read, so during play it does not fire. Cost: three virtual calls, one lock and unlock and two atomic reference-count pairs. Recipe 0 is the body after the prologue (`mov rsi,rcx; mov rax,[rcx+disp32]; test rax,rax; je; cmp byte ptr [rax],imm; jne; mov dword ptr [0],imm; mov rcx,[rsi+disp32]; mov rax,[rcx]; mov rax,[rax+disp8]; call [guard]; mov ebx,eax; mov rax,[rsi]; mov rax,[rax+disp32]; mov rcx,rsi; call [guard]; mov esi,eax`), then function_start_of and slot_of OptionRegistry.vtable. Slot 74 has the same start but reads the next getter with a disp8 `mov rax,[rax+8]`, so the disp32 form tells the two apart without a kept byte. Recipe 1 is the call site in getViewDistanceChunks (slot 59, 0x5b6e950): `mov rax,[rsi]; mov rax,[rax+disp32]; mov rcx,rsi; call [guard]; test al,al; je; mov rax,[rsi]; mov rax,[rax+8]; lea rdx,[rsp+..]; mov rcx,rsi; mov r8d,imm; call`, offset 3, the displacement turned into a slot. The two recipes are in two functions. Every immediate, displacement and branch byte is a wildcard; there are no kept bytes. Both are unique in 26.60 and agree. 26.51 was not derived (no exe on this machine); treat the entry as optional. Value: slot 76 (0x5b6eba0) in 26.60."
+
+  recipe {
+    step "pattern" {
+      bytes = "48 89 CE 48 8B 81 ?? ?? ?? ?? 48 85 C0 0F 84 ?? ?? ?? ?? 80 38 ?? 75 ?? C7 04 25 ?? ?? ?? ?? ?? ?? ?? ?? 48 8B 8E ?? ?? ?? ?? 48 8B 01 48 8B 40 ?? FF 15 ?? ?? ?? ?? 89 C3 48 8B 06 48 8B 80 ?? ?? ?? ?? 48 89 F1 FF 15 ?? ?? ?? ?? 89 C6"
+    }
+    step "function_start_of" {}
+    step "slot_of" { vtable = "OptionRegistry.vtable" }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "48 8B 06 48 8B 80 ?? ?? ?? ?? 48 89 F1 FF 15 ?? ?? ?? ?? 84 C0 74 ?? 48 8B 06 48 8B 40 ?? 48 8D 54 24 ?? 48 89 F1 41 B8 ?? ?? ?? ?? FF 15"
+      offset = 3
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+    step "displacement_to_slot" {}
+  }
+
+  check "range" {
+    min = 65
+    max = 85
+  }
+}

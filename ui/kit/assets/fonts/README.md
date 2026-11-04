@@ -1,6 +1,6 @@
 # Fonts
 
-Nordwand Mono, version 1.3.2.
+Nordwand Mono, version 1.501.
 
 Source: https://github.com/tywr/Nordwand-Mono
 

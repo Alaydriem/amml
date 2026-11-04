@@ -1,0 +1,9 @@
+mod allow_list_reader;
+mod http_release_source;
+mod listing_check;
+mod manifest_reader;
+mod registry_cli;
+mod registry_updater;
+mod release_verifier;
+mod tag_namer;
+mod tree_builder;
