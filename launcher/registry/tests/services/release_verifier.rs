@@ -306,7 +306,7 @@ fn check_mod_copies_amml_version() {
 fn check_mod_refuses_amml_version_below_the_floor() {
     let (_dir, source) = rig();
     let manifest = ZipFixture::manifest("zoom", Some("26.60.1"), None)
-        .replace("api_version = 2\n", "api_version = 2\namml_version = \"26.61.0\"\n");
+        .replace("api_version = 2\n", "api_version = 2\namml_version = \"26.60.5\"\n");
     let zip = ZipFixture::new()
         .file("@alaydriem/zoom/amml.hcl", manifest.as_bytes())
         .file("@alaydriem/zoom/alaydriem_zoom.dll", b"MZ")

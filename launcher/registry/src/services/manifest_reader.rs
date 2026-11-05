@@ -5,8 +5,9 @@ use crate::structs::{ModManifest, ReleaseVersion};
 pub struct ManifestReader;
 
 impl ManifestReader {
-    /// The oldest AMML version a mod may name in `amml_version`. Older AMML builds do not know the field.
-    pub const MIN_AMML_FLOOR: &'static str = "26.62.0";
+    /// The oldest AMML version a mod may name in `amml_version`. Older AMML builds refuse a manifest with a key they
+    /// do not know; 26.60.6 is the first that accepts the field.
+    pub const MIN_AMML_FLOOR: &'static str = "26.60.6";
 
     pub fn parse(text: &str) -> Result<ModManifest, RegistryError> {
         let body = hcl::parse(text)

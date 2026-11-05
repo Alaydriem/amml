@@ -21,6 +21,9 @@ pub struct ModSpec {
     pub amml_version: Option<AmmlVersion>,
     /// Entry ids the mod needs; used for the coverage log line.
     pub entries: Vec<EntryId>,
+    /// Manifest keys this loader does not know, as "attribute `x`" or "block `y`", in file order. They are ignored
+    /// so that a mod made for a newer loader still loads; the host logs them.
+    pub ignored: Vec<String>,
 }
 
 impl ModSpec {

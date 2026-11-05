@@ -16,6 +16,7 @@ fn spec(name: &str, entries: &[&str]) -> ModSpec {
         version: None,
         amml_version: None,
         entries: entries.iter().map(|id| EntryId(id.to_string())).collect(),
+        ignored: Vec::new(),
     }
 }
 

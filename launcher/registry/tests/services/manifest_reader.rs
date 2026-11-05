@@ -102,7 +102,7 @@ fn parse_accepts_amml_version_below_floor_but_check_floor_refuses_it() {
     match ManifestReader::check_floor(&manifest) {
         Err(RegistryError::MinAmml { got, reason }) => {
             assert_eq!(got, "26.60.5");
-            assert!(reason.contains("26.62.0"), "{reason}");
+            assert!(reason.contains("26.60.6"), "{reason}");
         }
         other => panic!("expected MinAmml, got {other:?}"),
     }
@@ -110,8 +110,8 @@ fn parse_accepts_amml_version_below_floor_but_check_floor_refuses_it() {
 
 #[test]
 fn accepts_amml_version_at_floor() {
-    let text = MANIFEST.replace("api_version = 2\n", "api_version = 2\namml_version = \"26.62.0\"\n");
-    assert_eq!(ManifestReader::parse(&text).unwrap().amml_version.as_deref(), Some("26.62.0"));
-    assert_eq!(ManifestReader::MIN_AMML_FLOOR, "26.62.0");
+    let text = MANIFEST.replace("api_version = 2\n", "api_version = 2\namml_version = \"26.60.6\"\n");
+    assert_eq!(ManifestReader::parse(&text).unwrap().amml_version.as_deref(), Some("26.60.6"));
+    assert_eq!(ManifestReader::MIN_AMML_FLOOR, "26.60.6");
     ManifestReader::check_floor(&ManifestReader::parse(&text).unwrap()).unwrap();
 }

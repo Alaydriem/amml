@@ -90,6 +90,7 @@ fn a_mod_needing_a_newer_api_is_refused_with_version_mismatch() {
         version: None,
         amml_version: None,
         entries: Vec::new(),
+        ignored: Vec::new(),
     };
     reports.extend(loader.load_all(&[ahead]));
 
@@ -248,6 +249,7 @@ fn spec_needing(harness: &Harness, name: &str, needs: AmmlVersion) -> ModSpec {
         version: None,
         amml_version: Some(needs),
         entries: Vec::new(),
+        ignored: Vec::new(),
     }
 }
 

@@ -82,6 +82,12 @@ impl HostStartup {
                 reason: skipped.reason.as_str()
             });
         }
+        for spec in scan.mods.iter().filter(|spec| !spec.ignored.is_empty()) {
+            curia::warn!("mod manifest has unknown keys", {
+                id: spec.id(),
+                keys: spec.ignored.join(", ")
+            });
+        }
         Ok((settings, scan))
     }
 

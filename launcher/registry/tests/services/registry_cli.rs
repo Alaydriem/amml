@@ -247,11 +247,11 @@ fn lint_manifest_refuses_amml_version_below_the_floor() {
     let rig = Rig::new();
     let path = rig._dir.path().join("amml.hcl");
     let text = ZipFixture::manifest("zoom", Some("26.60.1"), None)
-        .replace("api_version = 2\n", "api_version = 2\namml_version = \"26.61.0\"\n");
+        .replace("api_version = 2\n", "api_version = 2\namml_version = \"26.60.5\"\n");
     fs::write(&path, text).unwrap();
     let low = rig.run(&["lint-manifest", path.to_str().unwrap()]);
     assert_eq!(low.code, 1);
-    assert!(low.stderr.contains("26.62.0"), "{}", low.stderr);
+    assert!(low.stderr.contains("26.60.6"), "{}", low.stderr);
 }
 
 #[test]
