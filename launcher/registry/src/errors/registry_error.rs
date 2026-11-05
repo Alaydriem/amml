@@ -26,6 +26,8 @@ pub enum RegistryError {
     ManifestMismatch { field: &'static str, expected: String, got: String },
     #[error("listing field `{field}`: {reason}")]
     Listing { field: &'static str, reason: String },
+    #[error("amml_version `{got}`: {reason}")]
+    MinAmml { got: String, reason: String },
     #[error("bad registry tree: {0}")]
     BadTree(String),
     #[error("{0}")]

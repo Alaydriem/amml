@@ -12,4 +12,6 @@ pub enum UpdateStatus {
     Offline,
     // the AMML is a local build; `available` names the newest core release for the game, if any
     LocalBuild,
+    // no release for the instance's API fits its AMML; `UpdateRow.needs_amml` names the AMML that would
+    NeedsAmml,
 }

@@ -252,3 +252,133 @@ fn local_build_wins_over_not_listed() {
     assert_eq!(found.status, UpdateStatus::LocalBuild);
     assert_eq!(found.available, None);
 }
+
+#[test]
+fn local_build_flags_an_api_change_against_the_release() {
+    let server = FakeServer::start(vec![]);
+    RegistryTree::publish(&server, "Reg", &amml(&[("26.60.5", 2)]), &[]);
+    let root = tempfile::tempdir().unwrap();
+    let dir = root.path().join("one");
+    InstanceFolder::create(&dir, "1.26.60.05").with_amml(Some("26.61.0+local")).with_amml_api("3");
+    let state = InstanceReader::read(&dir).unwrap();
+    let cache = tempfile::tempdir().unwrap();
+    let downloads = tempfile::tempdir().unwrap();
+    let mut catalogue = Catalogues::catalogue(vec![Catalogues::client(&server, true, cache.path())], downloads.path());
+
+    let rows = UpdateChecker::check(&mut catalogue, &state);
+    let found = row(&rows, UpdateChecker::AMML_ID);
+    assert_eq!(found.status, UpdateStatus::LocalBuild);
+    assert!(found.api_change);
+
+    let same = local_build(&root.path().join("two"));
+    let rows = UpdateChecker::check(&mut catalogue, &same);
+    assert!(!row(&rows, UpdateChecker::AMML_ID).api_change);
+}
+
+#[test]
+fn check_fetched_asks_no_registry_root_again() {
+    let server = FakeServer::start(vec![]);
+    RegistryTree::publish(&server, "Reg", &amml(&[("26.60.1", 2)]), &[doc("m", &[("26.60.10", 2)])]);
+    let root = tempfile::tempdir().unwrap();
+    let one = instance(&root.path().join("one"), &server.base(), "26.60.1", &[("m", Some("26.60.9"), "registry")]);
+    let two = instance(&root.path().join("two"), &server.base(), "26.60.1", &[("m", Some("26.60.10"), "registry")]);
+    let cache = tempfile::tempdir().unwrap();
+    let downloads = tempfile::tempdir().unwrap();
+    let mut catalogue = Catalogues::catalogue(vec![Catalogues::client(&server, true, cache.path())], downloads.path());
+    catalogue.registries_mut().refresh_all();
+    server.clear_requests();
+
+    let first = UpdateChecker::check_fetched(&mut catalogue, &one);
+    let second = UpdateChecker::check_fetched(&mut catalogue, &two);
+
+    assert_eq!(row(&first, "@a/m").status, UpdateStatus::Available);
+    assert_eq!(row(&second, "@a/m").status, UpdateStatus::UpToDate);
+    let roots = server.requests().iter().filter(|request| request.path.ends_with("/registry.json")).count();
+    assert_eq!(roots, 0, "{:?}", server.requests());
+}
+
+fn doc_min(name: &str, releases: &[(&str, Option<&str>)]) -> amml_registry::ModDocument {
+    let releases: Vec<ModRelease> =
+        releases.iter().map(|(version, min)| RegistryTree::release_min(version, 2, *min)).collect();
+    RegistryTree::document("a", name, false, true, releases)
+}
+
+fn check_one(amml_version: &str, installed: &str, releases: &[(&str, Option<&str>)]) -> UpdateRow {
+    let server = FakeServer::start(vec![]);
+    RegistryTree::publish(&server, "Reg", &amml(&[("26.60.1", 2)]), &[doc_min("m", releases)]);
+    let root = tempfile::tempdir().unwrap();
+    let state = instance(&root.path().join("one"), &server.base(), amml_version, &[("m", Some(installed), "registry")]);
+    let cache = tempfile::tempdir().unwrap();
+    let downloads = tempfile::tempdir().unwrap();
+    let mut catalogue = Catalogues::catalogue(vec![Catalogues::client(&server, true, cache.path())], downloads.path());
+    let rows = UpdateChecker::check(&mut catalogue, &state);
+    row(&rows, "@a/m").clone()
+}
+
+#[test]
+fn newest_fits_is_available_without_note() {
+    let found = check_one("26.60.1", "26.60.5", &[("26.60.10", Some("26.60.1")), ("26.60.5", None)]);
+    assert_eq!(found.status, UpdateStatus::Available);
+    assert_eq!(found.available.as_deref(), Some("26.60.10"));
+    assert_eq!(found.needs_amml, None);
+}
+
+#[test]
+fn older_fitting_newer_than_installed_is_available_with_note() {
+    let found = check_one("26.60.1", "26.60.5", &[("26.60.10", Some("26.62.0")), ("26.60.8", None), ("26.60.5", None)]);
+    assert_eq!(found.status, UpdateStatus::Available);
+    assert_eq!(found.available.as_deref(), Some("26.60.8"));
+    assert_eq!(found.needs_amml.map(|needs| needs.version), Some("26.62.0".to_string()));
+}
+
+#[test]
+fn nothing_newer_fits_is_needs_amml() {
+    let found = check_one("26.60.1", "26.60.5", &[("26.60.10", Some("26.62.0")), ("26.60.5", None)]);
+    assert_eq!(found.status, UpdateStatus::NeedsAmml);
+    assert_eq!(found.available, None);
+    assert_eq!(found.needs_amml.map(|needs| needs.version), Some("26.62.0".to_string()));
+}
+
+#[test]
+fn installed_newer_than_any_fitting_is_up_to_date() {
+    // the installed release was put in by hand and is not older than the blocked release
+    let found = check_one("26.60.1", "26.60.10", &[("26.60.10", Some("26.62.0")), ("26.60.5", None)]);
+    assert_eq!(found.status, UpdateStatus::UpToDate);
+    assert_eq!(found.needs_amml, None);
+}
+
+#[test]
+fn unknown_installed_version_with_blocked_newest_is_unknown() {
+    let found = check_one("26.60.1", "dev", &[("26.60.10", Some("26.62.0")), ("26.60.5", None)]);
+    assert_eq!(found.status, UpdateStatus::Unknown);
+    assert_eq!(found.needs_amml.map(|needs| needs.version), Some("26.62.0".to_string()));
+}
+
+#[test]
+fn local_amml_build_sees_newest() {
+    let server = FakeServer::start(vec![]);
+    RegistryTree::publish(
+        &server,
+        "Reg",
+        &amml(&[("26.60.1", 2)]),
+        &[doc_min("m", &[("26.60.10", Some("26.62.0")), ("26.60.5", None)])],
+    );
+    let root = tempfile::tempdir().unwrap();
+    let state =
+        instance(&root.path().join("one"), &server.base(), "26.60.1+local", &[("m", Some("26.60.5"), "registry")]);
+    let cache = tempfile::tempdir().unwrap();
+    let downloads = tempfile::tempdir().unwrap();
+    let mut catalogue = Catalogues::catalogue(vec![Catalogues::client(&server, true, cache.path())], downloads.path());
+    let rows = UpdateChecker::check(&mut catalogue, &state);
+    let found = row(&rows, "@a/m");
+    assert_eq!(found.status, UpdateStatus::Available);
+    assert_eq!(found.available.as_deref(), Some("26.60.10"));
+    assert_eq!(found.needs_amml, None);
+}
+
+#[test]
+fn installed_blocked_only_release_is_up_to_date() {
+    let found = check_one("26.60.5", "26.60.10", &[("26.60.10", Some("26.62.0"))]);
+    assert_eq!(found.status, UpdateStatus::UpToDate);
+    assert_eq!(found.needs_amml, None);
+}

@@ -1,11 +1,13 @@
 use crate::support::{FakeServer, RegistryTree, Route};
-use amml_launcher_core::{RegistryCache, RegistryClient, RegistryRef, RegistrySet, RegistryStatus, UreqHttpFetch};
+use amml_launcher_core::{
+    CacheLock, RegistryCache, RegistryClient, RegistryRef, RegistrySet, RegistryStatus, UreqHttpFetch,
+};
 
 fn client(server: &FakeServer, cache: &std::path::Path) -> RegistryClient<UreqHttpFetch> {
     RegistryClient::new(
         RegistryRef::new(server.base()),
         UreqHttpFetch::new(UreqHttpFetch::agent()),
-        RegistryCache::new(cache.to_path_buf(), RegistryCache::BUDGET),
+        RegistryCache::new(cache.to_path_buf(), RegistryCache::BUDGET, CacheLock::new()),
     )
 }
 
@@ -61,12 +63,12 @@ fn refresh_all_reports_each_registry_and_the_official_one_is_found() {
     let official = RegistryClient::new(
         RegistryRef::official_at(up.base()),
         UreqHttpFetch::new(UreqHttpFetch::agent()),
-        RegistryCache::new(cache.path().join("1"), RegistryCache::BUDGET),
+        RegistryCache::new(cache.path().join("1"), RegistryCache::BUDGET, CacheLock::new()),
     );
     let other = RegistryClient::new(
         RegistryRef::new(down_base.clone()),
         UreqHttpFetch::new(UreqHttpFetch::agent()),
-        RegistryCache::new(cache.path().join("2"), RegistryCache::BUDGET),
+        RegistryCache::new(cache.path().join("2"), RegistryCache::BUDGET, CacheLock::new()),
     );
     let mut set = RegistrySet::new(vec![other, official]);
     let statuses = set.refresh_all();

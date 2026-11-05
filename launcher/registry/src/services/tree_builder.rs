@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use crate::errors::RegistryError;
 use crate::services::{HashText, JsonText, RegistryUpdater};
 use crate::structs::{
-    AmmlSection, ApiSummary, FileRef, IndexCard, IndexPage, IndexSummary, ModDocument, NameRow, NamesFile,
-    PublishedTree, RegistryRoot, ReleaseVersion,
+    AmmlSection, ApiSummary, CardRelease, FileRef, IndexCard, IndexPage, IndexSummary, ModDocument, ModRelease,
+    NameRow, NamesFile, PublishedTree, RegistryRoot, ReleaseVersion,
 };
 
 /// Regenerates `registry.json`, `names.json` and every index page from the mod documents.
@@ -15,6 +15,27 @@ impl TreeBuilder {
     pub const PAGE_SIZE: usize = 100;
     pub const NAMES_PATH: &'static str = "names.json";
     pub const ROOT_PATH: &'static str = "registry.json";
+
+    // every release of one API, newest first; empty unless some release needs a minimum AMML version
+    fn card_releases(document: &ModDocument, api: u32) -> Result<Vec<CardRelease>, RegistryError> {
+        let mut of_api: Vec<(ReleaseVersion, &ModRelease)> = Vec::new();
+        for release in document.versions.iter().filter(|release| release.api_version == api) {
+            of_api.push((ReleaseVersion::parse(&release.version)?, release));
+        }
+        if of_api.iter().all(|(_, release)| release.min_amml.is_none()) {
+            return Ok(Vec::new());
+        }
+        of_api.sort_by_key(|entry| std::cmp::Reverse(entry.0));
+        Ok(of_api
+            .into_iter()
+            .map(|(_, release)| CardRelease {
+                version: release.version.clone(),
+                min_amml: release.min_amml.clone(),
+                size: release.size,
+                updated: release.published.clone(),
+            })
+            .collect())
+    }
 
     pub fn build(
         name: &str,
@@ -47,6 +68,7 @@ impl TreeBuilder {
             apis.sort_by(|a, b| b.cmp(a));
             for (api, (_, position)) in &newest {
                 let release = &document.versions[*position];
+                let releases = Self::card_releases(document, *api)?;
                 by_api.entry(*api).or_default().push(IndexCard {
                     id: document.id.clone(),
                     title: document.listing.title.clone(),
@@ -57,6 +79,8 @@ impl TreeBuilder {
                     core: document.core,
                     default: document.default,
                     updated: release.published.clone(),
+                    min_amml: release.min_amml.clone(),
+                    releases,
                 });
             }
             apis_of.insert(document.id.as_str(), apis);

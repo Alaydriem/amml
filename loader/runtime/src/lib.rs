@@ -11,6 +11,6 @@ pub use services::{
     ResolverChain, ResolverSource, SymbolLookup,
 };
 pub use structs::{
-    ChainChange, ChainError, EntryTable, GradeReport, GradeRow, GradeVerdict, HookEntry, ImageLayout, ModRegistryError,
-    ModScan, ModSpec, OriginalValue, OriginalWrite, SkippedMod, SourceNote, SourceOutcome,
+    AmmlVersion, ChainChange, ChainError, EntryTable, GradeReport, GradeRow, GradeVerdict, HookEntry, ImageLayout,
+    ModRegistryError, ModScan, ModSpec, OriginalValue, OriginalWrite, SkippedMod, SourceNote, SourceOutcome,
 };

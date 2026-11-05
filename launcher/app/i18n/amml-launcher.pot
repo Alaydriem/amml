@@ -36,7 +36,7 @@ msgid_plural "{count} mods · {fetched}"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/lib/stores/CatalogStore.svelte.ts:133
+#: src/lib/stores/CatalogStore.svelte.ts:148
 msgid "{count} results in {registries} registries"
 msgstr ""
 
@@ -49,7 +49,7 @@ msgid_plural "{count} updates"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/lib/stores/CatalogStore.svelte.ts:139
+#: src/lib/stores/CatalogStore.svelte.ts:154
 msgid "{count} work with api {api}"
 msgstr ""
 
@@ -132,7 +132,7 @@ msgstr ""
 msgid "{n} min"
 msgstr ""
 
-#: src/lib/stores/SettingsStore.svelte.ts:346
+#: src/lib/stores/SettingsStore.svelte.ts:357
 #: src/lib/text/ActivityTextSet.ts:25
 msgid "{n} min ago"
 msgstr ""
@@ -157,7 +157,7 @@ msgstr ""
 msgid "{name} is running."
 msgstr ""
 
-#: src/lib/text/StepTextSet.ts:61
+#: src/lib/text/StepTextSet.ts:69
 msgid "{percent}%"
 msgstr ""
 
@@ -205,12 +205,24 @@ msgstr ""
 msgid "**{updates} available** in {instances}. Nothing is installed until you ask."
 msgstr ""
 
+#: src/lib/text/SetupProgressTextSet.ts:22
+msgid "**AMML is copying your worlds into shared data. Do not start Minecraft from the Store during this copy.** Nothing is moved or deleted: your Store worlds stay where they are."
+msgstr ""
+
 #: src/lib/text/InstallProgressTextSet.ts:25
 msgid "**AMML is creating your new instance. Do not start Minecraft from the Store during this install.** This may take a minute or two to complete."
 msgstr ""
 
 #: src/lib/text/DialogsTextSet.ts:26
 msgid "**Not in any registry.** It installs as unofficial: no checksum, and the launcher never checks it for updates. Only add mods from people you trust."
+msgstr ""
+
+#: src/lib/text/SetupProgressTextSet.ts:26
+msgid "**Nothing was changed.** Your Store worlds are where they were. The part copy was removed and no settings were saved."
+msgstr ""
+
+#: src/lib/text/SetupProgressTextSet.ts:27
+msgid "**The files copied so far stay in shared data.** Try again copies the rest. Your Store worlds are where they were."
 msgstr ""
 
 #: src/lib/text/AddModUrlTextSet.ts:18
@@ -242,6 +254,7 @@ msgid "About {size} on disk."
 msgstr ""
 
 #: src/lib/text/InstallProgressTextSet.ts:22
+#: src/lib/text/SetupProgressTextSet.ts:19
 msgid "about {time} left"
 msgstr ""
 
@@ -324,7 +337,7 @@ msgstr ""
 msgid "AMML Launcher"
 msgstr ""
 
-#: src/lib/text/ModNoteTextSet.ts:17
+#: src/lib/text/ModNoteTextSet.ts:23
 msgid "AMML loader"
 msgstr ""
 
@@ -348,7 +361,7 @@ msgstr ""
 msgid "api"
 msgstr ""
 
-#: src/lib/text/ModNoteTextSet.ts:22
+#: src/lib/text/ModNoteTextSet.ts:28
 #: src/lib/text/UrlCheckTextSet.ts:30
 msgid "api {api}"
 msgstr ""
@@ -378,7 +391,7 @@ msgstr ""
 msgid "Built in"
 msgstr ""
 
-#: src/lib/text/StepTextSet.ts:63
+#: src/lib/text/StepTextSet.ts:71
 msgid "cached"
 msgstr ""
 
@@ -401,6 +414,10 @@ msgstr ""
 msgid "Check again"
 msgstr ""
 
+#: src/lib/text/StepTextSet.ts:49
+msgid "Check the shared data folder"
+msgstr ""
+
 #: src/lib/text/StepTextSet.ts:31
 msgid "Check the Store install"
 msgstr ""
@@ -420,6 +437,10 @@ msgstr ""
 #: src/lib/text/AddModBrowseTextSet.ts:62
 #: src/lib/text/UrlCheckTextSet.ts:44
 msgid "checksum"
+msgstr ""
+
+#: src/lib/text/SetupProgressTextSet.ts:28
+msgid "Choose another source"
 msgstr ""
 
 #: src/lib/text/AddModBrowseTextSet.ts:72
@@ -460,7 +481,12 @@ msgid "Copy failed at {copied} of {expected} files."
 msgstr ""
 
 #: src/lib/text/FirstRunAdoptTextSet.ts:12
+#: src/lib/text/StepTextSet.ts:53
 msgid "Copy into shared data"
+msgstr ""
+
+#: src/lib/text/SetupProgressTextSet.ts:18
+msgid "Copy progress"
 msgstr ""
 
 #: src/lib/text/SharedDataSettingsTextSet.ts:24
@@ -487,6 +513,10 @@ msgstr ""
 msgid "Copying worlds"
 msgstr ""
 
+#: src/lib/text/SetupProgressTextSet.ts:14
+msgid "Copying worlds from **{name}**"
+msgstr ""
+
 #: src/lib/text/InstanceDetailTextSet.ts:21
 msgid "Core"
 msgstr ""
@@ -495,8 +525,12 @@ msgstr ""
 msgid "Core · {core} · Mods · {mods}"
 msgstr ""
 
-#: src/lib/text/ModNoteTextSet.ts:18
+#: src/lib/text/ModNoteTextSet.ts:24
 msgid "core, always on"
+msgstr ""
+
+#: src/lib/text/SetupProgressTextSet.ts:15
+msgid "Could not copy worlds from **{name}**"
 msgstr ""
 
 #: src/lib/text/InstallProgressTextSet.ts:10
@@ -594,7 +628,7 @@ msgstr ""
 
 #: src/lib/text/AddModBrowseTextSet.ts:44
 #: src/lib/text/ReportTextSet.ts:43
-#: src/lib/text/StepTextSet.ts:59
+#: src/lib/text/StepTextSet.ts:67
 msgid "failed"
 msgstr ""
 
@@ -626,7 +660,7 @@ msgstr ""
 msgid "Found"
 msgstr ""
 
-#: src/lib/text/ModNoteTextSet.ts:21
+#: src/lib/text/ModNoteTextSet.ts:27
 msgid "from a URL"
 msgstr ""
 
@@ -727,7 +761,7 @@ msgstr ""
 msgid "Installed versions · {size}"
 msgstr ""
 
-#: src/lib/text/StepTextSet.ts:52
+#: src/lib/text/StepTextSet.ts:60
 msgid "Installing {id}"
 msgstr ""
 
@@ -775,7 +809,7 @@ msgstr ""
 msgid "instances\\{name}"
 msgstr ""
 
-#: src/lib/stores/SettingsStore.svelte.ts:346
+#: src/lib/stores/SettingsStore.svelte.ts:357
 msgid "just now"
 msgstr ""
 
@@ -794,6 +828,10 @@ msgstr ""
 
 #: src/lib/text/ActivityTextSet.ts:16
 msgid "last played {ago}"
+msgstr ""
+
+#: src/lib/text/ModNoteTextSet.ts:31
+msgid "Later release needs AMML {version}"
 msgstr ""
 
 #: src/lib/text/InstancesTextSet.ts:37
@@ -833,7 +871,7 @@ msgstr ""
 msgid "Loading more mods"
 msgstr ""
 
-#: src/lib/text/ModNoteTextSet.ts:20
+#: src/lib/text/ModNoteTextSet.ts:26
 msgid "local"
 msgstr ""
 
@@ -848,6 +886,10 @@ msgstr ""
 
 #: src/lib/text/AboutSettingsTextSet.ts:16
 msgid "Made by {name}"
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:51
+msgid "Measure the worlds"
 msgstr ""
 
 #: src/lib/text/CheckTextSet.ts:12
@@ -888,6 +930,14 @@ msgstr ""
 msgid "Needed to install game versions"
 msgstr ""
 
+#: src/lib/text/ModNoteTextSet.ts:29
+msgid "Needs AMML {version}"
+msgstr ""
+
+#: src/lib/text/ModNoteTextSet.ts:30
+msgid "Needs AMML {version} (game {game})"
+msgstr ""
+
 #: src/lib/text/CheckTextSet.ts:54
 #: src/lib/text/FirstRunChecksTextSet.ts:14
 msgid "Needs attention"
@@ -901,7 +951,7 @@ msgstr ""
 msgid "Needs your OK"
 msgstr ""
 
-#: src/lib/stores/SettingsStore.svelte.ts:229
+#: src/lib/stores/SettingsStore.svelte.ts:240
 msgid "never"
 msgstr ""
 
@@ -991,7 +1041,7 @@ msgstr ""
 msgid "Off"
 msgstr ""
 
-#: src/lib/text/ModNoteTextSet.ts:19
+#: src/lib/text/ModNoteTextSet.ts:25
 msgid "official"
 msgstr ""
 
@@ -1156,7 +1206,7 @@ msgstr ""
 msgid "Report a problem"
 msgstr ""
 
-#: src/lib/stores/SettingsStore.svelte.ts:328
+#: src/lib/stores/SettingsStore.svelte.ts:339
 msgid "Report copied"
 msgstr ""
 
@@ -1175,6 +1225,10 @@ msgstr ""
 
 #: src/lib/text/ActivityTextSet.ts:13
 msgid "running since {time}"
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:55
+msgid "Save launcher settings"
 msgstr ""
 
 #: src/lib/text/ReportTextSet.ts:39
@@ -1216,7 +1270,11 @@ msgstr ""
 msgid "Select a mod to see what it does, who made it and how big the download is."
 msgstr ""
 
-#: src/lib/text/StepTextSet.ts:49
+#: src/lib/text/SetupProgressTextSet.ts:13
+msgid "Setting up shared data"
+msgstr ""
+
+#: src/lib/text/StepTextSet.ts:57
 msgid "Setting up your data"
 msgstr ""
 
@@ -1230,6 +1288,10 @@ msgstr ""
 
 #: src/lib/text/ShellTextSet.ts:12
 msgid "Setup · {current} of {total}"
+msgstr ""
+
+#: src/lib/text/SetupProgressTextSet.ts:16
+msgid "Setup steps"
 msgstr ""
 
 #: src/lib/text/NewInstanceTextSet.ts:24
@@ -1322,7 +1384,8 @@ msgstr ""
 msgid "Store Bedrock {version} registered"
 msgstr ""
 
-#: src/lib/stores/SettingsStore.svelte.ts:275
+#: src/lib/stores/SettingsStore.svelte.ts:286
+#: src/lib/stores/SetupProgressStore.svelte.ts:35
 #: src/lib/stores/SetupStore.svelte.ts:45
 msgid "Store Minecraft"
 msgstr ""
@@ -1513,7 +1576,7 @@ msgstr ""
 msgid "Windows would not let the launcher copy **{file}** for {version}. With Developer Mode on, it can. Windows asks for admin rights once."
 msgstr ""
 
-#: src/lib/stores/SettingsStore.svelte.ts:313
+#: src/lib/stores/SettingsStore.svelte.ts:324
 msgid "Windows x64"
 msgstr ""
 
@@ -1547,6 +1610,7 @@ msgid "en-US"
 msgstr ""
 
 #: src/lib/text/InstallProgressTextSet.ts:23
+#: src/lib/text/SetupProgressTextSet.ts:20
 msgctxt "separator"
 msgid " · "
 msgstr ""

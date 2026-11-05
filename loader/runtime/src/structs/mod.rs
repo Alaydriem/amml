@@ -1,3 +1,4 @@
+pub mod amml_version;
 pub mod chain_change;
 pub mod chain_error;
 pub mod entry_table;
@@ -15,6 +16,7 @@ pub mod skipped_mod;
 pub mod source_note;
 pub mod source_outcome;
 
+pub use amml_version::AmmlVersion;
 pub use chain_change::ChainChange;
 pub use chain_error::ChainError;
 pub use entry_table::EntryTable;

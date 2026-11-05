@@ -14,6 +14,7 @@ function mod(id: string, overrides: Partial<ModView> = {}): ModView {
         availableVersion: "1.0.0",
         api: 2,
         update: "upToDate",
+        needsAmml: null,
         ...overrides,
     };
 }

@@ -5,4 +5,5 @@ export { InstanceFixtures } from "./instances";
 export { ModFixtures } from "./mods";
 export { SettingsFixtures } from "./settings";
 export { ShellFixtures } from "./shell";
+export { SharedDataFixtures } from "./sharedData";
 export { SetupFixtures } from "./setup";

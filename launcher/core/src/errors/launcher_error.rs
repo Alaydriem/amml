@@ -1,3 +1,4 @@
+use crate::structs::NeedsAmml;
 use amml_gdk::GdkError;
 use amml_registry::RegistryError;
 use std::path::PathBuf;
@@ -42,8 +43,6 @@ pub enum LauncherError {
     ConfirmMismatch { name: String },
     #[error("{} is not an instance", .0.display())]
     NotAnInstance(PathBuf),
-    #[error("{} is not empty", .0.display())]
-    TargetNotEmpty(PathBuf),
     #[error("the patcher failed (exit {code:?}): {text}")]
     PatchFailed { code: Option<i32>, text: String },
     #[error("bad version.json: {0}")]
@@ -54,4 +53,6 @@ pub enum LauncherError {
     InstallerFailed { code: Option<i32> },
     #[error("the AMML API of the instance {0} is not known")]
     UnknownApi(String),
+    #[error("{id} needs AMML {}", .needs.version)]
+    NeedsAmml { id: String, needs: NeedsAmml },
 }

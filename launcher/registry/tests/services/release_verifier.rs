@@ -287,3 +287,38 @@ fn a_manifest_without_api_version_is_refused() {
     source.put_release(REPO, "26.60.1", ASSET, &zip);
     assert!(matches!(verify(source), Err(RegistryError::ManifestMismatch { field: "api_version", .. })));
 }
+
+#[test]
+fn check_mod_copies_amml_version() {
+    let (_dir, source) = rig();
+    let manifest = ZipFixture::manifest("zoom", Some("26.60.1"), None)
+        .replace("api_version = 2\n", "api_version = 2\namml_version = \"26.62.1\"\n");
+    let zip = ZipFixture::new()
+        .file("@alaydriem/zoom/amml.hcl", manifest.as_bytes())
+        .file("@alaydriem/zoom/alaydriem_zoom.dll", b"MZ")
+        .build();
+    source.put_release(REPO, "26.60.1", ASSET, &zip);
+    let verified = verify(source).unwrap();
+    assert_eq!(verified.release.min_amml.as_deref(), Some("26.62.1"));
+}
+
+#[test]
+fn check_mod_refuses_amml_version_below_the_floor() {
+    let (_dir, source) = rig();
+    let manifest = ZipFixture::manifest("zoom", Some("26.60.1"), None)
+        .replace("api_version = 2\n", "api_version = 2\namml_version = \"26.61.0\"\n");
+    let zip = ZipFixture::new()
+        .file("@alaydriem/zoom/amml.hcl", manifest.as_bytes())
+        .file("@alaydriem/zoom/alaydriem_zoom.dll", b"MZ")
+        .build();
+    source.put_release(REPO, "26.60.1", ASSET, &zip);
+    assert!(matches!(verify(source), Err(RegistryError::MinAmml { .. })));
+}
+
+#[test]
+fn check_mod_without_amml_version_has_none() {
+    let (_dir, source) = rig();
+    source.put_release(REPO, "26.60.1", ASSET, &good_mod_zip());
+    let verified = verify(source).unwrap();
+    assert_eq!(verified.release.min_amml, None);
+}

@@ -8,9 +8,10 @@ import { RegistryPresenter } from "#lib/present/RegistryPresenter.ts";
 import { AddModUrlTextSet } from "#lib/text/AddModUrlTextSet.ts";
 import { UrlCheckTextSet } from "#lib/text/UrlCheckTextSet.ts";
 import { SourceNavRules, type AddModContext, type FoundMod, type RegistrySource, type UrlCheck } from "@amml/launcher-kit";
+import { RegistryFeed, type RegistryFeedEvents } from "./RegistryFeed.ts";
 import type { Navigate } from "./Navigate.ts";
 
-export type UrlInstallApi = Pick<typeof LauncherApi, "registriesRefresh" | "instanceGet" | "urlInspect" | "urlInstall">;
+export type UrlInstallApi = Pick<typeof LauncherApi, "registriesGet" | "instanceGet" | "urlInspect" | "urlInstall">;
 
 // The add-a-mod-from-a-link screen: look at the zip, then install it.
 export class UrlInstallStore {
@@ -39,20 +40,28 @@ export class UrlInstallStore {
     private readonly name: string;
     private readonly api: UrlInstallApi;
     private readonly navigate: Navigate;
+    private readonly feed: RegistryFeed;
 
-    constructor(name: string, api: UrlInstallApi, navigate: Navigate) {
+    constructor(name: string, api: UrlInstallApi, navigate: Navigate, registryEvents: RegistryFeedEvents) {
         this.name = name;
         this.api = api;
         this.navigate = navigate;
+        this.feed = new RegistryFeed(registryEvents, (views) => {
+            this.registryViews = views;
+        });
     }
 
     async load(): Promise<void> {
         try {
-            this.registryViews = await this.api.registriesRefresh();
+            await this.feed.load(() => this.api.registriesGet());
             this.instance = await this.api.instanceGet(this.name);
         } catch (error) {
             this.fault = ApiFault.of(error);
         }
+    }
+
+    stopWatching(): void {
+        this.feed.stopWatching();
     }
 
     // typing a new link drops the checks of the old one

@@ -28,8 +28,11 @@ export interface ModTableProps {
 }
 
 export class ModTableRules {
-    /** Number of rows whose state is `update`; Update all is disabled at zero. A mod from a URL never counts. */
+    /**
+     * Number of rows whose state is `update`; Update all is disabled at zero. A mod from a URL never counts, and
+     * neither does a local AMML build: Update all does not replace it, only its own Update pill does.
+     */
     static updateCount(mods: readonly InstalledMod[]): number {
-        return mods.filter((mod) => ModTableRowRules.state(mod) === "update").length;
+        return mods.filter((mod) => !mod.localBuild && ModTableRowRules.state(mod) === "update").length;
     }
 }

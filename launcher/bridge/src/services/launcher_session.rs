@@ -1,23 +1,25 @@
+use super::planned_work::{JobWork, PlainWork};
 use super::session_state::SessionState;
 use super::{
     CatalogService, DataStats, DownloadFolder, FaultMapper, InstallSteps, JobRunner, JobSink, LastPlayed, LaunchGate,
-    Locked, ManagerSlot, NameCheck, OpenPolicy, SetupState, SystemChecks, SystemInfo, VersionList, ViewMapper,
+    Locked, ManagerSlot, NameCheck, OpenPolicy, PlannedWork, SetupState, SystemChecks, SystemInfo, VersionList,
+    ViewMapper,
 };
 use crate::{
     AboutView, AdoptCandidatesView, AdoptView, BridgeError, CardView, CatalogLayoutView, CatalogSortView, ChannelView,
-    CheckView, DataModeView, DataOverviewView, DownloadsView, FaultKindView, FaultView, InstanceView, JobError,
-    JobKind, JobSnapshot, JobStateView, ModDetailView, ModView, NameProblemView, RegistryView, SearchGroupView,
-    SettingsView, SetupView, UrlCheckView, VersionView, WorldLocationView, WorldSourceView,
+    CheckView, DataModeView, DataOverviewView, DownloadsView, FaultKindView, FaultView, InstanceView, JobKind,
+    JobSnapshot, JobStateView, ModDetailView, ModView, NameProblemView, RegistryView, SearchGroupView, SettingsView,
+    SetupView, UrlCheckView, VersionView, WorldLocationView, WorldSourceView,
 };
 use amml_gdk::{
-    CancelFlag, CatalogueReader, Channel, DeveloperMode, DiskSpace, GameVersion, GdkError, Installer, JournalStore,
-    PackageInventory, VersionStore, WindowsPackageInventory, WindowsProcessInspector,
+    CancelFlag, CatalogueReader, Channel, DeveloperMode, DiskSpace, DownloadProgress, GameVersion, GdkError, Installer,
+    JournalStore, PackageInventory, VersionStore, WindowsPackageInventory, WindowsProcessInspector,
 };
 use amml_launcher_core::{
-    Adopter, CoreProgress, CoreServices, DataMigrator, InstanceApi, InstanceGuard, InstanceReader, LauncherBlockStore,
-    LauncherError, LazyInstaller, Manager, ModId, ModSource, NewInstanceRequest, ProcessGameStarter, RegistryCache,
-    RegistryClient, RegistryRef, RegistrySet, RegistryStatus, SettingsStore, UpdateChecker, UpdateStatus,
-    UreqHttpFetch, UrlInspector, WindowsWindowProbe,
+    Adopter, AmmlLevel, CopyMode, CopyPlan, CoreProgress, CoreServices, DataMigrator, InstanceApi, InstanceGuard,
+    InstanceReader, LauncherBlockStore, LauncherError, LazyInstaller, Manager, ModId, ModSource, NewInstanceRequest,
+    ProcessGameStarter, RegistryCache, RegistryClient, RegistryRef, RegistrySet, RegistryStatus, SettingsStore,
+    UpdateChecker, UpdateStatus, UreqHttpFetch, UrlInspector, WindowsWindowProbe,
 };
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -44,6 +46,7 @@ impl<S: JobSink> LauncherSession<S> {
             manager: ManagerSlot::new(),
             registries: std::sync::Mutex::new(Vec::new()),
             updates: std::sync::Mutex::new(BTreeMap::new()),
+            refresher: super::RegistryRefresher::new(),
             startup: std::sync::Mutex::new(None),
             last_job: std::sync::Mutex::new(None),
             services,
@@ -267,42 +270,65 @@ impl<S: JobSink> LauncherSession<S> {
         fault
     }
 
-    // ---- catalogue calls: they answer `Busy` while a job holds the manager ----
+    // the views of the last registry refresh; no network
+    pub fn registry_views(&self) -> Vec<RegistryView> {
+        Locked::of(&self.state.registries).clone()
+    }
 
-    // Asks every registry again and counts the updates waiting in each instance.
+    // Asks every registry again on a catalogue of its own and counts the updates waiting in each instance. It never
+    // takes the manager, so it runs while a job runs; a request while a refresh runs gets that refresh's views. The
+    // views go to the sink as well.
     pub fn refresh_registries(&self) -> Result<Vec<RegistryView>, BridgeError> {
-        let paths = self.state.services.paths().clone();
-        let views = self.state.try_manager(|manager| {
-            manager.catalogue_mut().registries_mut().refresh_all();
-            let now = SystemTime::now();
-            let views: Vec<RegistryView> = manager
-                .catalogue_mut()
-                .registries_mut()
-                .clients_mut()
-                .iter()
-                .map(|client| {
-                    let fetched = matches!(client.status(), RegistryStatus::Ok).then_some(now);
-                    ViewMapper::registry(client.registry(), client.root(), client.status(), None, fetched)
-                })
-                .collect();
-            let mut counts = BTreeMap::new();
-            for listed in InstanceReader::list(&paths) {
-                let Ok(state) = listed else {
-                    continue;
-                };
-                if !state.managed {
-                    continue;
-                }
-                let rows = manager.check_updates(&state.name).unwrap_or_default();
-                let waiting = rows.iter().filter(|row| row.status == UpdateStatus::Available).count();
-                counts.insert(state.name, waiting as u32);
+        let state = &self.state;
+        let mut failure = None;
+        let views = state.refresher.refresh(|| match Self::fetch_registries(state) {
+            Ok(views) => views,
+            Err(error) => {
+                curia::warn!("the registries were not refreshed", { error: error.to_string() });
+                failure = Some(error);
+                // a request that joined this refresh keeps the last list
+                Locked::of(&state.registries).clone()
             }
-            *Locked::of(&self.state.updates) = counts;
-            Ok(views)
-        })?;
-        *Locked::of(&self.state.registries) = views.clone();
+        });
+        match failure {
+            Some(error) => Err(error),
+            None => Ok(views),
+        }
+    }
+
+    fn fetch_registries(state: &SessionState<S>) -> Result<Vec<RegistryView>, BridgeError> {
+        let paths = state.services.paths();
+        let mut catalogue = state.services.catalogue()?;
+        catalogue.registries_mut().refresh_all();
+        let now = SystemTime::now();
+        let views: Vec<RegistryView> = catalogue
+            .registries_mut()
+            .clients_mut()
+            .iter()
+            .map(|client| {
+                let fetched = matches!(client.status(), RegistryStatus::Ok).then_some(now);
+                ViewMapper::registry(client.registry(), client.root(), client.status(), None, fetched)
+            })
+            .collect();
+        let mut counts = BTreeMap::new();
+        for listed in InstanceReader::list(paths) {
+            let Ok(instance) = listed else {
+                continue;
+            };
+            if !instance.managed {
+                continue;
+            }
+            let rows = UpdateChecker::check_fetched(&mut catalogue, &instance);
+            let waiting = rows.iter().filter(|row| row.status == UpdateStatus::Available).count();
+            counts.insert(instance.name, waiting as u32);
+        }
+        *Locked::of(&state.updates) = counts;
+        *Locked::of(&state.registries) = views.clone();
+        state.runner.sink().registries(&views);
         Ok(views)
     }
+
+    // ---- catalogue calls: they answer `Busy` while a job holds the manager ----
 
     pub fn mods(&self, name: &str) -> Result<Vec<ModView>, BridgeError> {
         let paths = self.state.services.paths().clone();
@@ -333,8 +359,16 @@ impl<S: JobSink> LauncherSession<S> {
             client.refresh();
             let releases = client.root().map(|root| root.amml.versions.clone()).unwrap_or_default();
             let api = releases.iter().max_by_key(|release| release.api_version).map(|release| release.api_version);
+            // a new instance gets the newest release of the newest API, so that release sets the AMML level
+            let level = releases
+                .iter()
+                .filter_map(|release| {
+                    Some((release.api_version, amml_registry::ReleaseVersion::parse(&release.version).ok()?))
+                })
+                .max()
+                .map_or(AmmlLevel::Unknown, |(_, version)| AmmlLevel::Release(version));
             let defaults = api
-                .and_then(|api| manager.catalogue_mut().defaults_for(api).ok())
+                .and_then(|api| manager.catalogue_mut().defaults_for(api, &level).ok())
                 .map(|found| found.mods.len() as u32)
                 .unwrap_or(0);
             Ok((releases, defaults))
@@ -356,16 +390,18 @@ impl<S: JobSink> LauncherSession<S> {
     // instance, so the caller names neither.
 
     pub fn catalog_layout(&self, name: &str, registry_id: &str) -> Result<CatalogLayoutView, BridgeError> {
-        self.catalog(name, |set, api, _| CatalogService::layout(set, registry_id, api))
+        self.catalog(name, |set, api, _, _| CatalogService::layout(set, registry_id, api))
     }
 
     // `page` counts from 1
     pub fn catalog_page(&self, name: &str, registry_id: &str, page: u32) -> Result<Vec<CardView>, BridgeError> {
-        self.catalog(name, |set, api, installed| CatalogService::page(set, registry_id, api, page, installed))
+        self.catalog(name, |set, api, level, installed| {
+            CatalogService::page(set, registry_id, api, level, page, installed)
+        })
     }
 
     pub fn catalog_search(&self, name: &str, query: &str) -> Result<Vec<SearchGroupView>, BridgeError> {
-        self.catalog(name, |set, api, installed| Ok(CatalogService::search(set, query, api, installed)))
+        self.catalog(name, |set, api, level, installed| Ok(CatalogService::search(set, query, api, level, installed)))
     }
 
     pub fn catalog_sorted(
@@ -374,11 +410,13 @@ impl<S: JobSink> LauncherSession<S> {
         registry_id: &str,
         sort: CatalogSortView,
     ) -> Result<Option<Vec<CardView>>, BridgeError> {
-        self.catalog(name, |set, api, installed| CatalogService::sorted(set, registry_id, api, sort, installed))
+        self.catalog(name, |set, api, level, installed| {
+            CatalogService::sorted(set, registry_id, api, level, sort, installed)
+        })
     }
 
     pub fn catalog_detail(&self, name: &str, registry_id: &str, id: &str) -> Result<ModDetailView, BridgeError> {
-        self.catalog(name, |set, api, _| CatalogService::detail(set, registry_id, id, api))
+        self.catalog(name, |set, api, level, _| CatalogService::detail(set, registry_id, id, api, level))
     }
 
     // Downloads the zip of a URL and says what it is. The file stays in the downloads folder for the install.
@@ -404,7 +442,12 @@ impl<S: JobSink> LauncherSession<S> {
     fn catalog<R>(
         &self,
         name: &str,
-        f: impl FnOnce(&mut RegistrySet<UreqHttpFetch>, u32, &[(String, Option<String>)]) -> Result<R, BridgeError>,
+        f: impl FnOnce(
+            &mut RegistrySet<UreqHttpFetch>,
+            u32,
+            &AmmlLevel,
+            &[(String, Option<String>)],
+        ) -> Result<R, BridgeError>,
     ) -> Result<R, BridgeError> {
         let paths = self.state.services.paths().clone();
         self.state.try_manager(|manager| {
@@ -414,7 +457,8 @@ impl<S: JobSink> LauncherSession<S> {
                 .ok_or_else(|| BridgeError::Launcher(LauncherError::UnknownApi(name.to_string())))?;
             let installed: Vec<(String, Option<String>)> =
                 state.mods.iter().map(|held| (held.id.as_str(), held.version.clone())).collect();
-            f(manager.catalogue_mut().registries_mut(), api, &installed)
+            let level = AmmlLevel::of(&state.amml);
+            f(manager.catalogue_mut().registries_mut(), api, &level, &installed)
         })
     }
 
@@ -458,23 +502,26 @@ impl<S: JobSink> LauncherSession<S> {
         self.state.unless_busy(|| Ok(VersionStore::new(self.state.services.paths().gdk().clone()).remove(&game)?))
     }
 
-    // Adds a registry after asking it once; a registry that does not answer as one is refused.
+    // Adds a registry after asking it once; a registry that does not answer as one is refused. The check runs on a
+    // client of its own; the cache lock keeps its cache write safe.
     pub fn add_registry(&self, url: &str) -> Result<(), BridgeError> {
         let services = &self.state.services;
         let registry = RegistryRef::parse(url)?;
-        // the check writes the registry cache, so it runs while the manager lock is held
-        self.state.try_manager(|_| {
-            let mut client = RegistryClient::new(
-                registry.clone(),
-                UreqHttpFetch::new(UreqHttpFetch::agent()),
-                RegistryCache::new(services.paths().registry_cache(), RegistryCache::BUDGET),
-            );
-            match client.refresh() {
-                RegistryStatus::Ok | RegistryStatus::Stale { .. } => Ok(()),
-                RegistryStatus::Offline => Err(BridgeError::Unavailable(registry.base.clone())),
-                RegistryStatus::Broken { reason } => Err(amml_launcher_core::LauncherError::BadSettings(reason).into()),
+        if self.state.runner.is_busy() {
+            return Err(BridgeError::Busy);
+        }
+        let mut client = RegistryClient::new(
+            registry.clone(),
+            UreqHttpFetch::new(UreqHttpFetch::agent()),
+            RegistryCache::new(services.paths().registry_cache(), RegistryCache::BUDGET, services.cache_lock()),
+        );
+        match client.refresh() {
+            RegistryStatus::Ok | RegistryStatus::Stale { .. } => {}
+            RegistryStatus::Offline => return Err(BridgeError::Unavailable(registry.base.clone())),
+            RegistryStatus::Broken { reason } => {
+                return Err(amml_launcher_core::LauncherError::BadSettings(reason).into());
             }
-        })?;
+        }
         // the settings are saved first; the manager is rebuilt from them, so a reader never rebuilds it from the old list
         self.state.unless_busy(|| {
             let store = SettingsStore::new(services.paths().clone());
@@ -484,6 +531,7 @@ impl<S: JobSink> LauncherSession<S> {
                 store.save(&settings)?;
             }
             self.state.reset_manager();
+            self.state.refresher.settings_changed();
             Ok(())
         })
     }
@@ -498,6 +546,7 @@ impl<S: JobSink> LauncherSession<S> {
             settings.registries.retain(|registry| registry.base != base);
             store.save(&settings)?;
             self.state.reset_manager();
+            self.state.refresher.settings_changed();
             Ok(())
         })
     }
@@ -619,13 +668,18 @@ impl<S: JobSink> LauncherSession<S> {
         let state = Arc::clone(&self.state);
         // the busy flag is set under the guard, so a call that checked for a job before it cannot act after it
         let _guard = Locked::of(&self.state.start_guard);
-        let id = self.state.runner.start(kind.clone(), steps, move |progress| state.run_job(progress, work))?;
+        let id = match work {
+            PlannedWork::Manager(work) => {
+                self.state.runner.start(kind.clone(), steps, move |progress| state.run_job(progress, work))?
+            }
+            PlannedWork::Plain(work) => self.state.runner.start(kind.clone(), steps, work)?,
+        };
         *Locked::of(&self.state.last_job) = Some(kind);
         Ok(id)
     }
 
     // Checks what can be checked before a job starts, so a bad request changes nothing.
-    fn plan(&self, kind: &JobKind) -> Result<(InstallSteps, JobWork), BridgeError> {
+    fn plan(&self, kind: &JobKind) -> Result<(InstallSteps, PlannedWork), BridgeError> {
         let services = &self.state.services;
         let paths = services.paths().clone();
         match kind.clone() {
@@ -650,14 +704,14 @@ impl<S: JobSink> LauncherSession<S> {
                     }
                     Ok(())
                 });
-                Ok((InstallSteps::new(needed, Vec::new()), work))
+                Ok((InstallSteps::new(needed, Vec::new()), PlannedWork::Manager(work)))
             }
             JobKind::UpdateAmml { name } => {
                 let work: JobWork = Box::new(move |manager, progress| {
                     manager.update_amml(&name, None, &mut |event| progress(event))?;
                     Ok(())
                 });
-                Ok((InstallSteps::for_amml(), work))
+                Ok((InstallSteps::for_amml(), PlannedWork::Manager(work)))
             }
             JobKind::InstallMods { name, ids } => {
                 let parsed = ids.iter().map(|id| ModId::parse(id)).collect::<Result<Vec<_>, _>>()?;
@@ -668,7 +722,7 @@ impl<S: JobSink> LauncherSession<S> {
                     }
                     Ok(())
                 });
-                Ok((InstallSteps::for_mods(ids), work))
+                Ok((InstallSteps::for_mods(ids), PlannedWork::Manager(work)))
             }
             JobKind::UpdateMods { name, ids } => {
                 let with_amml = ids.iter().any(|id| id == UpdateChecker::AMML_ID);
@@ -688,7 +742,7 @@ impl<S: JobSink> LauncherSession<S> {
                     }
                     Ok(())
                 });
-                Ok((InstallSteps::for_updates(mod_ids, with_amml), work))
+                Ok((InstallSteps::for_updates(mod_ids, with_amml), PlannedWork::Manager(work)))
             }
             JobKind::InstallUrl { name, url, consent } => {
                 let work: JobWork = Box::new(move |manager, progress| {
@@ -698,44 +752,80 @@ impl<S: JobSink> LauncherSession<S> {
                     manager.install_inspected(&name, inspection, consent)?;
                     Ok(())
                 });
-                Ok((InstallSteps::single("mod-url"), work))
+                Ok((InstallSteps::single("mod-url"), PlannedWork::Manager(work)))
             }
             JobKind::CopyWorlds { source } => {
                 let from = self.world_source_path(&source)?;
                 let data_dir = services.settings()?.data_dir(&paths);
                 let migrator = DataMigrator::new(DataMigrator::appdata_bedrock().unwrap_or_default(), paths);
-                let work: JobWork = Box::new(move |_, _| {
-                    migrator.copy(&from, &data_dir, &mut |_| {})?;
+                let work: PlainWork = Box::new(move |progress| {
+                    // the plan is built on every run: a retry must not reuse the `created` flag of an earlier run
+                    Self::copy_data(&migrator, &from, &data_dir, progress)?;
                     Ok(())
                 });
-                Ok((InstallSteps::single("worlds"), work))
+                Ok((InstallSteps::for_copy(), PlannedWork::Plain(work)))
             }
             JobKind::InstallGameInput => {
                 let input = services.game_input();
-                let work: JobWork = Box::new(move |_, progress| {
+                let work: PlainWork = Box::new(move |progress| {
                     if !input.install(&mut |event| progress(event))? {
                         curia::warn!("GameInput is still missing after the install");
                     }
                     Ok(())
                 });
-                Ok((InstallSteps::single("game-input"), work))
+                Ok((InstallSteps::single("game-input"), PlannedWork::Plain(work)))
             }
             JobKind::SetupData { source } => {
                 let from = if source == Self::SCRATCH { None } else { Some(self.world_source_path(&source)?) };
                 let data_dir = services.settings()?.data_dir(&paths);
                 let migrator = DataMigrator::new(DataMigrator::appdata_bedrock().unwrap_or_default(), paths.clone());
-                let work: JobWork = Box::new(move |_, _| {
+                let steps = InstallSteps::for_setup(from.is_some());
+                let work: PlainWork = Box::new(move |progress| {
                     // the copy comes first: a copy that fails leaves no settings file, so the first run shows again
-                    if let Some(from) = &from {
-                        migrator.copy(from, &data_dir, &mut |_| {})?;
-                    }
+                    let plan = match &from {
+                        Some(from) => Some(Self::copy_data(&migrator, from, &data_dir, progress)?),
+                        None => None,
+                    };
+                    progress(CoreProgress::SavingSettings);
                     let store = SettingsStore::new(paths.clone());
-                    store.save(&store.load()?)?;
+                    if let Err(error) = store.load().and_then(|settings| store.save(&settings)) {
+                        if let Some(plan) = &plan
+                            && let Err(undo_error) = migrator.undo(plan)
+                        {
+                            curia::warn!("the copy could not be removed", { error: undo_error.to_string() });
+                        }
+                        return Err(error.into());
+                    }
                     Ok(())
                 });
-                Ok((InstallSteps::single("setup-data"), work))
+                Ok((steps, PlannedWork::Plain(work)))
             }
         }
+    }
+
+    // Checks, measures and copies one source into the shared data folder, sending the step events. Gives the plan
+    // so the caller can undo the copy.
+    fn copy_data(
+        migrator: &DataMigrator,
+        from: &std::path::Path,
+        data_dir: &std::path::Path,
+        progress: &mut dyn FnMut(CoreProgress),
+    ) -> Result<CopyPlan, LauncherError> {
+        let mode = migrator.check(from, data_dir)?;
+        progress(CoreProgress::MeasuringData { merge: mode == CopyMode::Merge });
+        let plan = migrator.measure(from, data_dir, mode)?;
+        let detail = format!("{} → {}", plan.source.display(), plan.target.display());
+        progress(CoreProgress::CopyingData {
+            detail: detail.clone(),
+            progress: DownloadProgress { bytes_done: 0, bytes_total: plan.total_bytes },
+        });
+        migrator.copy(&plan, &mut |done, total| {
+            progress(CoreProgress::CopyingData {
+                detail: detail.clone(),
+                progress: DownloadProgress { bytes_done: done, bytes_total: total },
+            });
+        })?;
+        Ok(plan)
     }
 
     fn world_source_path(&self, id: &str) -> Result<std::path::PathBuf, BridgeError> {
@@ -746,6 +836,3 @@ impl<S: JobSink> LauncherSession<S> {
             .ok_or_else(|| BridgeError::Unavailable(id.to_string()))
     }
 }
-
-// the work of one job: it gets the manager and the progress callback
-type JobWork = Box<dyn FnOnce(&mut Manager, &mut dyn FnMut(CoreProgress)) -> Result<(), JobError> + Send>;

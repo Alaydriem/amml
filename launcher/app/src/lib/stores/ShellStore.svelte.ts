@@ -1,12 +1,13 @@
 import type { LauncherApi } from "#lib/api/LauncherApi.ts";
 import type { FaultView } from "#lib/bindings/FaultView.ts";
 import type { RegistryView } from "#lib/bindings/RegistryView.ts";
+import { RegistryFeed, type RegistryFeedEvents } from "./RegistryFeed.ts";
 import { ActivityTextSet } from "#lib/text/ActivityTextSet.ts";
 import { ShellTextSet } from "#lib/text/ShellTextSet.ts";
 
 export type ShellApi = Pick<
     typeof LauncherApi,
-    "registriesRefresh" | "settingsGet" | "aboutGet" | "checksRun" | "startupFault" | "setupGet" | "openPath"
+    "registriesGet" | "registriesRefresh" | "settingsGet" | "aboutGet" | "checksRun" | "startupFault" | "setupGet" | "openPath"
 >;
 
 // What the title bar, the status bar and the start-up banner show, for every route.
@@ -31,11 +32,13 @@ export class ShellStore {
 
     private readonly api: ShellApi;
     private readonly clock: () => number;
+    private readonly feed: RegistryFeed;
     private messageTimer: ReturnType<typeof setTimeout> | undefined;
 
-    constructor(api: ShellApi, clock: () => number = Date.now) {
+    constructor(api: ShellApi, registryEvents: RegistryFeedEvents, clock: () => number = Date.now) {
         this.api = api;
         this.clock = clock;
+        this.feed = new RegistryFeed(registryEvents, (views) => this.show(views));
     }
 
     // "/setup/checks" until the settings exist, else "/instances"
@@ -44,19 +47,17 @@ export class ShellStore {
         return setup.needed ? "/setup/checks" : "/instances";
     }
 
-    // Loads what the bars show. A part that fails stays empty; the routes still work.
+    // Loads what the bars show. A part that fails stays empty; the routes still work. The registries come from
+    // the launcher's stored list and its events; the background refresh does the asking.
     async start(): Promise<void> {
-        await Promise.all([this.loadSettings(), this.loadVersions(), this.loadStartupFault()]);
-        void this.refresh();
+        await Promise.all([this.loadSettings(), this.loadVersions(), this.loadStartupFault(), this.loadRegistries()]);
     }
 
     // asks every registry again; the title bar shows how long ago the official one answered
     async refresh(): Promise<void> {
         this.refreshing = true;
         try {
-            const views = await this.api.registriesRefresh();
-            this.registries = views;
-            this.official = views.find((view) => view.official) ?? null;
+            this.show(await this.api.registriesRefresh());
         } catch {
             // a busy launcher or a dead network leaves the last answer on screen
         } finally {
@@ -89,7 +90,21 @@ export class ShellStore {
     }
 
     dispose(): void {
+        this.feed.stopWatching();
         if (this.messageTimer !== undefined) clearTimeout(this.messageTimer);
+    }
+
+    private show(views: RegistryView[]): void {
+        this.registries = views;
+        this.official = views.find((view) => view.official) ?? null;
+    }
+
+    private async loadRegistries(): Promise<void> {
+        try {
+            await this.feed.load(() => this.api.registriesGet());
+        } catch {
+            // the bar stays empty until an event brings the list
+        }
     }
 
     private async loadSettings(): Promise<void> {

@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use amml_runtime::ModRegistry;
+use amml_runtime::{AmmlVersion, ModRegistry};
 use tempfile::tempdir;
 
 struct Folders;
@@ -246,4 +246,35 @@ fn labelled_listing_block_is_refused() {
     let reason = Manifests::refusal("listing \"x\" {\n}\n");
 
     assert!(reason.contains("`listing` takes no labels"), "{reason}");
+}
+
+#[test]
+fn reads_amml_version() {
+    let scan = Manifests::scan("amml_version = \"26.62.0\"\n");
+
+    assert_eq!(scan.mods.len(), 1);
+    assert_eq!(scan.mods[0].amml_version, Some(AmmlVersion { major: 26, minor: 62, patch: 0 }));
+}
+
+#[test]
+fn amml_version_absent_is_none() {
+    let scan = Manifests::scan("");
+
+    assert_eq!(scan.mods[0].amml_version, None);
+}
+
+#[test]
+fn amml_version_wrong_type_is_refused() {
+    let reason = Manifests::refusal("amml_version = 26\n");
+
+    assert!(reason.contains("`amml_version` has the wrong type"), "{reason}");
+}
+
+#[test]
+fn amml_version_bad_shape_is_refused() {
+    for bad in ["26.62", "v26.62.0", "26.062.0", "26.62.0.1", ""] {
+        let reason = Manifests::refusal(&format!("amml_version = \"{bad}\"\n"));
+
+        assert!(reason.contains("`amml_version`"), "{bad}: {reason}");
+    }
 }

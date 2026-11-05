@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use amml_abi::ModId;
 use amml_data::EntryId;
 
+use crate::structs::AmmlVersion;
+
 /// One validated `amml.hcl`: a mod folder, the DLL it loads and the entries it needs.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ModSpec {
@@ -15,6 +17,8 @@ pub struct ModSpec {
     pub api_version: u32,
     /// The release version the mod publishes, when its manifest carries one.
     pub version: Option<String>,
+    /// The lowest AMML release the mod accepts, when its manifest names one.
+    pub amml_version: Option<AmmlVersion>,
     /// Entry ids the mod needs; used for the coverage log line.
     pub entries: Vec<EntryId>,
 }

@@ -1,5 +1,5 @@
 use super::FakeHttp;
-use amml_launcher_core::{RegistryCache, RegistryClient, RegistryRef};
+use amml_launcher_core::{CacheLock, RegistryCache, RegistryClient, RegistryRef};
 use amml_registry::{AmmlSection, JsonText, Listing, ModDocument, ModRelease, TreeBuilder};
 use std::path::Path;
 
@@ -36,6 +36,7 @@ impl RegistryFixture {
                 sha256: "ab".repeat(32),
                 size,
                 published: published.to_string(),
+                min_amml: None,
             }],
         }
     }
@@ -52,9 +53,19 @@ impl RegistryFixture {
 
     // serves the registry at `base` and returns a client for it
     pub fn serve(base: &str, documents: &[ModDocument], cache: &Path) -> (RegistryClient<FakeHttp>, FakeHttp) {
-        let http = FakeHttp::new();
         let amml = AmmlSection { repo: "alaydriem/amml".to_string(), versions: Vec::new() };
-        let tree = TreeBuilder::build("Test registry", Self::NOW, &amml, documents).unwrap();
+        Self::serve_with(base, documents, &amml, cache)
+    }
+
+    // the same, with AMML releases in the root
+    pub fn serve_with(
+        base: &str,
+        documents: &[ModDocument],
+        amml: &AmmlSection,
+        cache: &Path,
+    ) -> (RegistryClient<FakeHttp>, FakeHttp) {
+        let http = FakeHttp::new();
+        let tree = TreeBuilder::build("Test registry", Self::NOW, amml, documents).unwrap();
         for (path, bytes) in tree.files {
             http.put(format!("{base}{path}"), bytes);
         }
@@ -65,7 +76,7 @@ impl RegistryFixture {
         let client = RegistryClient::new(
             RegistryRef::new(base.to_string()),
             http.clone(),
-            RegistryCache::new(cache.to_path_buf(), RegistryCache::BUDGET),
+            RegistryCache::new(cache.to_path_buf(), RegistryCache::BUDGET, CacheLock::new()),
         );
         (client, http)
     }

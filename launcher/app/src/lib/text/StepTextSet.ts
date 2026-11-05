@@ -45,6 +45,14 @@ export class StepTextSet {
                 return I18n.t("Copying worlds");
             case "game-input":
                 return I18n.t("Installing GameInput");
+            case "setup-check":
+                return I18n.t("Check the shared data folder");
+            case "setup-measure":
+                return I18n.t("Measure the worlds");
+            case "setup-copy":
+                return I18n.t("Copy into shared data");
+            case "setup-settings":
+                return I18n.t("Save launcher settings");
             case "setup-data":
                 return I18n.t("Setting up your data");
         }

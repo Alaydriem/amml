@@ -30,6 +30,7 @@ impl Samples {
             sha256: sha256.to_string(),
             size: 1000,
             published: published.to_string(),
+            min_amml: None,
         }
     }
 

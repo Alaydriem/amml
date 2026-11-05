@@ -55,6 +55,8 @@ impl<S: ReleaseSource> RegistryCli<S> {
         let store = TreeStore::new(args.tree);
         let mut document = store.load_document(&args.namespace, &args.name)?;
         let verified = self.verifier.check_mod(&repo, &args.namespace, &args.name, &args.version, &now)?;
+        // a mod that needs a newer AMML than any listed one would be unusable for every user
+        RegistryUpdater::check_min_amml(&verified.release, store.load_root()?.as_ref().map(|root| &root.amml))?;
         let (sha256, asset) = (verified.release.sha256.clone(), verified.release.asset.clone());
         let result = RegistryUpdater::add_mod(
             &mut document,
@@ -125,6 +127,7 @@ impl<S: ReleaseSource> RegistryCli<S> {
     fn lint_manifest(args: LintManifestArgs) -> Result<CliOutput, RegistryError> {
         let text = fs::read_to_string(&args.manifest)?;
         let manifest = ManifestReader::parse(&text)?;
+        ManifestReader::check_floor(&manifest)?;
         let listing = manifest.listing.ok_or_else(|| RegistryError::Listing {
             field: "listing",
             reason: "the amml.hcl has no listing block".to_string(),

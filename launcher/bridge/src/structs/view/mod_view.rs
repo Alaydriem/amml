@@ -1,4 +1,4 @@
-use super::{ModOriginView, UpdateStatusView};
+use super::{ModOriginView, NeedsAmmlView, UpdateStatusView};
 use serde::Serialize;
 use ts_rs::TS;
 
@@ -16,4 +16,6 @@ pub struct ModView {
     pub available_version: Option<String>,
     pub api: u32,
     pub update: UpdateStatusView,
+    // set when `update` is `NeedsAmml`, and when it is `Available` but a newer release needs a newer AMML
+    pub needs_amml: Option<NeedsAmmlView>,
 }

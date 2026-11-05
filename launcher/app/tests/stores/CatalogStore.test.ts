@@ -3,6 +3,7 @@ import type { CardView } from "#lib/bindings/CardView.ts";
 import type { CatalogLayoutView } from "#lib/bindings/CatalogLayoutView.ts";
 import type { RegistryView } from "#lib/bindings/RegistryView.ts";
 import { CatalogStore, type CatalogApi } from "#lib/stores/CatalogStore.svelte.ts";
+import { FakeRegistryEvents } from "../support/FakeRegistryEvents.ts";
 import { Samples } from "../support/Samples.ts";
 
 function card(id: string, registryId = "r1", overrides: Partial<CardView> = {}): CardView {
@@ -16,6 +17,7 @@ function card(id: string, registryId = "r1", overrides: Partial<CardView> = {}):
         size: 1,
         iconUrl: null,
         state: "available",
+        needsAmml: null,
         updated: "2026-10-01",
         ...overrides,
     };
@@ -38,6 +40,7 @@ function layout(registryId: string, total: number, pageSize = 10): CatalogLayout
 
 function api(overrides: Partial<CatalogApi> = {}): CatalogApi {
     return {
+        registriesGet: vi.fn(async () => [registry("r1"), registry("r2")]),
         registriesRefresh: vi.fn(async () => [registry("r1"), registry("r2")]),
         instanceGet: vi.fn(async () => Samples.instance("play")),
         catalogLayout: vi.fn(async (_name: string, registryId: string) => layout(registryId, 60)),
@@ -53,9 +56,15 @@ function api(overrides: Partial<CatalogApi> = {}): CatalogApi {
 }
 
 async function loaded(overrides: Partial<CatalogApi> = {}, navigate = vi.fn()) {
-    const store = new CatalogStore("play", api(overrides), navigate);
+    const store = new CatalogStore("play", api(overrides), navigate, new FakeRegistryEvents());
     await store.load();
     return store;
+}
+
+class FakeSettle {
+    static async turns(): Promise<void> {
+        for (let turn = 0; turn < 10; turn += 1) await Promise.resolve();
+    }
 }
 
 describe("CatalogStore", () => {
@@ -67,6 +76,24 @@ describe("CatalogStore", () => {
         expect(store.allCount).toBe(200);
         expect(store.groups()[0]?.rows.map((row) => row.id)).toEqual(["p1-a", "p1-b"]);
         expect(store.context).toEqual({ game: "1.26.60.05", amml: "26.60.1", api: "2" });
+    });
+
+    it("load reads the stored registries and opens the first one when the event brings it", async () => {
+        const events = new FakeRegistryEvents();
+        const registriesGet = vi.fn(async () => []);
+        const registriesRefresh = vi.fn(async () => []);
+        const store = new CatalogStore("play", api({ registriesGet, registriesRefresh }), vi.fn(), events);
+
+        await store.load();
+        expect(store.source).toBe("");
+        expect(registriesRefresh).not.toHaveBeenCalled();
+        events.emit([registry("r9")]);
+        await FakeSettle.turns();
+
+        expect(store.source).toBe("r9");
+        expect(store.registryViews).toHaveLength(1);
+        store.stopWatching();
+        expect(events.listeners).toBe(0);
     });
 
     it("a_failed_page_leaves_loading_and_is_asked_for_again", async () => {
@@ -253,7 +280,7 @@ describe("CatalogStore", () => {
         const navigate = vi.fn();
         const store = await loaded(
             {
-                registriesRefresh: vi.fn(async () => [registry("r1"), registry("r2", { status: "offline", modCount: null })]),
+                registriesGet: vi.fn(async () => [registry("r1"), registry("r2", { status: "offline", modCount: null })]),
                 catalogLayout: vi.fn(async (_n: string, id: string) => {
                     if (id === "r2") throw new Error("offline");
                     return layout(id, 10);

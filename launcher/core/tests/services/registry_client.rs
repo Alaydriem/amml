@@ -1,6 +1,6 @@
 use crate::support::{FakeServer, RegistryTree, Route};
 use amml_launcher_core::{
-    LauncherError, ModId, RegistryCache, RegistryClient, RegistryRef, RegistryStatus, UreqHttpFetch,
+    CacheLock, LauncherError, ModId, RegistryCache, RegistryClient, RegistryRef, RegistryStatus, UreqHttpFetch,
 };
 use amml_registry::{IndexCard, IndexPage, JsonText};
 use std::path::Path;
@@ -9,7 +9,7 @@ fn client(server_base: &str, cache_dir: &Path) -> RegistryClient<UreqHttpFetch> 
     RegistryClient::new(
         RegistryRef::new(server_base.to_string()),
         UreqHttpFetch::new(UreqHttpFetch::agent()),
-        RegistryCache::new(cache_dir.to_path_buf(), RegistryCache::BUDGET),
+        RegistryCache::new(cache_dir.to_path_buf(), RegistryCache::BUDGET, CacheLock::new()),
     )
 }
 
@@ -38,6 +38,8 @@ fn page_json(api: u32, page: u32) -> Vec<u8> {
         core: false,
         default: false,
         updated: RegistryTree::NOW.to_string(),
+        min_amml: None,
+        releases: Vec::new(),
     };
     JsonText::compact(&IndexPage { schema: 2, api_version: api, page, cards: vec![card] }).unwrap()
 }

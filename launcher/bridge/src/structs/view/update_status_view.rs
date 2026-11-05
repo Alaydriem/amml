@@ -12,4 +12,5 @@ pub enum UpdateStatusView {
     Unofficial,
     Offline,
     LocalBuild,
+    NeedsAmml,
 }

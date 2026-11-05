@@ -9,4 +9,6 @@ pub enum CardStateView {
     Available,
     Installed,
     Update,
+    // the newest release needs a newer AMML than the instance has
+    NeedsAmml,
 }

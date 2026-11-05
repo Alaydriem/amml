@@ -24,9 +24,9 @@ export interface ModResultRowProps {
 }
 
 export class ModResultRowRules {
-    /** An installed mod cannot be ticked again. An update row can. */
+    /** An installed mod cannot be ticked again, and a mod that needs a newer AMML cannot be ticked. An update row can. */
     static selectable(state: ModCardState): boolean {
-        return state !== "installed";
+        return state !== "installed" && state !== "needsAmml";
     }
 
     /** The selection after a row is ticked or cleared; ids keep their order and appear once. */

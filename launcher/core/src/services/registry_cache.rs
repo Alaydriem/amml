@@ -1,4 +1,4 @@
-use crate::{CachedFile, LauncherError, RegistryRef};
+use crate::{CacheLock, CachedFile, LauncherError, RegistryRef};
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -11,6 +11,8 @@ pub struct RegistryCache {
     budget: u64,
     // the last time stamp handed out; file times only move forward, so eviction order is exact
     clock: Mutex<SystemTime>,
+    // shared by every cache on this folder; held for a whole read, write or evict
+    lock: CacheLock,
 }
 
 impl RegistryCache {
@@ -18,8 +20,8 @@ impl RegistryCache {
     const ETAG_SUFFIX: &'static str = ".etag";
     const TEMP_SUFFIX: &'static str = ".tmp";
 
-    pub fn new(dir: PathBuf, budget: u64) -> RegistryCache {
-        RegistryCache { dir, budget, clock: Mutex::new(SystemTime::UNIX_EPOCH) }
+    pub fn new(dir: PathBuf, budget: u64, lock: CacheLock) -> RegistryCache {
+        RegistryCache { dir, budget, clock: Mutex::new(SystemTime::UNIX_EPOCH), lock }
     }
 
     // only `[A-Za-z0-9@._/-]`, no empty, `.` or `..` segment and no leading `/`
@@ -36,6 +38,7 @@ impl RegistryCache {
 
     pub fn read(&self, registry: &RegistryRef, relative: &str) -> Option<(Vec<u8>, Option<String>)> {
         let path = self.path(registry, relative).ok()?;
+        let _held = self.lock.hold();
         let bytes = std::fs::read(&path).ok()?;
         let etag_path = Self::etag_path(&path);
         let etag = std::fs::read_to_string(&etag_path).ok().filter(|text| !text.is_empty());
@@ -52,6 +55,7 @@ impl RegistryCache {
         etag: Option<&str>,
     ) -> Result<(), LauncherError> {
         let path = self.path(registry, relative)?;
+        let _held = self.lock.hold();
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }

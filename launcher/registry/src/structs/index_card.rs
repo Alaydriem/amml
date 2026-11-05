@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use super::CardRelease;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IndexCard {
     pub id: String,
@@ -12,4 +14,8 @@ pub struct IndexCard {
     pub core: bool,
     pub default: bool,
     pub updated: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_amml: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub releases: Vec<CardRelease>,
 }

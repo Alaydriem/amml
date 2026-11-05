@@ -8,7 +8,7 @@
     import { Template } from "../text/Template";
     import type { FirstRunAdoptScreenProps } from "./FirstRunAdoptScreen";
 
-    let { instances, choices, selected, text, onselect, onnext, onback }: FirstRunAdoptScreenProps = $props();
+    let { instances, choices, selected, text, busy = false, onselect, onnext, onback }: FirstRunAdoptScreenProps = $props();
 </script>
 
 <div class="amml-screen">
@@ -29,6 +29,7 @@
     </div>
     <WizardFooter
         text={{ note: text.footerNote, secondary: text.back, primary: text.next }}
+        primaryDisabled={busy}
         onsecondary={onback}
         onprimary={onnext}
     />

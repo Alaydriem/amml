@@ -322,8 +322,13 @@ impl LauncherCli {
             }
             DataCommand::Copy { source } => {
                 let data_dir = self.services.settings()?.data_dir(&self.paths);
-                let copied = migrator.copy(source, &data_dir, &mut |_| {})?;
-                Self::line(out, format!("Copied {copied} files to {}", data_dir.join("Minecraft Bedrock").display()));
+                let mode = migrator.check(source, &data_dir)?;
+                let plan = migrator.measure(source, &data_dir, mode)?;
+                migrator.copy(&plan, &mut |_, _| {})?;
+                Self::line(
+                    out,
+                    format!("Copied {} files to {}", plan.files.len(), data_dir.join("Minecraft Bedrock").display()),
+                );
             }
         }
         Ok(0)
@@ -429,6 +434,7 @@ impl LauncherCli {
             UpdateStatus::Unofficial => "unofficial",
             UpdateStatus::Offline => "offline",
             UpdateStatus::LocalBuild => "local-build",
+            UpdateStatus::NeedsAmml => "needs-amml",
         }
     }
 

@@ -294,6 +294,8 @@ impl amml_launcher_bridge::JobSink for PanicAtEnd {
     fn publish(&self, snapshot: &JobSnapshot) {
         assert!(snapshot.state == JobStateView::Running, "the sink fails on the last snapshot");
     }
+
+    fn registries(&self, _views: &[amml_launcher_bridge::RegistryView]) {}
 }
 
 #[test]
@@ -321,6 +323,8 @@ impl amml_launcher_bridge::JobSink for ProbeSink {
             self.seen.lock().unwrap().push((snapshot.clone(), runner.is_busy(), runner.snapshot()));
         }
     }
+
+    fn registries(&self, _views: &[amml_launcher_bridge::RegistryView]) {}
 }
 
 #[test]
@@ -438,6 +442,8 @@ impl amml_launcher_bridge::JobSink for SlowEndSink {
         }
         self.order.lock().unwrap().push((snapshot.id, snapshot.state));
     }
+
+    fn registries(&self, _views: &[amml_launcher_bridge::RegistryView]) {}
 }
 
 #[test]

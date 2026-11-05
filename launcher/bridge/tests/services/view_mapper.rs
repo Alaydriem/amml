@@ -1,7 +1,9 @@
 use crate::support::Samples;
-use amml_launcher_bridge::{DataModeView, ModOriginView, RegistryStatusView, UnixMillis, UpdateStatusView, ViewMapper};
+use amml_launcher_bridge::{
+    DataModeView, ModOriginView, NeedsAmmlView, RegistryStatusView, UnixMillis, UpdateStatusView, ViewMapper,
+};
 use amml_launcher_core::{
-    LauncherSettings, ModSource, RegistryRef, RegistryStatus, RunningGame, UpdateRow, UpdateStatus,
+    LauncherSettings, ModSource, NeedsAmml, RegistryRef, RegistryStatus, RunningGame, UpdateRow, UpdateStatus,
 };
 use amml_registry::{AmmlSection, ApiSummary, FileRef, IndexSummary, RegistryRoot};
 use std::collections::BTreeMap;
@@ -14,6 +16,7 @@ fn row(id: &str, status: UpdateStatus, available: Option<&str>) -> UpdateRow {
         available: available.map(str::to_string),
         status,
         api_change: false,
+        needs_amml: None,
     }
 }
 
@@ -194,4 +197,32 @@ fn instance_view_carries_amml_local() {
 
     assert!(local.amml_local);
     assert!(!release.amml_local);
+}
+
+#[test]
+fn update_status_maps_needs_amml() {
+    assert_eq!(ViewMapper::update_status(UpdateStatus::NeedsAmml), UpdateStatusView::NeedsAmml);
+}
+
+#[test]
+fn mod_view_carries_needs_amml() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut state = Samples::instance(dir.path(), "play");
+    state.mods.push(Samples::installed("@alaydriem/peek", Some("1.0.0"), ModSource::Registry("https://r/".into())));
+    state.mods.push(Samples::installed("@alaydriem/calm", Some("1.0.0"), ModSource::Registry("https://r/".into())));
+    let mut blocked = row("@alaydriem/peek", UpdateStatus::NeedsAmml, None);
+    blocked.needs_amml = Some(NeedsAmml { version: "26.62.0".to_string(), game: Some("1.26.10".to_string()) });
+    let mut later = row("@alaydriem/calm", UpdateStatus::Available, Some("1.1.0"));
+    later.needs_amml = Some(NeedsAmml { version: "26.63.0".to_string(), game: None });
+
+    let views = ViewMapper::mods(&state, &[blocked, later], &[]);
+
+    assert_eq!(views[0].needs_amml, None);
+    assert_eq!(views[1].update, UpdateStatusView::NeedsAmml);
+    assert_eq!(
+        views[1].needs_amml,
+        Some(NeedsAmmlView { version: "26.62.0".to_string(), game: Some("1.26.10".to_string()) })
+    );
+    assert_eq!(views[2].update, UpdateStatusView::Available);
+    assert_eq!(views[2].needs_amml, Some(NeedsAmmlView { version: "26.63.0".to_string(), game: None }));
 }

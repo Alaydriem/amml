@@ -24,6 +24,7 @@
         onback,
         oncancel,
         onretry,
+        onother,
         onshowlog,
     }: InstallProgressScreenProps = $props();
 
@@ -32,10 +33,17 @@
 </script>
 
 <div class="amml-screen">
-    <div class="amml-screen__back">
-        <BackLink label={text.back} onclick={onback} />
-    </div>
+    {#if text.back && onback}
+        <div class="amml-screen__back">
+            <BackLink label={text.back} onclick={onback} />
+        </div>
+    {/if}
     <div class="amml-screen__title">
+        {#if text.eyebrow}
+            <div class="amml-screen__eyebrow">
+                <Eyebrow size="lg">{text.eyebrow}</Eyebrow>
+            </div>
+        {/if}
         <PageHeader>
             {#snippet title()}
                 <RichText parts={Template.parts(failed ? text.failedTitle : text.title, { name })} />
@@ -57,6 +65,9 @@
                 {/if}
                 <div class="amml-screen__actions">
                     <Button variant="primary" onclick={onretry}>{text.retry}</Button>
+                    {#if text.other && onother}
+                        <Button variant="secondary" onclick={onother}>{text.other}</Button>
+                    {/if}
                     <Button variant="ghost" onclick={onshowlog}>{text.showLog}</Button>
                 </div>
             {:else}
@@ -67,7 +78,9 @@
                     <RichText parts={Template.parts(text.warning)} />
                 </Callout>
                 <div class="amml-screen__actions">
-                    <Button variant="secondary" onclick={oncancel}>{text.cancel}</Button>
+                    {#if text.cancel && oncancel}
+                        <Button variant="secondary" onclick={oncancel}>{text.cancel}</Button>
+                    {/if}
                     <Button variant="ghost" onclick={onshowlog}>{text.showLog}</Button>
                 </div>
             {/if}
@@ -90,6 +103,10 @@
 
     .amml-screen__title {
         padding-bottom: 22px;
+    }
+
+    .amml-screen__eyebrow {
+        padding-bottom: 10px;
     }
 
     .amml-screen__columns {

@@ -4,7 +4,7 @@ import type { MenuItem } from "../primitives/Menu";
 import type { ModRowControls } from "./ModRowControls";
 
 /** Which cell the right-hand state column of a row shows. */
-export type ModRowState = "current" | "update" | "unofficial";
+export type ModRowState = "current" | "update" | "unofficial" | "blocked";
 
 /** Text of one row. `toggleLabel` and `menuLabel` are templates with a `{title}` slot. */
 export interface ModTableRowText {
@@ -69,8 +69,12 @@ export class ModTableRowRules {
         return ModTableRowRules.isNewer(mod.availableVersion, mod.installedVersion);
     }
 
-    /** A mod from a URL is unofficial and gets no update check. Otherwise the row shows an update or none. */
+    /**
+     * A mod with a blocked note shows no update. A mod from a URL is unofficial and gets no update check.
+     * Otherwise the row shows an update or none.
+     */
     static state(mod: InstalledMod): ModRowState {
+        if (mod.blockedNote !== undefined) return "blocked";
         if (mod.origin === "url") return "unofficial";
         return ModTableRowRules.hasUpdate(mod) ? "update" : "current";
     }

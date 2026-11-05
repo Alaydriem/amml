@@ -62,3 +62,15 @@ describe("ModTable", () => {
         expect(screen.getByRole("table", { name: "Mods in this instance" })).toBeInTheDocument();
     });
 });
+
+describe("ModTableRules.updateCount local build", () => {
+    it("does not count a local-build row, which Update all does not replace", () => {
+        const local = {
+            ...ModFixtures.coreLoader,
+            installedVersion: "26.60.5+local",
+            availableVersion: "26.60.5",
+            localBuild: true,
+        };
+        expect(ModTableRules.updateCount([local, ModFixtures.zoom])).toBe(0);
+    });
+});

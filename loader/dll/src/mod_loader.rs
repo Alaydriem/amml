@@ -1,11 +1,19 @@
+use std::sync::LazyLock;
+
 use amml_abi::{AMML_API_VERSION, AmmlModInfo, AmmlStatus, AmmlStr, ModId};
 use amml_data::EntryId;
-use amml_runtime::{ModRegistry, ModSpec};
+use amml_runtime::{AmmlVersion, ModRegistry, ModSpec};
 
 use crate::{
     Boundary, Callback, CurrentMod, Library, LoaderLog, LoaderState, ModExports, ModLoadError, ModPhase, ModRecord,
     ModReport,
 };
+
+// A workspace version that does not parse panics on first use; the package-version test catches this in CI.
+#[allow(clippy::expect_used)]
+static LOADER_AMML: LazyLock<AmmlVersion> = LazyLock::new(|| {
+    AmmlVersion::parse(env!("CARGO_PKG_VERSION")).expect("the workspace version must look like X.Y.Z; fix Cargo.toml")
+});
 
 /// Loads, enables, disables and unloads mod DLLs.
 ///
@@ -21,6 +29,11 @@ pub struct ModLoader {
 impl ModLoader {
     pub fn new(state: &'static LoaderState) -> Self {
         Self { state }
+    }
+
+    /// The AMML release of this loader.
+    pub fn amml_version() -> AmmlVersion {
+        *LOADER_AMML
     }
 
     /// Maps each mod DLL and calls `amml_mod_load`, in the order of `specs`.
@@ -100,7 +113,9 @@ impl ModLoader {
 
     fn phase_for(error: &ModLoadError) -> ModPhase {
         match error {
-            ModLoadError::VersionMismatch { .. } | ModLoadError::OlderMod { .. } => ModPhase::Refused,
+            ModLoadError::VersionMismatch { .. } | ModLoadError::AmmlTooOld { .. } | ModLoadError::OlderMod { .. } => {
+                ModPhase::Refused
+            }
             ModLoadError::Call { status, .. } if *status == AmmlStatus::VERSION_MISMATCH => ModPhase::Refused,
             _ => ModPhase::Failed,
         }
@@ -108,6 +123,11 @@ impl ModLoader {
 
     // On failure the index is present once the mod has a record, so its hooks can be removed.
     fn try_load(&self, spec: &ModSpec) -> Result<usize, (Option<usize>, ModLoadError)> {
+        if let Some(needs) = spec.amml_version
+            && needs > *LOADER_AMML
+        {
+            return Err((None, ModLoadError::AmmlTooOld { needs, loader: *LOADER_AMML }));
+        }
         if spec.api_version > AMML_API_VERSION {
             let error = ModLoadError::VersionMismatch { needs: spec.api_version, loader: AMML_API_VERSION };
             return Err((None, error));

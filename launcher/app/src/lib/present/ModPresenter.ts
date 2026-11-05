@@ -2,6 +2,7 @@ import type { ModView } from "#lib/bindings/ModView.ts";
 import type { RegistryView } from "#lib/bindings/RegistryView.ts";
 import type { ModNoteText } from "#lib/text/ModNoteTextSet.ts";
 import type { InstalledMod, ModOrigin } from "@amml/launcher-kit";
+import { NeedsAmmlNote } from "./NeedsAmmlNote.ts";
 
 // Turns a mod's facts into the kit's `InstalledMod` model.
 export class ModPresenter {
@@ -23,6 +24,10 @@ export class ModPresenter {
             availableVersion: hasAvailable ? (view.availableVersion ?? undefined) : undefined,
             note: ModPresenter.noteOf(view, registry, notes),
             localBuild,
+            blockedNote:
+                view.update === "needsAmml" && view.needsAmml ? NeedsAmmlNote.blocked(view.needsAmml, notes) : undefined,
+            laterNote:
+                view.update === "available" && view.needsAmml ? NeedsAmmlNote.later(view.needsAmml, notes) : undefined,
         };
     }
 

@@ -106,6 +106,10 @@ export class LauncherApi {
         return LauncherApi.call("catalog_detail", { name, registryId, id });
     }
 
+    static registriesGet(): Promise<RegistryView[]> {
+        return LauncherApi.call("registries_get");
+    }
+
     static registriesRefresh(): Promise<RegistryView[]> {
         return LauncherApi.call("registries_refresh");
     }

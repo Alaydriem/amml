@@ -40,7 +40,7 @@
     <div class="amml-instance-row__update">
         {#if updateLabel}
             <Pill tone="brand" dot tint>{updateLabel}</Pill>
-        {:else}
+        {:else if !instance.ammlLocal}
             <StatusDot tone="ok" size="sm">{text.upToDate}</StatusDot>
         {/if}
     </div>

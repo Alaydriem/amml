@@ -134,3 +134,22 @@ describe("ModTableRow local build", () => {
         expect(screen.queryByText(text.localBuild)).toBeNull();
     });
 });
+
+describe("ModTableRow blocked note", () => {
+    it("mod_table_row_blocked_note_hides_update", () => {
+        const blocked = { ...modManager, blockedNote: "Needs AMML 26.62.0" };
+        const { container } = render(ModTableRow, { mod: blocked, text, menuItems });
+
+        expect(screen.getByText("Needs AMML 26.62.0")).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: text.update })).toBeNull();
+        expect(container.querySelector(".amml-mod-row--blocked")).not.toBeNull();
+        expect(screen.queryByText(text.upToDate)).toBeNull();
+    });
+
+    it("keeps the update action next to a later-release note", () => {
+        render(ModTableRow, { mod: { ...modManager, laterNote: "Later release needs AMML 26.62.0" }, text, menuItems });
+
+        expect(screen.getByText("Later release needs AMML 26.62.0")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: text.update })).toBeInTheDocument();
+    });
+});

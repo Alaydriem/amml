@@ -22,10 +22,12 @@ import {
     type RegistrySource,
     type ResultGroup,
 } from "@amml/launcher-kit";
+import { RegistryFeed, type RegistryFeedEvents } from "./RegistryFeed.ts";
 import type { Navigate } from "./Navigate.ts";
 
 export type CatalogApi = Pick<
     typeof LauncherApi,
+    | "registriesGet"
     | "registriesRefresh"
     | "instanceGet"
     | "catalogLayout"
@@ -81,23 +83,36 @@ export class CatalogStore {
     private readonly api: CatalogApi;
     private readonly navigate: Navigate;
     private readonly inFlight = new Set<string>();
+    private readonly feed: RegistryFeed;
 
-    constructor(name: string, api: CatalogApi, navigate: Navigate) {
+    constructor(name: string, api: CatalogApi, navigate: Navigate, registryEvents: RegistryFeedEvents) {
         this.name = name;
         this.api = api;
         this.navigate = navigate;
+        this.feed = new RegistryFeed(registryEvents, (views) => this.follow(views));
     }
 
-    // Reads the registries and the instance, and opens the first registry.
+    // Reads the stored registries and the instance, and opens the first registry. An event with a newer list
+    // replaces the read, and opens the first registry if none is open yet.
     async load(): Promise<void> {
         try {
-            this.registryViews = await this.api.registriesRefresh();
+            await this.feed.load(() => this.api.registriesGet());
             this.instance = await this.api.instanceGet(this.name);
             const first = this.registryViews[0];
             if (first && this.source === "") await this.chooseSource(first.id);
         } catch (error) {
             this.fault = ApiFault.of(error);
         }
+    }
+
+    stopWatching(): void {
+        this.feed.stopWatching();
+    }
+
+    private follow(views: RegistryView[]): void {
+        this.registryViews = views;
+        const first = views[0];
+        if (first && this.source === "" && this.instance !== null) void this.chooseSource(first.id);
     }
 
     // the rows to draw, in the kit's model
