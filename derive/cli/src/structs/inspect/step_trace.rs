@@ -36,9 +36,11 @@ impl StepTrace {
             Step::SlotOf { vtable } => format!("slot_of {vtable}"),
             Step::Add { value } => format!("add {value}"),
             Step::MemberDisplacement { index, local_at } => format!("member_displacement {index} local_at {local_at}"),
-            Step::FunctionStartOf | Step::ReadPointer | Step::DisplacementToSlot | Step::Alternative => {
-                step.name().to_string()
-            }
+            Step::FunctionStartOf
+            | Step::VtableHolding
+            | Step::ReadPointer
+            | Step::DisplacementToSlot
+            | Step::Alternative => step.name().to_string(),
         }
     }
 

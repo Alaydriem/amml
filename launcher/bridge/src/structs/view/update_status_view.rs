@@ -11,4 +11,5 @@ pub enum UpdateStatusView {
     NotListed,
     Unofficial,
     Offline,
+    LocalBuild,
 }

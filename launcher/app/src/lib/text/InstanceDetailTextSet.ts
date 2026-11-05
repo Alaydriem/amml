@@ -22,6 +22,7 @@ export class InstanceDetailTextSet {
                 upToDate: I18n.t("Up to date"),
                 update: I18n.t("Update"),
                 unofficial: I18n.t("Unofficial"),
+                localBuild: I18n.t("Local build"),
                 noVersion: I18n.tc("separator", "—"),
                 toggleLabel: I18n.t("Turn {title} on or off"),
                 menuLabel: I18n.t("Actions for {title}"),

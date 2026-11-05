@@ -12,6 +12,8 @@ export interface ModTableRowText {
     upToDate: string;
     update: string;
     unofficial: string;
+    /** Badge of an AMML row that holds a local build. */
+    localBuild: string;
     /** Shown in the available column when no registry lists the mod. */
     noVersion: string;
     toggleLabel: string;
@@ -57,9 +59,14 @@ export class ModTableRowRules {
         return ModTableRowRules.comparePre(a.pre, b.pre) > 0;
     }
 
-    /** True when a registry lists a newer version than the installed one. */
+    /**
+     * True when a registry lists a newer version than the installed one. A local build is never ordered against a
+     * release (the version rule drops `+local`): any listed release replaces it.
+     */
     static hasUpdate(mod: InstalledMod): boolean {
-        return mod.availableVersion !== undefined && ModTableRowRules.isNewer(mod.availableVersion, mod.installedVersion);
+        if (mod.availableVersion === undefined) return false;
+        if (mod.localBuild) return true;
+        return ModTableRowRules.isNewer(mod.availableVersion, mod.installedVersion);
     }
 
     /** A mod from a URL is unofficial and gets no update check. Otherwise the row shows an update or none. */

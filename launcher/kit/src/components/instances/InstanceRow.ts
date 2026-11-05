@@ -10,6 +10,8 @@ export interface InstanceRowText {
     launch: string;
     running: string;
     upToDate: string;
+    /** Badge next to the AMML version of a local build. */
+    localBuild: string;
     /** Update count, for example "{count} update" and "{count} updates". */
     updates: Plural;
     /** Template with `{data}` and `{activity}` slots, for example "{data} · {activity}". */

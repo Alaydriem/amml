@@ -1,4 +1,4 @@
-use amml_launcher_core::Timestamp;
+use amml_gdk::Timestamp;
 
 #[test]
 fn dates_are_right_around_leap_days_and_century_years() {

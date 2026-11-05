@@ -82,3 +82,15 @@ describe("InstanceRow", () => {
         );
     });
 });
+
+describe("InstanceRow local build", () => {
+    it("instance_row_shows_local_badge", () => {
+        mount({ ...idle, ammlVersion: "26.60.5+local", ammlLocal: true });
+        expect(screen.getByText(instanceRowEn.localBuild)).toBeTruthy();
+    });
+
+    it("shows no local badge for a release", () => {
+        mount(idle);
+        expect(screen.queryByText(instanceRowEn.localBuild)).toBeNull();
+    });
+});

@@ -27,6 +27,7 @@ impl ViewMapper {
             game: state.game.instance_name(),
             preview: state.preview,
             amml_version: state.amml.version.clone(),
+            amml_local: state.amml.local,
             amml_installed: state.amml.installed,
             mod_count: state.mods.len() as u32,
             data_mode: if own { DataModeView::Own } else { DataModeView::Shared },
@@ -112,6 +113,7 @@ impl ViewMapper {
             UpdateStatus::NotListed => UpdateStatusView::NotListed,
             UpdateStatus::Unofficial => UpdateStatusView::Unofficial,
             UpdateStatus::Offline => UpdateStatusView::Offline,
+            UpdateStatus::LocalBuild => UpdateStatusView::LocalBuild,
         }
     }
 

@@ -12,4 +12,5 @@ mod package_deployer;
 mod pe_check;
 mod robocopy_log;
 mod store_check;
+mod timestamp;
 mod version_store;

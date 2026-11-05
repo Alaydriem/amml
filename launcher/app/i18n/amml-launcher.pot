@@ -42,8 +42,8 @@ msgstr ""
 
 #: src/lib/text/InstancesTextSet.ts:14
 #: src/lib/text/InstancesTextSet.ts:15
-#: src/lib/text/InstancesTextSet.ts:41
 #: src/lib/text/InstancesTextSet.ts:42
+#: src/lib/text/InstancesTextSet.ts:43
 msgid "{count} update"
 msgid_plural "{count} updates"
 msgstr[0] ""
@@ -60,7 +60,7 @@ msgid_plural "{count} worlds"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/lib/text/InstancesTextSet.ts:44
+#: src/lib/text/InstancesTextSet.ts:45
 msgid "{data} · {activity}"
 msgstr ""
 
@@ -88,7 +88,7 @@ msgstr ""
 msgid "{hours} h {minutes} min"
 msgstr ""
 
-#: src/lib/text/InstanceDetailTextSet.ts:28
+#: src/lib/text/InstanceDetailTextSet.ts:29
 msgid "{id} · {note}"
 msgstr ""
 
@@ -249,7 +249,7 @@ msgstr ""
 msgid "Actions"
 msgstr ""
 
-#: src/lib/text/InstanceDetailTextSet.ts:27
+#: src/lib/text/InstanceDetailTextSet.ts:28
 msgid "Actions for {title}"
 msgstr ""
 
@@ -519,8 +519,8 @@ msgstr ""
 msgid "Creating the instance"
 msgstr ""
 
-#: src/lib/text/InstancesTextSet.ts:59
-#: src/lib/text/InstancesTextSet.ts:68
+#: src/lib/text/InstancesTextSet.ts:60
+#: src/lib/text/InstancesTextSet.ts:69
 msgid "Delete"
 msgstr ""
 
@@ -639,7 +639,7 @@ msgstr ""
 msgid "Game"
 msgstr ""
 
-#: src/lib/text/InstancesTextSet.ts:72
+#: src/lib/text/InstancesTextSet.ts:73
 msgid "Game {game} · {data} · {folder}"
 msgstr ""
 
@@ -757,7 +757,7 @@ msgstr ""
 
 #: src/lib/text/InstallProgressTextSet.ts:8
 #: src/lib/text/InstancesTextSet.ts:23
-#: src/lib/text/InstancesTextSet.ts:67
+#: src/lib/text/InstancesTextSet.ts:68
 #: src/lib/text/NewInstanceTextSet.ts:8
 #: src/lib/text/ShellTextSet.ts:20
 msgid "Instances"
@@ -797,7 +797,7 @@ msgid "last played {ago}"
 msgstr ""
 
 #: src/lib/text/InstancesTextSet.ts:37
-#: src/lib/text/InstancesTextSet.ts:70
+#: src/lib/text/InstancesTextSet.ts:71
 msgid "Launch"
 msgstr ""
 
@@ -837,6 +837,11 @@ msgstr ""
 msgid "local"
 msgstr ""
 
+#: src/lib/text/InstanceDetailTextSet.ts:25
+#: src/lib/text/InstancesTextSet.ts:40
+msgid "Local build"
+msgstr ""
+
 #: src/lib/text/AboutSettingsTextSet.ts:48
 msgid "Logs"
 msgstr ""
@@ -870,7 +875,7 @@ msgstr ""
 msgid "Mods in this instance"
 msgstr ""
 
-#: src/lib/text/InstancesTextSet.ts:47
+#: src/lib/text/InstancesTextSet.ts:48
 msgid "More actions"
 msgstr ""
 
@@ -1020,8 +1025,8 @@ msgstr ""
 msgid "Open"
 msgstr ""
 
-#: src/lib/text/InstancesTextSet.ts:55
-#: src/lib/text/InstancesTextSet.ts:69
+#: src/lib/text/InstancesTextSet.ts:56
+#: src/lib/text/InstancesTextSet.ts:70
 msgid "Open folder"
 msgstr ""
 
@@ -1040,11 +1045,11 @@ msgstr ""
 msgid "Or from the registry"
 msgstr ""
 
-#: src/lib/text/InstancesTextSet.ts:74
+#: src/lib/text/InstancesTextSet.ts:75
 msgid "own data folder"
 msgstr ""
 
-#: src/lib/text/InstancesTextSet.ts:46
+#: src/lib/text/InstancesTextSet.ts:47
 msgid "Own data folder"
 msgstr ""
 
@@ -1126,7 +1131,7 @@ msgstr ""
 #: src/lib/text/DialogsTextSet.ts:61
 #: src/lib/text/DownloadsSettingsTextSet.ts:15
 #: src/lib/text/GameVersionsSettingsTextSet.ts:22
-#: src/lib/text/InstanceDetailTextSet.ts:37
+#: src/lib/text/InstanceDetailTextSet.ts:38
 #: src/lib/text/RegistriesSettingsTextSet.ts:12
 msgid "Remove"
 msgstr ""
@@ -1164,7 +1169,7 @@ msgid "Review"
 msgstr ""
 
 #: src/lib/text/InstancesTextSet.ts:38
-#: src/lib/text/InstancesTextSet.ts:71
+#: src/lib/text/InstancesTextSet.ts:72
 msgid "Running"
 msgstr ""
 
@@ -1232,11 +1237,11 @@ msgstr ""
 msgid "Shared"
 msgstr ""
 
-#: src/lib/text/InstancesTextSet.ts:73
+#: src/lib/text/InstancesTextSet.ts:74
 msgid "shared data"
 msgstr ""
 
-#: src/lib/text/InstancesTextSet.ts:45
+#: src/lib/text/InstancesTextSet.ts:46
 #: src/lib/text/ShellTextSet.ts:34
 msgid "Shared data"
 msgstr ""
@@ -1245,7 +1250,7 @@ msgstr ""
 msgid "Shared folder"
 msgstr ""
 
-#: src/lib/text/InstanceDetailTextSet.ts:33
+#: src/lib/text/InstanceDetailTextSet.ts:34
 msgid "Show in folder"
 msgstr ""
 
@@ -1398,7 +1403,7 @@ msgstr ""
 msgid "Try again"
 msgstr ""
 
-#: src/lib/text/InstanceDetailTextSet.ts:26
+#: src/lib/text/InstanceDetailTextSet.ts:27
 msgid "Turn {title} on or off"
 msgstr ""
 
@@ -1546,7 +1551,7 @@ msgctxt "separator"
 msgid " · "
 msgstr ""
 
-#: src/lib/text/InstanceDetailTextSet.ts:25
+#: src/lib/text/InstanceDetailTextSet.ts:26
 msgctxt "separator"
 msgid "—"
 msgstr ""

@@ -444,3 +444,17 @@ fn a_name_with_a_leading_dot_is_refused_by_create() {
     assert_eq!(harness.installer.calls(), 0);
     assert!(!harness.paths.gdk().instances().exists());
 }
+
+#[test]
+fn install_mod_works_on_local_build_without_mods() {
+    let harness = Harness::new();
+    standard(&harness);
+    let dir = harness.paths.instance("one");
+    std::fs::create_dir_all(&dir).unwrap();
+    InstanceFolder::create(&dir, "1.26.60.05").with_amml(Some("26.60.5+local")).with_amml_api("2");
+    let mut manager = harness.manager();
+
+    let resolved = manager.catalogue_mut().resolve(&ModId::parse("@alaydriem/peek").unwrap(), 2).unwrap();
+
+    assert_eq!(manager.install_mod("one", &resolved, &mut |_| {}).unwrap(), ModChange::Installed);
+}

@@ -166,3 +166,32 @@ fn the_official_registry_is_marked_official() {
     assert!(view.official);
     assert_eq!(view.fetched, Some(0));
 }
+
+#[test]
+fn update_status_maps_local_build() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = Samples::instance(dir.path(), "play");
+    let rows = [row("alaydriem/amml", UpdateStatus::LocalBuild, Some("26.60.5"))];
+
+    let views = ViewMapper::mods(&state, &rows, &[]);
+
+    assert_eq!(views[0].update, UpdateStatusView::LocalBuild);
+    assert_eq!(views[0].available_version.as_deref(), Some("26.60.5"));
+}
+
+#[test]
+fn instance_view_carries_amml_local() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Samples::paths(dir.path());
+    let settings = LauncherSettings::new(Vec::new(), false, None);
+    let mut state = Samples::instance(dir.path(), "loc");
+    state.amml.version = Some("26.60.5+local".to_string());
+    state.amml.local = true;
+
+    let local = ViewMapper::instance(&state, &settings, &paths, &[], 0, None);
+    state.amml.local = false;
+    let release = ViewMapper::instance(&state, &settings, &paths, &[], 0, None);
+
+    assert!(local.amml_local);
+    assert!(!release.amml_local);
+}

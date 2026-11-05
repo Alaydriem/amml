@@ -37,6 +37,7 @@ export class InstancesTextSet {
             launch: I18n.t("Launch"),
             running: I18n.t("Running"),
             upToDate: I18n.t("Up to date"),
+            localBuild: I18n.t("Local build"),
             updates: {
                 one: I18n.tn("{count} update", "{count} updates", 1),
                 other: I18n.tn("{count} update", "{count} updates", 2),

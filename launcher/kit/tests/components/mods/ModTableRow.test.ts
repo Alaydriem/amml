@@ -105,3 +105,32 @@ describe("ModTableRow", () => {
         expect(screen.queryByRole("button", { name: "Update" })).toBeNull();
     });
 });
+
+describe("ModTableRow local build", () => {
+    const local = { ...coreLoader, installedVersion: "26.60.5+local", availableVersion: "26.60.5", localBuild: true };
+
+    it("local_build_with_equal_base_version_shows_update_pill", () => {
+        expect(ModTableRowRules.state(local)).toBe("update");
+        render(ModTableRow, { mod: local, text, menuItems });
+        expect(screen.getByText(text.localBuild)).toBeTruthy();
+        expect(screen.getByRole("button", { name: text.update })).toBeTruthy();
+    });
+
+    it("local_build_with_newer_release_shows_update_pill", () => {
+        const newer = { ...local, availableVersion: "26.61.0" };
+        expect(ModTableRowRules.state(newer)).toBe("update");
+    });
+
+    it("local_build_offline_shows_badge_only", () => {
+        const offline = { ...local, availableVersion: undefined };
+        expect(ModTableRowRules.state(offline)).toBe("current");
+        render(ModTableRow, { mod: offline, text, menuItems });
+        expect(screen.getByText(text.localBuild)).toBeTruthy();
+        expect(screen.queryByRole("button", { name: text.update })).toBeNull();
+    });
+
+    it("shows no local badge for a release", () => {
+        render(ModTableRow, { mod: coreLoader, text, menuItems });
+        expect(screen.queryByText(text.localBuild)).toBeNull();
+    });
+});

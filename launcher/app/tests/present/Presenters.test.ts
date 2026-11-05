@@ -22,6 +22,7 @@ const instance: InstanceView = {
     game: "1.26.60.05",
     preview: false,
     ammlVersion: null,
+    ammlLocal: false,
     ammlInstalled: true,
     modCount: 4,
     dataMode: "shared",
@@ -259,5 +260,36 @@ describe("FaultPresenter", () => {
         expect(FaultPresenter.present({ kind: "download-failed", code: null, values: {}, restored: false }).fault.primaryAction).toBe(true);
         expect(FaultPresenter.present({ kind: "install-interrupted", code: null, values: { version: "1" }, restored: false }).fault.severity).toBe("info");
         expect(FaultPresenter.present({ kind: "disk-space", code: null, values: {}, restored: false }).fault.severity).toBe("warn");
+    });
+});
+
+describe("local AMML build", () => {
+    const notes = ModNoteTextSet.build();
+
+    it("local_build_row_gets_available_version_and_badge", () => {
+        const view = mod({
+            id: ModPresenter.AMML_ID,
+            origin: "core",
+            installedVersion: "26.60.5+local",
+            availableVersion: "26.60.5",
+            update: "localBuild",
+        });
+
+        const row = ModPresenter.toInstalled(view, [official], notes);
+
+        expect(row.availableVersion).toBe("26.60.5");
+        expect(row.localBuild).toBe(true);
+    });
+
+    it("instance_row_gets_local_flag", () => {
+        const local = InstancePresenter.toInstance(
+            { ...instance, ammlVersion: "26.60.5+local", ammlLocal: true },
+            { unknownVersion: "?" },
+            0,
+        );
+        const release = InstancePresenter.toInstance({ ...instance, ammlVersion: "26.60.5" }, { unknownVersion: "?" }, 0);
+
+        expect(local.ammlLocal).toBe(true);
+        expect(release.ammlLocal).toBe(false);
     });
 });

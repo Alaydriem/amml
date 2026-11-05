@@ -22,6 +22,7 @@ pub mod remote_file;
 pub mod space_need;
 pub mod store_state;
 pub mod version_folder;
+pub mod version_json;
 
 pub use amml_paths::AmmlPaths;
 pub use cancel_flag::CancelFlag;
@@ -47,3 +48,4 @@ pub use remote_file::RemoteFile;
 pub use space_need::SpaceNeed;
 pub use store_state::StoreState;
 pub use version_folder::VersionFolder;
+pub use version_json::VersionJson;

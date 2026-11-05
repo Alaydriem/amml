@@ -189,3 +189,66 @@ fn a_mod_for_the_old_api_is_offered_its_release_for_the_new_api_after_an_amml_up
     let stuck = row(&rows, "@a/old");
     assert_eq!((stuck.status, stuck.available.as_deref()), (UpdateStatus::Unknown, None));
 }
+
+fn local_build(dir: &Path) -> amml_launcher_core::InstanceState {
+    InstanceFolder::create(dir, "1.26.60.05").with_amml(Some("26.60.5+local")).with_amml_api("2");
+    InstanceReader::read(dir).unwrap()
+}
+
+#[test]
+fn local_build_gets_local_build_status() {
+    let server = FakeServer::start(vec![]);
+    RegistryTree::publish(&server, "Reg", &amml(&[("26.60.5", 2)]), &[]);
+    let root = tempfile::tempdir().unwrap();
+    let state = local_build(&root.path().join("one"));
+    let cache = tempfile::tempdir().unwrap();
+    let downloads = tempfile::tempdir().unwrap();
+    let mut catalogue = Catalogues::catalogue(vec![Catalogues::client(&server, true, cache.path())], downloads.path());
+
+    let rows = UpdateChecker::check(&mut catalogue, &state);
+
+    let found = row(&rows, UpdateChecker::AMML_ID);
+    assert_eq!(found.status, UpdateStatus::LocalBuild);
+    assert_eq!(found.available.as_deref(), Some("26.60.5"));
+}
+
+#[test]
+fn local_build_wins_over_offline() {
+    let server = FakeServer::start(vec![]);
+    let base = server.base();
+    drop(server);
+    let root = tempfile::tempdir().unwrap();
+    let state = local_build(&root.path().join("one"));
+    let cache = tempfile::tempdir().unwrap();
+    let downloads = tempfile::tempdir().unwrap();
+    let client = Catalogues::client_for(amml_launcher_core::RegistryRef::official_at(base), cache.path());
+    let mut catalogue = Catalogues::catalogue(vec![client], downloads.path());
+
+    let rows = UpdateChecker::check(&mut catalogue, &state);
+
+    let found = row(&rows, UpdateChecker::AMML_ID);
+    assert_eq!(found.status, UpdateStatus::LocalBuild);
+    assert_eq!(found.available, None);
+}
+
+#[test]
+fn local_build_wins_over_not_listed() {
+    let server = FakeServer::start(vec![]);
+    RegistryTree::publish(
+        &server,
+        "Reg",
+        &RegistryTree::amml(vec![RegistryTree::amml_release("26.60.5", 2, &["1.26.52.3"])]),
+        &[],
+    );
+    let root = tempfile::tempdir().unwrap();
+    let state = local_build(&root.path().join("one"));
+    let cache = tempfile::tempdir().unwrap();
+    let downloads = tempfile::tempdir().unwrap();
+    let mut catalogue = Catalogues::catalogue(vec![Catalogues::client(&server, true, cache.path())], downloads.path());
+
+    let rows = UpdateChecker::check(&mut catalogue, &state);
+
+    let found = row(&rows, UpdateChecker::AMML_ID);
+    assert_eq!(found.status, UpdateStatus::LocalBuild);
+    assert_eq!(found.available, None);
+}

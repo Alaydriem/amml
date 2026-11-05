@@ -10,4 +10,6 @@ pub enum UpdateStatus {
     Unofficial,
     // the registry could not be reached and nothing is cached
     Offline,
+    // the AMML is a local build; `available` names the newest core release for the game, if any
+    LocalBuild,
 }

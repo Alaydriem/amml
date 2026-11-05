@@ -17,7 +17,7 @@ impl Samples {
             folder: root.join("instances").join(name),
             game: GameVersion::parse("1.26.60.05").unwrap(),
             preview: false,
-            amml: AmmlState { version: Some("26.60.1".to_string()), installed: true },
+            amml: AmmlState { version: Some("26.60.1".to_string()), installed: true, local: false, local_api: None },
             mods: Vec::new(),
             data_dir: None,
             managed: true,

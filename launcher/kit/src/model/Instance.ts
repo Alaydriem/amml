@@ -8,6 +8,8 @@ export interface Instance {
     swatch: Swatch;
     gameVersion: string;
     ammlVersion: string;
+    /** The AMML is a local build (`install-game`), not a core release. */
+    ammlLocal?: boolean;
     modCount: number;
     dataMode: DataMode;
     /** Folder path as shown to the user, for example `%LOCALAPPDATA%\amml\instances\1.26.60.05`. */

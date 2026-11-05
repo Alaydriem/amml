@@ -19,4 +19,5 @@ mod rtti_index;
 mod signature_probe;
 mod slot_namer;
 mod string_xref;
+mod vtable_locator;
 mod vtable_reader;

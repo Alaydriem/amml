@@ -247,3 +247,34 @@ fn an_unreadable_journal_exits_3_and_lists_the_cached_packages() {
     assert!(!run.text.contains("b.msixvc"));
     assert!(run.text.contains("reinstall Minecraft from the Microsoft Store"));
 }
+
+#[test]
+fn instance_command_writes_version_json() {
+    let rig = Rig::new();
+    let seeded = rig.root.path().join("seeded");
+    GameFolder::create(&seeded);
+    std::fs::write(seeded.join("Minecraft.Windows.exe.bak"), PeBytes::x64(8192)).unwrap();
+    std::fs::write(seeded.join("version.json"), r#"{"gameVersion": "1.26.60.05"}"#).unwrap();
+    assert_eq!(rig.run(CliCommand::Seed { instance_dir: seeded }, "").exit, CliExit::Ok);
+
+    let run = rig.run(CliCommand::Instance { version: "1.26.60.5".to_string(), name: "test-x".to_string() }, "");
+
+    assert_eq!(run.exit, CliExit::Ok, "{}", run.text);
+    let path = rig.root.path().join("amml").join("instances").join("test-x").join("version.json");
+    let document = amml_gdk::VersionJson::read(&path).unwrap();
+    assert_eq!(document.game_version().unwrap(), GameVersion::parse("1.26.60.5").unwrap());
+    assert_eq!(document.value("name"), Some(&serde_json::json!("test-x")));
+    assert_eq!(document.value("launcher"), None);
+}
+
+#[test]
+fn instance_command_writes_no_version_json_when_create_fails() {
+    let rig = Rig::new();
+    let existing = rig.root.path().join("amml").join("instances").join("taken");
+    std::fs::create_dir_all(&existing).unwrap();
+
+    let run = rig.run(CliCommand::Instance { version: "1.26.60.5".to_string(), name: "taken".to_string() }, "");
+
+    assert_eq!(run.exit, CliExit::Error, "{}", run.text);
+    assert!(!existing.join("version.json").exists());
+}

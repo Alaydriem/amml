@@ -1,5 +1,5 @@
 use crate::{
-    AmmlInstaller, Compatibility, CoreProgress, HttpFetch, InstanceGuard, InstanceHclFile, InstanceReader,
+    AmmlInstaller, Compatibility, CoreProgress, HttpFetch, InstanceApi, InstanceGuard, InstanceHclFile, InstanceReader,
     InstanceState, LauncherBlock, LauncherBlockStore, LauncherError, LauncherPaths, ModCatalogue, ModChange, ModId,
     ModInstaller, ModSource, NewInstanceOutcome, NewInstanceRequest, Patcher, ResolvedMod, UpdateChecker, UpdateRow,
     UrlInspection, VersionJsonFile,
@@ -364,18 +364,8 @@ impl<I: Installer, T: Patcher, P: ProcessInspector, H: HttpFetch> InstanceManage
 
     // The API of the AMML in the instance: from the official registry's entry for its version, else from a mod in it.
     fn instance_api(&mut self, state: &InstanceState) -> Result<u32, LauncherError> {
-        if let Some(version) = &state.amml.version
-            && let Ok(root) = self.official_root()
-            && let Some(release) = root.amml.versions.iter().find(|release| &release.version == version)
-        {
-            return Ok(release.api_version);
-        }
-        state
-            .mods
-            .iter()
-            .map(|installed| installed.api_version)
-            .find(|api| *api != 0)
-            .ok_or_else(|| LauncherError::UnknownApi(state.name.clone()))
+        let root = self.official_root().ok();
+        InstanceApi::of(state, root.as_ref()).ok_or_else(|| LauncherError::UnknownApi(state.name.clone()))
     }
 
     fn instance_folder(&self, name: &str) -> Result<PathBuf, LauncherError> {

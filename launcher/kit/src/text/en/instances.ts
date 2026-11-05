@@ -10,6 +10,7 @@ export const instanceRowEn: InstanceRowText = {
     launch: "Launch",
     running: "Running",
     upToDate: "Up to date",
+    localBuild: "Local build",
     updates: { one: "{count} update", other: "{count} updates" },
     activityLine: "{data} · {activity}",
     dataShared: "Shared data",

@@ -1,6 +1,6 @@
 use crate::{
-    Compatibility, HttpFetch, InstalledMod, InstanceState, LauncherError, ModCatalogue, ModSource, UpdateRow,
-    UpdateStatus,
+    Compatibility, HttpFetch, InstalledMod, InstanceApi, InstanceState, LauncherError, ModCatalogue, ModSource,
+    UpdateRow, UpdateStatus,
 };
 use amml_registry::ReleaseVersion;
 
@@ -22,9 +22,8 @@ impl UpdateChecker {
 
     // the API of the AMML in the instance, from the official registry's entry for its version
     fn instance_api<H: HttpFetch>(catalogue: &mut ModCatalogue<H>, state: &InstanceState) -> Option<u32> {
-        let version = state.amml.version.as_ref()?;
-        let root = catalogue.registries_mut().official_mut()?.root()?.clone();
-        root.amml.versions.iter().find(|release| &release.version == version).map(|release| release.api_version)
+        let root = catalogue.registries_mut().official_mut().and_then(|client| client.root().cloned());
+        InstanceApi::of(state, root.as_ref())
     }
 
     fn amml_row<H: HttpFetch>(catalogue: &mut ModCatalogue<H>, state: &InstanceState) -> UpdateRow {
@@ -36,7 +35,13 @@ impl UpdateChecker {
             status,
             api_change,
         };
-        let Some(root) = catalogue.registries_mut().official_mut().and_then(|client| client.root().cloned()) else {
+        let root = catalogue.registries_mut().official_mut().and_then(|client| client.root().cloned());
+        // a local build is never ordered against a release; the newest release for the game is only offered
+        if state.amml.local {
+            let release = root.as_ref().and_then(|root| Compatibility::amml_for(&state.game, root));
+            return row(release.map(|release| release.version), UpdateStatus::LocalBuild, false);
+        }
+        let Some(root) = root else {
             return row(None, UpdateStatus::Offline, false);
         };
         let Some(release) = Compatibility::amml_for(&state.game, &root) else {

@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use amml_data::{EntryId, EntryKind, OperandKind, Recipe, Resolved, Step};
 
 use crate::errors::StepError;
-use crate::services::{Disasm, PatternScanner, RttiIndex, StringXref};
+use crate::services::{Disasm, PatternScanner, RttiIndex, StringXref, VtableLocator};
 use crate::structs::{Cursor, Image, Pattern, StepTrace};
 
 /// Where one `pattern` / `pattern_any` step matched, before its `offset`. A `pattern_any` lists every alternative
@@ -20,14 +20,15 @@ pub struct RecipeRunner<'a> {
     image: &'a Image,
     rtti: &'a RttiIndex,
     xrefs: &'a StringXref,
+    vtables: VtableLocator<'a>,
 }
 
 impl<'a> RecipeRunner<'a> {
-    // slots `slot_of` reads before it gives up
-    const SLOT_SCAN_LIMIT: u32 = 1024;
+    // slots `slot_of` reads before it gives up, and qwords `vtable_holding` walks back from a slot
+    pub(crate) const SLOT_SCAN_LIMIT: u32 = 1024;
 
     pub fn new(image: &'a Image, rtti: &'a RttiIndex, xrefs: &'a StringXref) -> Self {
-        Self { image, rtti, xrefs }
+        Self { image, rtti, xrefs, vtables: VtableLocator::new(image) }
     }
 
     /// Runs the steps in order; the last cursor is the result and its type must fit `kind`.
@@ -153,6 +154,7 @@ impl<'a> RecipeRunner<'a> {
                 self.rtti.slot_of(self.image, class, Self::need(cursor)?.rva()?).map(Cursor::Slot)
             }
             Step::VtableSlot { slot } => self.vtable_slot(Self::need(cursor)?.rva()?, *slot).map(Cursor::Rva),
+            Step::VtableHolding => self.vtables.table_holding(Self::need(cursor)?.rva()?).map(Cursor::Rva),
             Step::ReadPointer => self.read_pointer(Self::need(cursor)?.rva()?).map(Cursor::Rva),
             Step::SlotOf { vtable } => {
                 let function = Self::need(cursor)?.rva()?;

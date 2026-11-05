@@ -130,3 +130,30 @@ fn the_data_dir_comes_from_instance_hcl() {
     std::fs::write(dir.join("amml").join("instance.hcl"), "data_dir = \"D:\\\\mine\"\n").unwrap();
     assert_eq!(InstanceReader::read(&dir).unwrap().data_dir, Some(std::path::PathBuf::from("D:\\mine")));
 }
+
+#[test]
+fn amml_state_is_local_for_plus_local_version() {
+    let root = tempfile::tempdir().unwrap();
+    let dir = root.path().join("one");
+    std::fs::create_dir_all(&dir).unwrap();
+    InstanceFolder::create(&dir, "1.26.62.01").with_amml(Some("26.60.5+local")).with_amml_api("2");
+
+    let state = InstanceReader::read(&dir).unwrap();
+
+    assert!(state.amml.local);
+    assert_eq!(state.amml.local_api, Some(2));
+    assert_eq!(state.amml.version.as_deref(), Some("26.60.5+local"));
+}
+
+#[test]
+fn amml_state_is_not_local_for_release_version() {
+    let root = tempfile::tempdir().unwrap();
+    let dir = root.path().join("one");
+    std::fs::create_dir_all(&dir).unwrap();
+    InstanceFolder::create(&dir, "1.26.60.05").with_amml(Some("26.60.4")).with_amml_api("9");
+
+    let state = InstanceReader::read(&dir).unwrap();
+
+    assert!(!state.amml.local);
+    assert_eq!(state.amml.local_api, None);
+}

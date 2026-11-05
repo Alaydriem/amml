@@ -18,6 +18,7 @@ export const instanceDetailEn: InstanceDetailScreenText = {
         upToDate: "Up to date",
         update: "Update",
         unofficial: "Unofficial",
+        localBuild: "Local build",
         noVersion: "—",
         toggleLabel: "Turn {title} on or off",
         menuLabel: "Actions for {title}",

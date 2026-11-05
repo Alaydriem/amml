@@ -3,6 +3,7 @@
     import Menu from "../primitives/Menu.svelte";
     import Pill from "../primitives/Pill.svelte";
     import StatusDot from "../primitives/StatusDot.svelte";
+    import Tag from "../primitives/Tag.svelte";
     import Tile from "../primitives/Tile.svelte";
     import Button from "../primitives/Button.svelte";
     import RunningBadge from "./RunningBadge.svelte";
@@ -28,6 +29,9 @@
     <div class="amml-instance-row__stat amml-instance-row__stat--amml">
         <Eyebrow size="sm">{text.amml}</Eyebrow>
         <span class="amml-instance-row__value">{instance.ammlVersion}</span>
+        {#if instance.ammlLocal}
+            <Tag>{text.localBuild}</Tag>
+        {/if}
     </div>
     <div class="amml-instance-row__stat amml-instance-row__stat--mods">
         <Eyebrow size="sm">{text.mods}</Eyebrow>

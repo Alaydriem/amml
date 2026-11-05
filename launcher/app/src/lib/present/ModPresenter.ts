@@ -11,7 +11,8 @@ export class ModPresenter {
     static toInstalled(view: ModView, registries: readonly RegistryView[], notes: ModNoteText): InstalledMod {
         const registry = registries.find((held) => held.base === view.registryBase);
         const origin: ModOrigin = view.origin === "local" ? "url" : view.origin;
-        const hasAvailable = view.update === "available" || view.update === "upToDate";
+        const localBuild = view.update === "localBuild";
+        const hasAvailable = view.update === "available" || view.update === "upToDate" || localBuild;
         return {
             id: view.id,
             title: view.id === ModPresenter.AMML_ID ? notes.loaderTitle : (view.title ?? ModPresenter.nameOf(view.id)),
@@ -21,6 +22,7 @@ export class ModPresenter {
             installedVersion: view.installedVersion ?? "",
             availableVersion: hasAvailable ? (view.availableVersion ?? undefined) : undefined,
             note: ModPresenter.noteOf(view, registry, notes),
+            localBuild,
         };
     }
 

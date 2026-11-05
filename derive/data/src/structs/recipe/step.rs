@@ -9,6 +9,8 @@ pub enum Step {
     PatternAny { patterns: Vec<String>, offset: i64, literal_ok: Vec<LiteralOk> },
     // the primary start of the function holding the cursor
     FunctionStartOf,
+    // the vtable that holds the function at the cursor
+    VtableHolding,
     // `nth` absent: exactly one function must load the string
     StringXref { text: String, nth: Option<u32> },
     RttiVtable { class: String, slot: Option<u32> },
@@ -67,6 +69,7 @@ impl Step {
             Self::Pattern { .. } => "pattern",
             Self::PatternAny { .. } => "pattern_any",
             Self::FunctionStartOf => "function_start_of",
+            Self::VtableHolding => "vtable_holding",
             Self::StringXref { .. } => "string_xref",
             Self::RttiVtable { .. } => "rtti_vtable",
             Self::Ref { .. } => "ref",
@@ -98,7 +101,7 @@ impl Step {
             },
             Self::StringXref { .. } | Self::RttiVtable { .. } => Ok(ValueType::Rva),
             Self::Ref { entry } => referenced.ok_or_else(|| format!("step `ref` names unknown entry {entry}")),
-            Self::Call { .. } | Self::FunctionStartOf => needs_rva().map(|()| ValueType::Rva),
+            Self::Call { .. } | Self::FunctionStartOf | Self::VtableHolding => needs_rva().map(|()| ValueType::Rva),
             Self::Operand { kind, .. } => needs_rva().map(|()| match kind {
                 OperandKind::Displacement | OperandKind::Immediate | OperandKind::ScaleFactor => ValueType::Number,
                 OperandKind::RipTarget | OperandKind::BranchTarget => ValueType::Rva,

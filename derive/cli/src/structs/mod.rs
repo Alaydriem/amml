@@ -8,6 +8,7 @@ pub mod outcome;
 pub mod pattern;
 pub mod report;
 pub mod signature;
+pub mod vtable_anchors;
 
 pub use covered_instruction::CoveredInstruction;
 pub use cursor::Cursor;
@@ -26,3 +27,4 @@ pub use signature::{
     EntryComparison, EntrySignature, Reg, ReturnKind, Signature, SignatureComparison, SignatureFile, SignatureReport,
     SignatureStatus,
 };
+pub(crate) use vtable_anchors::VtableAnchors;

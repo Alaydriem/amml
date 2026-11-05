@@ -1,8 +1,7 @@
 use super::session_state::SessionState;
 use super::{
-    CatalogService, DataStats, DownloadFolder, FaultMapper, InstallSteps, InstanceApi, JobRunner, JobSink, LastPlayed,
-    LaunchGate, Locked, ManagerSlot, NameCheck, OpenPolicy, SetupState, SystemChecks, SystemInfo, VersionList,
-    ViewMapper,
+    CatalogService, DataStats, DownloadFolder, FaultMapper, InstallSteps, JobRunner, JobSink, LastPlayed, LaunchGate,
+    Locked, ManagerSlot, NameCheck, OpenPolicy, SetupState, SystemChecks, SystemInfo, VersionList, ViewMapper,
 };
 use crate::{
     AboutView, AdoptCandidatesView, AdoptView, BridgeError, CardView, CatalogLayoutView, CatalogSortView, ChannelView,
@@ -15,7 +14,7 @@ use amml_gdk::{
     PackageInventory, VersionStore, WindowsPackageInventory, WindowsProcessInspector,
 };
 use amml_launcher_core::{
-    Adopter, CoreProgress, CoreServices, DataMigrator, InstanceGuard, InstanceReader, LauncherBlockStore,
+    Adopter, CoreProgress, CoreServices, DataMigrator, InstanceApi, InstanceGuard, InstanceReader, LauncherBlockStore,
     LauncherError, LazyInstaller, Manager, ModId, ModSource, NewInstanceRequest, ProcessGameStarter, RegistryCache,
     RegistryClient, RegistryRef, RegistrySet, RegistryStatus, SettingsStore, UpdateChecker, UpdateStatus,
     UreqHttpFetch, UrlInspector, WindowsWindowProbe,

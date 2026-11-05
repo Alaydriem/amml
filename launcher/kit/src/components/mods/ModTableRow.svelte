@@ -30,7 +30,12 @@
         <span class="amml-mod-row__title">{mod.title}</span>
         <span class="amml-mod-row__id">{ModTableRowRules.subline(mod, text)}</span>
     </div>
-    <div class="amml-mod-row__version amml-mod-row__version--installed" role="cell">{mod.installedVersion}</div>
+    <div class="amml-mod-row__version amml-mod-row__version--installed" role="cell">
+        {mod.installedVersion}
+        {#if mod.localBuild}
+            <Tag>{text.localBuild}</Tag>
+        {/if}
+    </div>
     <div class="amml-mod-row__version" class:amml-mod-row__version--newer={newer} role="cell">
         {mod.availableVersion ?? text.noVersion}
     </div>

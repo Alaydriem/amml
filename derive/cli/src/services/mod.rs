@@ -22,6 +22,7 @@ pub mod signature_probe;
 pub mod signature_store;
 pub mod slot_namer;
 pub mod string_xref;
+pub mod vtable_locator;
 pub mod vtable_reader;
 
 pub use check_runner::CheckRunner;
@@ -48,4 +49,5 @@ pub use signature_probe::SignatureProbe;
 pub use signature_store::SignatureStore;
 pub use slot_namer::SlotNamer;
 pub use string_xref::StringXref;
+pub use vtable_locator::VtableLocator;
 pub use vtable_reader::VtableReader;
