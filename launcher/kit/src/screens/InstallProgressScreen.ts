@@ -3,8 +3,10 @@ import type { InstallStepRowText } from "../components/install/InstallStepRow";
 import type { ProgressReadoutText } from "../components/install/ProgressReadout";
 
 export interface InstallProgressScreenText {
-    /** Back link label ("Instances"). */
-    back: string;
+    /** Back link label ("Instances"). The link shows only when `onback` is set too. */
+    back?: string;
+    /** Eyebrow above the title. Left out when not set. */
+    eyebrow?: string;
     /** Title with the instance name in bold, for example "Creating **{name}**". */
     title: string;
     /** Title of the failed state, for example "Could not create **{name}**". */
@@ -21,8 +23,11 @@ export interface InstallProgressScreenText {
     warning: string;
     /** The note that the Store version is back after a failure. Mark the lead with `**…**`. */
     restored: string;
-    cancel: string;
+    /** Cancel label. The button shows only when `oncancel` is set too. */
+    cancel?: string;
     retry: string;
+    /** Label of the secondary action of the failed state ("Choose another source"). Shows only when `onother` is set too. */
+    other?: string;
     showLog: string;
 }
 
@@ -44,5 +49,6 @@ export interface InstallProgressScreenProps {
     onback?: () => void;
     oncancel?: () => void;
     onretry?: () => void;
+    onother?: () => void;
     onshowlog?: () => void;
 }

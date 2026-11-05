@@ -2,7 +2,7 @@ use super::{DeveloperModeControl, Installer, InstanceService, PackageInventory, 
 use crate::GdkError;
 use crate::structs::{
     AmmlPaths, Catalogue, Channel, CliCommand, CliExit, GameVersion, InstallOutcome, InstallRequest, InstallStep,
-    PowerShellText,
+    PowerShellText, VersionJson,
 };
 use std::fmt::Display;
 use std::io::{BufRead, Write};
@@ -20,6 +20,8 @@ pub struct CliApp<N, I, M> {
 }
 
 impl<N: Installer, I: PackageInventory, M: DeveloperModeControl> CliApp<N, I, M> {
+    const VERSION_JSON: &'static str = "version.json";
+
     pub fn new(
         installer: N,
         inventory: I,
@@ -211,7 +213,10 @@ impl<N: Installer, I: PackageInventory, M: DeveloperModeControl> CliApp<N, I, M>
     }
 
     fn instance(&self, version: &str, name: &str, output: &mut impl Write) -> Result<(), GdkError> {
-        let folder = self.instances.create(&GameVersion::parse(version)?, name)?;
+        let game = GameVersion::parse(version)?;
+        let folder = self.instances.create(&game, name)?;
+        // no `launcher` block: the launcher lists the folder as an instance it does not manage
+        VersionJson::new_for(name, &game, false).write(&folder.path.join(Self::VERSION_JSON))?;
         Self::line(output, format!("Created {}", folder.path.display()));
         Ok(())
     }

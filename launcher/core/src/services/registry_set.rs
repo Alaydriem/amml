@@ -18,6 +18,11 @@ impl<H: HttpFetch> RegistrySet<H> {
         &mut self.clients
     }
 
+    // the root of the official registry, when it was fetched
+    pub fn official_root(&self) -> Option<&amml_registry::RegistryRoot> {
+        self.clients.iter().find(|client| client.registry().is_official()).and_then(|client| client.root())
+    }
+
     pub fn official_mut(&mut self) -> Option<&mut RegistryClient<H>> {
         self.clients.iter_mut().find(|client| client.registry().is_official())
     }

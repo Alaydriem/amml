@@ -53,6 +53,9 @@
             <KeyValueRow label={text.download} value={ModDetailPaneRules.downloadValue(detail, text)} tone="dim" />
             <KeyValueRow label={text.source} value={detail.sourceLabel} tone="brand" />
         </div>
+        {#if detail.blockedNote ?? detail.laterNote}
+            <p class="amml-detail__amml">{detail.blockedNote ?? detail.laterNote}</p>
+        {/if}
         <p class="amml-detail__note">{text.note}</p>
     {:else}
         <p class="amml-detail__empty">{text.empty}</p>
@@ -143,6 +146,13 @@
         color: var(--color-rad-faint);
         font-size: var(--text-rad-mono);
         line-height: 150%;
+    }
+
+    .amml-detail__amml {
+        margin: 0;
+        color: var(--color-rad-dim);
+        font-size: var(--text-rad-small);
+        line-height: 18px;
     }
 
     .amml-detail__loading {

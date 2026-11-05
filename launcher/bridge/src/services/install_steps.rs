@@ -16,6 +16,8 @@ pub struct InstallSteps {
     // the active mod step has begun installing, so the next download is another mod's
     mod_installing: bool,
     restore_seen: bool,
+    // the job is the first run, whose failed fresh copy puts the Store version back
+    setup_restore: bool,
     // the step that was in progress when the wait step came in
     paused: Option<usize>,
 }
@@ -26,6 +28,8 @@ impl InstallSteps {
     const RATE_WINDOW: Duration = Duration::from_secs(5);
     const FINISH: &'static str = "finish";
     const MANAGER_WAIT: &'static str = "manager-wait";
+    const SETUP_SETTINGS: &'static str = "setup-settings";
+    const COPY_STEPS: [&'static str; 3] = ["setup-check", "setup-measure", "setup-copy"];
     const MOD_PREFIX: &'static str = "mod:";
     const VERSION_STEPS: [&'static str; 9] = [
         "version-check",
@@ -72,6 +76,26 @@ impl InstallSteps {
         Self::from_ids(["amml-download", "amml-patch", Self::FINISH].map(String::from).to_vec())
     }
 
+    // The first run: check the target, measure, copy, then save the settings. A start with no worlds has only the
+    // last step.
+    pub fn for_setup(copy: bool) -> InstallSteps {
+        let mut ids: Vec<String> = Vec::new();
+        if copy {
+            ids.extend(Self::COPY_STEPS.map(String::from));
+        }
+        ids.push(Self::SETUP_SETTINGS.to_string());
+        let mut steps = Self::from_ids(ids);
+        // nothing is copied before the measure step, so a failure before it changes nothing
+        steps.setup_restore = copy;
+        steps.restore_seen = copy;
+        steps
+    }
+
+    // a copy of worlds on its own: the setup steps without the settings
+    pub fn for_copy() -> InstallSteps {
+        Self::from_ids(Self::COPY_STEPS.map(String::from).to_vec())
+    }
+
     // one named step and the finish
     pub fn single(id: &str) -> InstallSteps {
         Self::from_ids(vec![id.to_string(), Self::FINISH.to_string()])
@@ -89,6 +113,7 @@ impl InstallSteps {
             bytes: None,
             mod_installing: false,
             restore_seen: false,
+            setup_restore: false,
             paused: None,
         }
     }
@@ -150,6 +175,16 @@ impl InstallSteps {
                 true
             }
             CoreProgress::WaitingForManager { waiting } => self.set_waiting(*waiting, now),
+            CoreProgress::MeasuringData { merge } => {
+                self.restore_seen = self.setup_restore && !*merge;
+                self.activate_named("setup-measure", now)
+            }
+            CoreProgress::CopyingData { detail, progress } => {
+                let changed = self.activate_named("setup-copy", now);
+                self.record(progress.bytes_done, progress.bytes_total, Some(detail.clone()), now);
+                changed
+            }
+            CoreProgress::SavingSettings => self.activate_named(Self::SETUP_SETTINGS, now),
         }
     }
 
@@ -347,7 +382,7 @@ impl InstallSteps {
         let file = file.or_else(|| self.bytes.as_ref().and_then(|(_, _, held)| held.clone()));
         self.bytes = Some((done, total, file));
         if let Some(index) = self.active_index() {
-            self.steps[index].percent = Some((done.saturating_mul(100) / total.max(1)).min(100) as u32);
+            self.steps[index].percent = (total > 0).then(|| (done.saturating_mul(100) / total).min(100) as u32);
         }
         if let Some((_, last_bytes)) = self.samples.back()
             && done < *last_bytes

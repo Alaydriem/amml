@@ -6,6 +6,7 @@ pub struct AdoptionCandidate {
     pub name: String,
     pub game: GameVersion,
     pub amml: Option<String>,
+    pub amml_local: bool,
     pub mod_count: usize,
     pub has_version_in_store: bool,
 }

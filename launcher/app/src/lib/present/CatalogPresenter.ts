@@ -2,11 +2,14 @@ import type { CardView } from "#lib/bindings/CardView.ts";
 import type { CatalogLayoutView } from "#lib/bindings/CatalogLayoutView.ts";
 import type { ModDetailView } from "#lib/bindings/ModDetailView.ts";
 import type { ModCard, ModDetail, ResultGroup } from "@amml/launcher-kit";
+import { ModNoteTextSet, type ModNoteText } from "#lib/text/ModNoteTextSet.ts";
+import { NeedsAmmlNote } from "./NeedsAmmlNote.ts";
 import { SwatchRules } from "./SwatchRules.ts";
 
 // Turns catalogue facts into the kit's card, detail and group models.
 export class CatalogPresenter {
-    static toCard(view: CardView): ModCard {
+    static toCard(view: CardView, notes: ModNoteText = ModNoteTextSet.build()): ModCard {
+        const needs = view.needsAmml;
         return {
             id: view.id,
             registryId: view.registryId,
@@ -18,12 +21,17 @@ export class CatalogPresenter {
             icon: view.iconUrl ?? undefined,
             swatch: SwatchRules.forName(view.id),
             state: view.state,
+            blockedNote: view.state === "needsAmml" && needs ? NeedsAmmlNote.blocked(needs, notes) : undefined,
+            laterNote:
+                (view.state === "installed" || view.state === "available" || view.state === "update") && needs
+                    ? NeedsAmmlNote.later(needs, notes)
+                    : undefined,
         };
     }
 
-    static toDetail(view: ModDetailView, registryName: string): ModDetail {
+    static toDetail(view: ModDetailView, registryName: string, notes: ModNoteText = ModNoteTextSet.build()): ModDetail {
         return {
-            ...CatalogPresenter.toCard(view.card),
+            ...CatalogPresenter.toCard(view.card, notes),
             registryName,
             description: view.description ?? undefined,
             authors: view.authors,

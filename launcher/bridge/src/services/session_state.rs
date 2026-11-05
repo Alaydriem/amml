@@ -1,4 +1,4 @@
-use super::{JobRunner, JobSink, LaunchGate, Locked, ManagerSlot};
+use super::{JobRunner, JobSink, LaunchGate, Locked, ManagerSlot, RegistryRefresher};
 use crate::{BridgeError, FaultView, JobKind, RegistryView};
 use amml_gdk::{GdkError, WindowsProcessInspector};
 use amml_launcher_core::{CoreProgress, CoreServices, LauncherError, Manager, ProcessGameStarter, WindowsWindowProbe};
@@ -20,6 +20,8 @@ pub(crate) struct SessionState<S: JobSink> {
     pub(crate) registries: Mutex<Vec<RegistryView>>,
     // updates waiting per instance; rebuilt on each refresh, so bounded by the instances
     pub(crate) updates: Mutex<BTreeMap<String, u32>>,
+    // one registry refresh at a time, on its own catalogue; it never takes the manager
+    pub(crate) refresher: RegistryRefresher,
     pub(crate) startup: Mutex<Option<FaultView>>,
     // the last job that started, for a retry
     pub(crate) last_job: Mutex<Option<JobKind>>,

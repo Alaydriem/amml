@@ -82,3 +82,27 @@ describe("InstanceRow", () => {
         );
     });
 });
+
+describe("InstanceRow local build", () => {
+    it("instance_row_shows_local_badge", () => {
+        mount({ ...idle, ammlVersion: "26.60.5+local", ammlLocal: true });
+        expect(screen.getByText(instanceRowEn.localBuild)).toBeTruthy();
+    });
+
+    it("shows no local badge for a release", () => {
+        mount(idle);
+        expect(screen.queryByText(instanceRowEn.localBuild)).toBeNull();
+    });
+});
+
+describe("InstanceRow local build status", () => {
+    it("shows no Up to date dot for a local build with no updates", () => {
+        mount({ ...idle, ammlVersion: "26.60.5+local", ammlLocal: true, updateCount: 0 });
+        expect(screen.queryByText(instanceRowEn.upToDate)).toBeNull();
+    });
+
+    it("still shows Up to date for a release with no updates", () => {
+        mount({ ...idle, updateCount: 0 });
+        expect(screen.getByText(instanceRowEn.upToDate)).toBeTruthy();
+    });
+});

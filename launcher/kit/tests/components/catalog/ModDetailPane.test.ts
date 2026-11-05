@@ -31,6 +31,25 @@ describe("ModDetailPane", () => {
         expect(screen.getByText("0.3 MB · checksum")).toBeInTheDocument();
     });
 
+    it("shows the needs-AMML note of a blocked mod, or the later-release note", () => {
+        const blocked = render(ModDetailPane, {
+            detail: { ...CatalogFixtures.chunkBorders, blockedNote: "Needs AMML 26.62.0" },
+            text,
+        });
+        expect(screen.getByText("Needs AMML 26.62.0")).toBeInTheDocument();
+        blocked.unmount();
+
+        const later = render(ModDetailPane, {
+            detail: { ...CatalogFixtures.chunkBorders, laterNote: "Later release needs AMML 26.62.0" },
+            text,
+        });
+        expect(screen.getByText("Later release needs AMML 26.62.0")).toBeInTheDocument();
+        later.unmount();
+
+        render(ModDetailPane, { detail: CatalogFixtures.chunkBorders, text });
+        expect(screen.queryByText(/needs AMML/i)).toBeNull();
+    });
+
     it("shows what the index row knows while the document loads, and marks the pane busy", () => {
         const { container } = render(ModDetailPane, { pending: CatalogFixtures.pendingMapper, text });
 

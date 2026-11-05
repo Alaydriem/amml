@@ -1,8 +1,8 @@
 use crate::support::{Catalogues, FakeServer, Harness, InstanceFolder, RegistryTree, Route};
 use amml_gdk::GameVersion;
 use amml_launcher_core::{
-    CoreProgress, DataChoice, HclText, InstanceReader, LauncherBlockStore, LauncherError, LauncherModEntry, ModChange,
-    ModId, ModSource, NewInstanceRequest, UrlInspector,
+    AmmlLevel, CoreProgress, DataChoice, HclText, InstanceReader, LauncherBlockStore, LauncherError, LauncherModEntry,
+    ModChange, ModId, ModSource, NewInstanceRequest, UrlInspector,
 };
 
 fn game() -> GameVersion {
@@ -225,7 +225,7 @@ fn a_registry_mod_installs_and_an_inspected_zip_needs_consent() {
     let mut manager = harness.manager();
 
     let id = ModId::parse("@alaydriem/peek").unwrap();
-    let resolved = manager.catalogue_mut().resolve(&id, 2).unwrap();
+    let resolved = manager.catalogue_mut().resolve(&id, 2, &AmmlLevel::Local).unwrap();
     assert_eq!(manager.install_mod("one", &resolved, &mut |_| {}).unwrap(), ModChange::Installed);
     assert_eq!(
         manager.install_mod("one", &resolved, &mut |_| {}).unwrap(),
@@ -270,7 +270,8 @@ fn a_mod_release_for_another_api_is_refused_before_any_download() {
     let dir = existing_instance(&harness, "one", "26.60.1");
     let before = InstanceFolder::hashes(&dir);
     let mut manager = harness.manager();
-    let resolved = manager.catalogue_mut().resolve(&ModId::parse("@alaydriem/fly").unwrap(), 3).unwrap();
+    let resolved =
+        manager.catalogue_mut().resolve(&ModId::parse("@alaydriem/fly").unwrap(), 3, &AmmlLevel::Local).unwrap();
     match manager.install_mod("one", &resolved, &mut |_| {}) {
         Err(LauncherError::ApiMismatch { mod_api, amml_api, .. }) => assert_eq!((mod_api, amml_api), (3, 2)),
         other => panic!("{other:?}"),
@@ -289,7 +290,7 @@ fn a_zip_that_holds_another_mod_than_the_one_asked_for_is_refused() {
     InstanceFolder { dir: dir.clone() }.with_mod(true, "amml", "modmanager", Some("26.60.0"), 2);
     let before = InstanceFolder::hashes(&dir);
     let mut manager = harness.manager();
-    let resolved = manager.catalogue_mut().resolve(&ModId::parse("@x/y").unwrap(), 2).unwrap();
+    let resolved = manager.catalogue_mut().resolve(&ModId::parse("@x/y").unwrap(), 2, &AmmlLevel::Local).unwrap();
     match manager.install_mod("one", &resolved, &mut |_| {}) {
         Err(LauncherError::BadArchive { reason, .. }) => {
             assert!(reason.contains("@amml/modmanager") && reason.contains("@x/y"), "{reason}")
@@ -349,7 +350,8 @@ fn a_core_mod_stays_core_when_the_registry_is_down_because_install_recorded_it()
     standard(&harness);
     let dir = existing_instance(&harness, "one", "26.60.1");
     let mut manager = harness.manager();
-    let resolved = manager.catalogue_mut().resolve(&ModId::parse("@amml/modmanager").unwrap(), 2).unwrap();
+    let resolved =
+        manager.catalogue_mut().resolve(&ModId::parse("@amml/modmanager").unwrap(), 2, &AmmlLevel::Local).unwrap();
     manager.install_mod("one", &resolved, &mut |_| {}).unwrap();
     assert_eq!(LauncherBlockStore::read(&dir).unwrap().mods["@amml/modmanager"].core, Some(true));
 
@@ -443,4 +445,45 @@ fn a_name_with_a_leading_dot_is_refused_by_create() {
     assert!(matches!(result, Err(LauncherError::Gdk(_))), "{result:?}");
     assert_eq!(harness.installer.calls(), 0);
     assert!(!harness.paths.gdk().instances().exists());
+}
+
+#[test]
+fn install_mod_works_on_local_build_without_mods() {
+    let harness = Harness::new();
+    standard(&harness);
+    let dir = harness.paths.instance("one");
+    std::fs::create_dir_all(&dir).unwrap();
+    InstanceFolder::create(&dir, "1.26.60.05").with_amml(Some("26.60.5+local")).with_amml_api("2");
+    let mut manager = harness.manager();
+
+    let resolved =
+        manager.catalogue_mut().resolve(&ModId::parse("@alaydriem/peek").unwrap(), 2, &AmmlLevel::Local).unwrap();
+
+    assert_eq!(manager.install_mod("one", &resolved, &mut |_| {}).unwrap(), ModChange::Installed);
+}
+
+#[test]
+fn install_into_instance_uses_instance_amml_level() {
+    let harness = Harness::new();
+    let older = harness.mod_document("alaydriem", "gate", false, false, "1.0.0", 2).versions.remove(0);
+    let mut newer = harness.mod_document("alaydriem", "gate", false, false, "2.0.0", 2).versions.remove(0);
+    newer.min_amml = Some("26.62.0".to_string());
+    let document = RegistryTree::document("alaydriem", "gate", false, false, vec![older, newer]);
+    harness.publish(
+        vec![harness.amml_release("26.60.5", 2, &["1.26.60.5"]), harness.amml_release("26.62.0", 2, &["1.26.62.1"])],
+        &[document],
+    );
+    let dir = existing_instance(&harness, "one", "26.60.5");
+    let mut manager = harness.manager();
+    let id = ModId::parse("@alaydriem/gate").unwrap();
+
+    let resolved = manager.resolve_mod("one", &id, None).unwrap();
+    assert_eq!(resolved.release.version, "1.0.0");
+    assert_eq!(manager.install_mod("one", &resolved, &mut |_| {}).unwrap(), ModChange::Installed);
+    assert!(dir.join("mods").join("amml").join("@alaydriem").join("gate").join("amml.hcl").is_file());
+    assert_eq!(harness.server.count("/zips/alaydriem-gate-2.0.0.zip"), 0);
+
+    let newer_instance = existing_instance(&harness, "two", "26.62.0");
+    assert!(newer_instance.is_dir());
+    assert_eq!(manager.resolve_mod("two", &id, None).unwrap().release.version, "2.0.0");
 }

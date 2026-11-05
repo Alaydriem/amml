@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use amml_runtime::ModRegistry;
+use amml_runtime::{AmmlVersion, ModRegistry};
 use tempfile::tempdir;
 
 struct Folders;
@@ -235,10 +235,41 @@ fn second_listing_block_is_refused() {
 }
 
 #[test]
-fn other_block_is_refused() {
-    let reason = Manifests::refusal("settings {\n}\n");
+fn other_block_loads_and_is_listed_as_ignored() {
+    let scan = Manifests::scan("settings {\n  speed = 2\n}\n");
 
-    assert!(reason.contains("unknown block `settings`"), "{reason}");
+    assert_eq!(scan.mods.len(), 1, "{:?}", scan.skipped);
+    assert_eq!(scan.mods[0].ignored, ["block `settings`"]);
+}
+
+#[test]
+fn unknown_attribute_loads_and_is_listed_as_ignored() {
+    let scan = Manifests::scan("future_field = \"x\"\nanother = 3\n");
+
+    assert_eq!(scan.mods.len(), 1, "{:?}", scan.skipped);
+    assert_eq!(scan.mods[0].ignored, ["attribute `future_field`", "attribute `another`"]);
+    assert_eq!(scan.mods[0].entry, "zoom.dll");
+}
+
+#[test]
+fn known_manifest_has_nothing_ignored() {
+    let scan = Manifests::scan("version = \"1.0.0\"\namml_version = \"26.60.6\"\nlisting {\n}\n");
+
+    assert!(scan.mods[0].ignored.is_empty());
+}
+
+#[test]
+fn known_attribute_with_wrong_type_is_still_refused_next_to_an_unknown_one() {
+    let reason = Manifests::refusal("future_field = 1\nentries = \"Echo.found\"\n");
+
+    assert!(reason.contains("`entries` has the wrong type"), "{reason}");
+}
+
+#[test]
+fn second_listing_block_is_refused_even_with_an_unknown_block() {
+    let reason = Manifests::refusal("settings {\n}\nlisting {\n}\nlisting {\n}\n");
+
+    assert!(reason.contains("only one `listing` block"), "{reason}");
 }
 
 #[test]
@@ -246,4 +277,35 @@ fn labelled_listing_block_is_refused() {
     let reason = Manifests::refusal("listing \"x\" {\n}\n");
 
     assert!(reason.contains("`listing` takes no labels"), "{reason}");
+}
+
+#[test]
+fn reads_amml_version() {
+    let scan = Manifests::scan("amml_version = \"26.62.0\"\n");
+
+    assert_eq!(scan.mods.len(), 1);
+    assert_eq!(scan.mods[0].amml_version, Some(AmmlVersion { major: 26, minor: 62, patch: 0 }));
+}
+
+#[test]
+fn amml_version_absent_is_none() {
+    let scan = Manifests::scan("");
+
+    assert_eq!(scan.mods[0].amml_version, None);
+}
+
+#[test]
+fn amml_version_wrong_type_is_refused() {
+    let reason = Manifests::refusal("amml_version = 26\n");
+
+    assert!(reason.contains("`amml_version` has the wrong type"), "{reason}");
+}
+
+#[test]
+fn amml_version_bad_shape_is_refused() {
+    for bad in ["26.62", "v26.62.0", "26.062.0", "26.62.0.1", ""] {
+        let reason = Manifests::refusal(&format!("amml_version = \"{bad}\"\n"));
+
+        assert!(reason.contains("`amml_version`"), "{bad}: {reason}");
+    }
 }

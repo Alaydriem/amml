@@ -2,6 +2,7 @@ import type { ModView } from "#lib/bindings/ModView.ts";
 import type { RegistryView } from "#lib/bindings/RegistryView.ts";
 import type { ModNoteText } from "#lib/text/ModNoteTextSet.ts";
 import type { InstalledMod, ModOrigin } from "@amml/launcher-kit";
+import { NeedsAmmlNote } from "./NeedsAmmlNote.ts";
 
 // Turns a mod's facts into the kit's `InstalledMod` model.
 export class ModPresenter {
@@ -11,7 +12,8 @@ export class ModPresenter {
     static toInstalled(view: ModView, registries: readonly RegistryView[], notes: ModNoteText): InstalledMod {
         const registry = registries.find((held) => held.base === view.registryBase);
         const origin: ModOrigin = view.origin === "local" ? "url" : view.origin;
-        const hasAvailable = view.update === "available" || view.update === "upToDate";
+        const localBuild = view.update === "localBuild";
+        const hasAvailable = view.update === "available" || view.update === "upToDate" || localBuild;
         return {
             id: view.id,
             title: view.id === ModPresenter.AMML_ID ? notes.loaderTitle : (view.title ?? ModPresenter.nameOf(view.id)),
@@ -21,6 +23,11 @@ export class ModPresenter {
             installedVersion: view.installedVersion ?? "",
             availableVersion: hasAvailable ? (view.availableVersion ?? undefined) : undefined,
             note: ModPresenter.noteOf(view, registry, notes),
+            localBuild,
+            blockedNote:
+                view.update === "needsAmml" && view.needsAmml ? NeedsAmmlNote.blocked(view.needsAmml, notes) : undefined,
+            laterNote:
+                view.update === "available" && view.needsAmml ? NeedsAmmlNote.later(view.needsAmml, notes) : undefined,
         };
     }
 

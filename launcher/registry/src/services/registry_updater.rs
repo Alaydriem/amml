@@ -92,6 +92,28 @@ impl RegistryUpdater {
         Ok(if is_newest { UpdateResult::Added } else { UpdateResult::Backfilled })
     }
 
+    /// A mod release may not need an AMML that is newer than the newest listed AMML.
+    pub fn check_min_amml(release: &ModRelease, amml: Option<&AmmlSection>) -> Result<(), RegistryError> {
+        let Some(min) = &release.min_amml else {
+            return Ok(());
+        };
+        let wanted = ReleaseVersion::parse(min)?;
+        let mut newest: Option<(ReleaseVersion, &str)> = None;
+        for listed in amml.map(|section| section.versions.as_slice()).unwrap_or_default() {
+            let parsed = ReleaseVersion::parse(&listed.version)?;
+            if newest.is_none_or(|(current, _)| parsed > current) {
+                newest = Some((parsed, listed.version.as_str()));
+            }
+        }
+        match newest {
+            Some((newest, _)) if wanted <= newest => Ok(()),
+            Some((_, text)) => {
+                Err(RegistryError::MinAmml { got: min.clone(), reason: format!("the newest listed AMML is {text}") })
+            }
+            None => Err(RegistryError::MinAmml { got: min.clone(), reason: "no AMML release is listed".to_string() }),
+        }
+    }
+
     /// Checks the mod and the repo against the allow list before anything is downloaded.
     pub fn authorize_mod<'a>(
         allow: &'a AllowList,

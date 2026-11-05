@@ -168,7 +168,8 @@ impl<'a> CodeXref<'a> {
             .then_some(CodeRefKind::RipRelative)
     }
 
-    fn data_pointers(&self, rva: u32) -> Vec<CodeRef> {
+    /// Every 8-byte, 8-aligned data pointer to `rva` in the non-executable sections.
+    pub fn data_pointers(&self, rva: u32) -> Vec<CodeRef> {
         let pointer = self.image.image_base() + u64::from(rva);
         let finder = memmem::Finder::new(&pointer.to_le_bytes()).into_owned();
         let mut refs = Vec::new();

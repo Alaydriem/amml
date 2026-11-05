@@ -4,7 +4,7 @@ import type { MenuItem } from "../primitives/Menu";
 import type { ModRowControls } from "./ModRowControls";
 
 /** Which cell the right-hand state column of a row shows. */
-export type ModRowState = "current" | "update" | "unofficial";
+export type ModRowState = "current" | "update" | "unofficial" | "blocked";
 
 /** Text of one row. `toggleLabel` and `menuLabel` are templates with a `{title}` slot. */
 export interface ModTableRowText {
@@ -12,6 +12,8 @@ export interface ModTableRowText {
     upToDate: string;
     update: string;
     unofficial: string;
+    /** Badge of an AMML row that holds a local build. */
+    localBuild: string;
     /** Shown in the available column when no registry lists the mod. */
     noVersion: string;
     toggleLabel: string;
@@ -57,13 +59,22 @@ export class ModTableRowRules {
         return ModTableRowRules.comparePre(a.pre, b.pre) > 0;
     }
 
-    /** True when a registry lists a newer version than the installed one. */
+    /**
+     * True when a registry lists a newer version than the installed one. A local build is never ordered against a
+     * release (the version rule drops `+local`): any listed release replaces it.
+     */
     static hasUpdate(mod: InstalledMod): boolean {
-        return mod.availableVersion !== undefined && ModTableRowRules.isNewer(mod.availableVersion, mod.installedVersion);
+        if (mod.availableVersion === undefined) return false;
+        if (mod.localBuild) return true;
+        return ModTableRowRules.isNewer(mod.availableVersion, mod.installedVersion);
     }
 
-    /** A mod from a URL is unofficial and gets no update check. Otherwise the row shows an update or none. */
+    /**
+     * A mod with a blocked note shows no update. A mod from a URL is unofficial and gets no update check.
+     * Otherwise the row shows an update or none.
+     */
     static state(mod: InstalledMod): ModRowState {
+        if (mod.blockedNote !== undefined) return "blocked";
         if (mod.origin === "url") return "unofficial";
         return ModTableRowRules.hasUpdate(mod) ? "update" : "current";
     }

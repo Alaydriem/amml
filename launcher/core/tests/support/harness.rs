@@ -1,7 +1,7 @@
 use super::{FakeInstaller, FakePatcher, FakeProcesses, FakeServer, RegistryTree, Route, Zips};
 use amml_gdk::{Downloader, InstanceService, VersionStore};
 use amml_launcher_core::{
-    AmmlInstaller, AssetFetcher, InstanceGuard, InstanceManager, LauncherPaths, ModCatalogue, ModInstaller,
+    AmmlInstaller, AssetFetcher, CacheLock, InstanceGuard, InstanceManager, LauncherPaths, ModCatalogue, ModInstaller,
     RegistryCache, RegistryClient, RegistryRef, RegistrySet, UreqHttpFetch,
 };
 use amml_registry::{AmmlRelease, HashText, ModDocument};
@@ -87,7 +87,7 @@ impl Harness {
         let client = RegistryClient::new(
             self.official(),
             UreqHttpFetch::new(UreqHttpFetch::agent()),
-            RegistryCache::new(self.paths.registry_cache(), RegistryCache::BUDGET),
+            RegistryCache::new(self.paths.registry_cache(), RegistryCache::BUDGET, CacheLock::new()),
         );
         let downloads: PathBuf = self.paths.gdk().downloads();
         let downloader = Downloader::new(UreqHttpFetch::agent(), downloads.clone(), 1, amml_gdk::CancelFlag::new());

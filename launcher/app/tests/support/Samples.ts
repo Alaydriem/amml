@@ -12,6 +12,7 @@ export class Samples {
             game: "1.26.60.05",
             preview: false,
             ammlVersion: "26.60.1",
+            ammlLocal: false,
             ammlInstalled: true,
             modCount: 3,
             dataMode: "shared",

@@ -76,3 +76,42 @@ fn a_missing_or_zero_api_version_is_refused() {
         ));
     }
 }
+
+#[test]
+fn reads_amml_version() {
+    let text = MANIFEST.replace("api_version = 2\n", "api_version = 2\namml_version = \"26.62.1\"\n");
+    assert_eq!(ManifestReader::parse(&text).unwrap().amml_version.as_deref(), Some("26.62.1"));
+    assert_eq!(ManifestReader::parse(MANIFEST).unwrap().amml_version, None);
+}
+
+#[test]
+fn refuses_amml_version_bad_shape() {
+    let text = MANIFEST.replace("api_version = 2\n", "api_version = 2\namml_version = \"26.62\"\n");
+    assert!(matches!(ManifestReader::parse(&text), Err(RegistryError::MinAmml { .. })));
+    for bad in ["26.062.0", "026.62.0", "26.62.00"] {
+        let text = MANIFEST.replace("api_version = 2\n", &format!("api_version = 2\namml_version = \"{bad}\"\n"));
+        assert!(matches!(ManifestReader::parse(&text), Err(RegistryError::MinAmml { .. })), "{bad}");
+    }
+}
+
+#[test]
+fn parse_accepts_amml_version_below_floor_but_check_floor_refuses_it() {
+    let text = MANIFEST.replace("api_version = 2\n", "api_version = 2\namml_version = \"26.60.5\"\n");
+    let manifest = ManifestReader::parse(&text).unwrap();
+    assert_eq!(manifest.amml_version.as_deref(), Some("26.60.5"));
+    match ManifestReader::check_floor(&manifest) {
+        Err(RegistryError::MinAmml { got, reason }) => {
+            assert_eq!(got, "26.60.5");
+            assert!(reason.contains("26.60.6"), "{reason}");
+        }
+        other => panic!("expected MinAmml, got {other:?}"),
+    }
+}
+
+#[test]
+fn accepts_amml_version_at_floor() {
+    let text = MANIFEST.replace("api_version = 2\n", "api_version = 2\namml_version = \"26.60.6\"\n");
+    assert_eq!(ManifestReader::parse(&text).unwrap().amml_version.as_deref(), Some("26.60.6"));
+    assert_eq!(ManifestReader::MIN_AMML_FLOOR, "26.60.6");
+    ManifestReader::check_floor(&ManifestReader::parse(&text).unwrap()).unwrap();
+}

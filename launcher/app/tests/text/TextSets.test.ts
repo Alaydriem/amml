@@ -94,6 +94,7 @@ describe("text sets", () => {
             game: "1.26.60.05",
             preview: false,
             ammlVersion: null,
+            ammlLocal: false,
             ammlInstalled: true,
             modCount: 0,
             dataMode: "shared" as const,

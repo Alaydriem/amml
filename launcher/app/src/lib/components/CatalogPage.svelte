@@ -1,8 +1,9 @@
 <script lang="ts">
     import { goto } from "$app/navigation";
     import { AddModBrowseScreen } from "@amml/launcher-kit";
-    import { getContext, onMount, untrack } from "svelte";
+    import { getContext, onDestroy, onMount, untrack } from "svelte";
     import { LauncherApi } from "#lib/api/LauncherApi.ts";
+    import { RegistryEvents } from "#lib/api/RegistryEvents.ts";
     import { FaultPresenter } from "#lib/present/FaultPresenter.ts";
     import { CatalogStore } from "#lib/stores/CatalogStore.svelte.ts";
     import { FaultActions } from "#lib/stores/FaultActions.ts";
@@ -13,11 +14,12 @@
 
     const shell = getContext<ShellStore>(ShellStore.KEY);
     const store = new CatalogStore(
-        untrack(() => name), LauncherApi, (path) => void goto(path));
+        untrack(() => name), LauncherApi, (path) => void goto(path), RegistryEvents);
     const actions = new FaultActions(shell, LauncherApi, (path) => void goto(path), (text) => navigator.clipboard.writeText(text));
     const fault = $derived(store.fault ? FaultPresenter.present(store.fault) : null);
 
     onMount(() => store.load());
+    onDestroy(() => store.stopWatching());
 </script>
 
 <AppShell {shell} {fault} onfault={() => store.fault && actions.run(store.fault, () => store.load())}>

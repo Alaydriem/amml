@@ -1267,7 +1267,7 @@ flag "--with <mod>" help="One more mod repo beside amml to package and keep inst
 run = "bash scripts/ingame-peek.sh"
 
 [tasks.install-game]
-description = "Builds release amml.dll and amml-patch, patches <game>/Minecraft.Windows.exe from Minecraft.Windows.exe.bak, and copies amml.dll and the recipes next to it: --game, default %LOCALAPPDATA%/amml/instances/1.26.60.05"
+description = "Builds release amml.dll and amml-patch, patches <game>/Minecraft.Windows.exe from Minecraft.Windows.exe.bak, copies amml.dll and the recipes next to it, and marks the AMML as a local build (amml/amml-version.txt = <version>+local, amml/amml-api.txt): --game, default %LOCALAPPDATA%/amml/instances/1.26.60.05"
 dir = "{{config_root}}"
 shell = "bash -c"
 usage = 'flag "--game <game>" help="The standalone game folder that holds Minecraft.Windows.exe.bak"'
@@ -1284,7 +1284,16 @@ cp target/release/amml.dll "$game/amml.dll"
 rm -rf "$game/amml/recipes"
 mkdir -p "$game/amml/cache" "$game/mods/amml"
 cp -r recipes "$game/amml/recipes"
-echo "installed loader into $game"
+# amml-loader takes the workspace version; `+local` tells the launcher this AMML is not a core release
+version="$(sed -nE '/^\[workspace\.package\]/,/^\[/{s/^version *= *"([^"]+)".*/\1/p}' Cargo.toml)"
+api="$(sed -nE 's/^pub const AMML_API_VERSION: u32 = ([0-9]+);.*/\1/p' loader/abi/src/amml_api.rs)"
+if [ -z "$version" ] || [ -z "$api" ]; then
+  echo "the workspace version or AMML_API_VERSION was not found" >&2
+  exit 1
+fi
+printf '%s+local' "$version" > "$game/amml/amml-version.txt"
+printf '%s' "$api" > "$game/amml/amml-api.txt"
+echo "installed loader $version+local (API $api) into $game"
 '''
 
 [tasks.install-mods]

@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use amml_abi::AmmlStatus;
+use amml_runtime::AmmlVersion;
 
 /// Why a mod did not load or enable.
 #[derive(Debug, thiserror::Error)]
@@ -11,6 +12,8 @@ pub enum ModLoadError {
     MissingExport(&'static str),
     #[error("the mod needs API version {needs} and this loader has version {loader}")]
     VersionMismatch { needs: u32, loader: u32 },
+    #[error("the mod needs AMML {needs} or newer and this loader is {loader}")]
+    AmmlTooOld { needs: AmmlVersion, loader: AmmlVersion },
     #[error("the mod was built for an older loader (API {found}), this loader needs API 2")]
     OlderMod { found: u32 },
     #[error("the manifest says `{manifest}` but the mod reports `{reported}`")]
@@ -29,7 +32,9 @@ impl ModLoadError {
     /// The status that describes this error.
     pub fn status(&self) -> AmmlStatus {
         match self {
-            Self::VersionMismatch { .. } | Self::OlderMod { .. } => AmmlStatus::VERSION_MISMATCH,
+            Self::VersionMismatch { .. } | Self::AmmlTooOld { .. } | Self::OlderMod { .. } => {
+                AmmlStatus::VERSION_MISMATCH
+            }
             Self::Call { status, .. } => *status,
             Self::Library { .. }
             | Self::MissingExport(_)

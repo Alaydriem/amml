@@ -107,15 +107,20 @@ export class SetupStore {
         this.selected = id;
     }
 
-    // Copies the chosen worlds unless the choice is "scratch", then saves the settings. Nothing is adopted: this PC has no
-    // AMML yet. A failed job shows its fault and leaves the step as it was.
-    // With no instance afterwards the player makes one.
+    // Starts the setup job. A copy goes to the progress page at once, which follows the job and goes on. "Scratch" only
+    // saves the settings, so this waits for it. Nothing is adopted: this PC has no AMML yet. A failed scratch job shows
+    // its fault and leaves the step as it was. With no instance afterwards the player makes one.
     async adopt(): Promise<void> {
         if (this.busy) return;
         this.busy = true;
         this.fault = null;
         await this.guard(async () => {
             const job = await this.api.setupRun(this.selected);
+            // a copy shows its progress on its own page, which follows the job
+            if (this.selected !== SetupStore.SCRATCH) {
+                this.navigate("/setup/progress");
+                return;
+            }
             const ended = await JobWatcher.untilEnded(job, this.api, this.events);
             if (ended.state !== "done") {
                 // a job that did not finish never leaves a silent screen

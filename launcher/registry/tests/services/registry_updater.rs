@@ -220,3 +220,54 @@ fn authorize_checks_the_allow_list_and_returns_its_spelling() {
         Err(RegistryError::RepoMismatch { .. })
     ));
 }
+
+fn amml_listing(versions: &[&str]) -> AmmlSection {
+    let mut section = empty_amml();
+    section.versions = versions.iter().map(|version| amml_release(version, "aa")).collect();
+    section
+}
+
+fn release_needing(min: Option<&str>) -> amml_registry::ModRelease {
+    let mut release = Samples::release("26.62.1", 2, "aa", Samples::NOW);
+    release.min_amml = min.map(str::to_string);
+    release
+}
+
+#[test]
+fn min_amml_none_always_passes() {
+    assert!(RegistryUpdater::check_min_amml(&release_needing(None), None).is_ok());
+}
+
+#[test]
+fn min_amml_at_newest_listed_passes() {
+    let section = amml_listing(&["26.62.0", "26.62.3"]);
+    assert!(RegistryUpdater::check_min_amml(&release_needing(Some("26.62.3")), Some(&section)).is_ok());
+}
+
+#[test]
+fn min_amml_between_listed_versions_passes() {
+    let section = amml_listing(&["26.62.0", "26.62.3"]);
+    assert!(RegistryUpdater::check_min_amml(&release_needing(Some("26.62.1")), Some(&section)).is_ok());
+}
+
+#[test]
+fn min_amml_above_newest_is_refused() {
+    let section = amml_listing(&["26.62.0", "26.62.3"]);
+    let error = RegistryUpdater::check_min_amml(&release_needing(Some("26.62.4")), Some(&section)).unwrap_err();
+    match error {
+        RegistryError::MinAmml { got, reason } => {
+            assert_eq!(got, "26.62.4");
+            assert!(reason.contains("26.62.3"), "{reason}");
+        }
+        other => panic!("expected MinAmml, got {other:?}"),
+    }
+}
+
+#[test]
+fn min_amml_with_no_amml_listed_is_refused() {
+    let empty = empty_amml();
+    for section in [None, Some(&empty)] {
+        let result = RegistryUpdater::check_min_amml(&release_needing(Some("26.62.0")), section);
+        assert!(matches!(result, Err(RegistryError::MinAmml { .. })), "{result:?}");
+    }
+}

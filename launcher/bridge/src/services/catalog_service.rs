@@ -1,7 +1,12 @@
 use super::BrowseLayout;
-use crate::{BridgeError, CardStateView, CardView, CatalogLayoutView, CatalogSortView, ModDetailView, SearchGroupView};
-use amml_launcher_core::{Compatibility, HttpFetch, LauncherError, ModId, NameSearch, RegistryClient, RegistrySet};
-use amml_registry::{IndexCard, NameRow};
+use crate::{
+    BridgeError, CardStateView, CardView, CatalogLayoutView, CatalogSortView, ModDetailView, NeedsAmmlView,
+    SearchGroupView,
+};
+use amml_launcher_core::{
+    AmmlLevel, Compatibility, HttpFetch, LauncherError, ModId, NameSearch, RegistryClient, RegistrySet,
+};
+use amml_registry::{IndexCard, NameRow, RegistryRoot};
 use std::collections::{BTreeMap, BTreeSet};
 
 // Reads a registry's index for the browse and search screens. It holds nothing between calls: the registry clients
@@ -39,13 +44,14 @@ impl CatalogService {
         set: &mut RegistrySet<H>,
         registry_id: &str,
         api: u32,
+        level: &AmmlLevel,
         page: u32,
         installed: &[(String, Option<String>)],
     ) -> Result<Vec<CardView>, BridgeError> {
+        let official = set.official_root().cloned();
         let client = Self::client(set, registry_id)?;
-        let base = client.registry().base.clone();
-        let cached = client.page(api, page)?;
-        Ok(cached.value.cards.iter().map(|card| Self::card(card, registry_id, &base, installed)).collect())
+        let cards = client.page(api, page)?.value.cards;
+        Ok(cards.iter().map(|card| Self::card(client, card, level, official.as_ref(), installed)).collect())
     }
 
     // The best hits of every registry that answers. A registry that cannot be read drops out and the others answer.
@@ -53,11 +59,13 @@ impl CatalogService {
         set: &mut RegistrySet<H>,
         query: &str,
         api: u32,
+        level: &AmmlLevel,
         installed: &[(String, Option<String>)],
     ) -> Vec<SearchGroupView> {
+        let official = set.official_root().cloned();
         let mut groups = Vec::new();
         for client in set.clients_mut() {
-            match Self::search_one(client, query, api, installed) {
+            match Self::search_one(client, query, api, level, official.as_ref(), installed) {
                 Ok(Some(group)) => groups.push(group),
                 Ok(None) => {}
                 Err(error) => {
@@ -77,15 +85,16 @@ impl CatalogService {
         set: &mut RegistrySet<H>,
         registry_id: &str,
         api: u32,
+        level: &AmmlLevel,
         sort: CatalogSortView,
         installed: &[(String, Option<String>)],
     ) -> Result<Option<Vec<CardView>>, BridgeError> {
         if sort == CatalogSortView::Name {
             return Ok(None);
         }
+        let official = set.official_root().cloned();
         let client = Self::client(set, registry_id)?;
         let root = Self::root(client)?;
-        let base = client.registry().base.clone();
         let pages = root.index.apis.get(&api.to_string()).map_or(0, |summary| summary.pages);
         if pages > Self::SORT_PAGE_LIMIT {
             return Ok(None);
@@ -98,7 +107,7 @@ impl CatalogService {
             CatalogSortView::Updated => cards.sort_by(|left, right| right.updated.cmp(&left.updated)),
             _ => cards.sort_by_key(|card| std::cmp::Reverse(card.size)),
         }
-        Ok(Some(cards.iter().map(|card| Self::card(card, registry_id, &base, installed)).collect()))
+        Ok(Some(cards.iter().map(|card| Self::card(client, card, level, official.as_ref(), installed)).collect()))
     }
 
     pub fn detail<H: HttpFetch>(
@@ -106,13 +115,23 @@ impl CatalogService {
         registry_id: &str,
         id: &str,
         api: u32,
+        level: &AmmlLevel,
     ) -> Result<ModDetailView, BridgeError> {
+        let official = set.official_root().cloned();
         let client = Self::client(set, registry_id)?;
         let base = client.registry().base.clone();
         let cached = client.document(&ModId::parse(id)?)?;
         let document = cached.value;
-        let release = Compatibility::newest_for_api(&document, api)
-            .ok_or_else(|| LauncherError::UnknownMod(document.id.clone()))?;
+        // the newest release that fits; when none fits, the newest one, shown as needing a newer AMML
+        let choice = Compatibility::choose(&document, api, level, official.as_ref());
+        let (release, state, needs_amml) = match choice.fitting {
+            Some(release) => (release, CardStateView::Available, None),
+            None => {
+                let newest = Compatibility::newest_for_api(&document, api)
+                    .ok_or_else(|| LauncherError::UnknownMod(document.id.clone()))?;
+                (newest, CardStateView::NeedsAmml, choice.blocked.as_ref().map(NeedsAmmlView::from))
+            }
+        };
         let listing = &document.listing;
         let card = CardView {
             id: document.id.clone(),
@@ -123,7 +142,8 @@ impl CatalogService {
             version: release.version.clone(),
             size: release.size,
             icon_url: listing.icon.as_ref().map(|icon| format!("{base}{icon}")),
-            state: CardStateView::Available,
+            state,
+            needs_amml,
             updated: release.published.clone(),
         };
         Ok(ModDetailView {
@@ -164,6 +184,8 @@ impl CatalogService {
         client: &mut RegistryClient<H>,
         query: &str,
         api: u32,
+        level: &AmmlLevel,
+        official: Option<&RegistryRoot>,
         installed: &[(String, Option<String>)],
     ) -> Result<Option<SearchGroupView>, BridgeError> {
         let root = Self::root(client)?;
@@ -189,7 +211,6 @@ impl CatalogService {
             .filter_map(|hit| ordinals.get(hit.id.as_str()))
             .map(|ordinal| (ordinal / page_size) as u32 + 1)
             .collect();
-        let base = client.registry().base.clone();
         let registry_id = client.registry().cache_key();
         let mut found: BTreeMap<String, IndexCard> = BTreeMap::new();
         for page in pages {
@@ -201,7 +222,7 @@ impl CatalogService {
         let mut cards = Vec::new();
         for hit in kept {
             if let Some(card) = found.get(&hit.id) {
-                let mut view = Self::card(card, &registry_id, &base, installed);
+                let mut view = Self::card(client, card, level, official, installed);
                 view.tags = tags.get(hit.id.as_str()).map(|held| (*held).clone()).unwrap_or_default();
                 cards.push(view);
             }
@@ -209,23 +230,53 @@ impl CatalogService {
         Ok(Some(SearchGroupView { registry_id, total, cards }))
     }
 
-    fn card(card: &IndexCard, registry_id: &str, base: &str, installed: &[(String, Option<String>)]) -> CardView {
-        let state = match installed.iter().find(|(id, _)| id == &card.id) {
-            None => CardStateView::Available,
-            Some((_, Some(version))) if version != &card.version => CardStateView::Update,
-            Some(_) => CardStateView::Installed,
-        };
-        CardView {
+    // A card against the instance. A mod the instance holds keeps its installed state, and the card still says a later
+    // release needs a newer AMML. For a mod it does not hold, whose newest release is blocked, the card's own release
+    // list says if an older release fits: then the card shows that release, else the card is `NeedsAmml`.
+    fn card<H: HttpFetch>(
+        client: &mut RegistryClient<H>,
+        card: &IndexCard,
+        level: &AmmlLevel,
+        official: Option<&RegistryRoot>,
+        installed: &[(String, Option<String>)],
+    ) -> CardView {
+        let registry_id = client.registry().cache_key();
+        let base = client.registry().base.clone();
+        let mut view = CardView {
             id: card.id.clone(),
-            registry_id: registry_id.to_string(),
+            registry_id,
             title: card.title.clone(),
             summary: card.summary.clone(),
             tags: Vec::new(),
             version: card.version.clone(),
             size: card.size,
             icon_url: card.icon.as_ref().map(|icon| format!("{base}{icon}")),
-            state,
+            state: CardStateView::Available,
+            needs_amml: None,
             updated: card.updated.clone(),
+        };
+        let held = installed.iter().find(|(id, _)| id == &card.id);
+        let blocked = match card.min_amml.as_deref() {
+            Some(min) if !Compatibility::fits_min(Some(min), level) => Some(Compatibility::needs(min, official)),
+            _ => None,
+        };
+        view.state = match held {
+            _ if blocked.is_some() && held.is_some() => CardStateView::Installed,
+            None if blocked.is_some() => CardStateView::NeedsAmml,
+            None => CardStateView::Available,
+            Some((_, Some(version))) if version != &card.version => CardStateView::Update,
+            Some(_) => CardStateView::Installed,
+        };
+        view.needs_amml = blocked.as_ref().map(NeedsAmmlView::from);
+        if view.state == CardStateView::NeedsAmml
+            && let Some(release) =
+                card.releases.iter().find(|release| Compatibility::fits_min(release.min_amml.as_deref(), level))
+        {
+            view.version = release.version.clone();
+            view.size = release.size;
+            view.updated = release.updated.clone();
+            view.state = CardStateView::Available;
         }
+        view
     }
 }

@@ -14,7 +14,12 @@
     const slots = $derived({ title: mod.title });
 </script>
 
-<div class="amml-mod-row" class:amml-mod-row--off={!controls.coreTag && !mod.enabled} role="row">
+<div
+    class="amml-mod-row"
+    class:amml-mod-row--off={!controls.coreTag && !mod.enabled}
+    class:amml-mod-row--blocked={state === "blocked"}
+    role="row"
+>
     <div class="amml-mod-row__on" role="cell">
         {#if controls.coreTag}
             <Tag>{text.coreTag}</Tag>
@@ -29,8 +34,18 @@
     <div class="amml-mod-row__name" role="cell">
         <span class="amml-mod-row__title">{mod.title}</span>
         <span class="amml-mod-row__id">{ModTableRowRules.subline(mod, text)}</span>
+        {#if mod.blockedNote !== undefined}
+            <span class="amml-mod-row__id amml-mod-row__note">{mod.blockedNote}</span>
+        {:else if mod.laterNote !== undefined}
+            <span class="amml-mod-row__id amml-mod-row__note">{mod.laterNote}</span>
+        {/if}
     </div>
-    <div class="amml-mod-row__version amml-mod-row__version--installed" role="cell">{mod.installedVersion}</div>
+    <div class="amml-mod-row__version amml-mod-row__version--installed" role="cell">
+        {mod.installedVersion}
+        {#if mod.localBuild}
+            <Tag>{text.localBuild}</Tag>
+        {/if}
+    </div>
     <div class="amml-mod-row__version" class:amml-mod-row__version--newer={newer} role="cell">
         {mod.availableVersion ?? text.noVersion}
     </div>
@@ -39,7 +54,7 @@
             <Pill onclick={() => onupdate?.(mod.id)}>{#snippet children()}{text.update}{/snippet}</Pill>
         {:else if state === "unofficial"}
             <Pill tone="warn" tint>{#snippet children()}{text.unofficial}{/snippet}</Pill>
-        {:else}
+        {:else if state === "current"}
             <span class="amml-mod-row__current">{text.upToDate}</span>
         {/if}
     </div>
@@ -79,6 +94,15 @@
         font-size: var(--text-rad-lead);
         font-weight: var(--font-weight-rad-strong);
         line-height: 22px;
+    }
+
+    .amml-mod-row--blocked .amml-mod-row__title,
+    .amml-mod-row--blocked .amml-mod-row__version {
+        opacity: var(--opacity-rad-disabled);
+    }
+
+    .amml-mod-row__note {
+        color: var(--color-rad-dim);
     }
 
     .amml-mod-row--off .amml-mod-row__title {

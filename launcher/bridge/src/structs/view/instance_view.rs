@@ -12,6 +12,8 @@ pub struct InstanceView {
     pub game: String,
     pub preview: bool,
     pub amml_version: Option<String>,
+    // the AMML is a local build (`install-game`), not a core release
+    pub amml_local: bool,
     pub amml_installed: bool,
     pub mod_count: u32,
     pub data_mode: DataModeView,

@@ -28,6 +28,7 @@
         instances={store.adopted}
         choices={store.choices}
         selected={store.selected}
+        busy={store.busy}
         text={store.adoptText}
         onselect={(id) => store.select(id)}
         onnext={() => store.adopt()}

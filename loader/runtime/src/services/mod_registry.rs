@@ -5,7 +5,7 @@ use amml_abi::ModId;
 use amml_data::EntryId;
 use hcl::{Body, Expression};
 
-use crate::structs::{ModRegistryError, ModScan, ModSpec, SkippedMod};
+use crate::structs::{AmmlVersion, ModRegistryError, ModScan, ModSpec, SkippedMod};
 
 /// Reads the mod folders under a root: `<root>/@<namespace>/<name>/amml.hcl`.
 ///
@@ -107,9 +107,11 @@ impl ModRegistry {
 
     fn spec(dir: &Path, body: &Body) -> Result<ModSpec, String> {
         let mut listing_seen = false;
+        let mut ignored = Vec::new();
         for block in body.blocks() {
             if block.identifier() != "listing" {
-                return Err(format!("unknown block `{}`", block.identifier()));
+                ignored.push(format!("block `{}`", block.identifier()));
+                continue;
             }
             if !block.labels().is_empty() {
                 return Err("`listing` takes no labels".to_string());
@@ -124,6 +126,7 @@ impl ModRegistry {
         let mut entry = None;
         let mut api_version = None;
         let mut version = None;
+        let mut amml_version = None;
         let mut entries = Vec::new();
         for attribute in body.attributes() {
             let key = attribute.key();
@@ -132,6 +135,10 @@ impl ModRegistry {
                 ("name", Expression::String(text)) => name = Some(text.clone()),
                 ("entry", Expression::String(text)) => entry = Some(text.clone()),
                 ("version", Expression::String(text)) => version = Some(text.clone()),
+                ("amml_version", Expression::String(text)) => {
+                    let parsed = AmmlVersion::parse(text);
+                    amml_version = Some(parsed.ok_or("`amml_version` must look like 26.62.0")?);
+                }
                 ("api_version", Expression::Number(number)) => {
                     let version = number.as_u64().and_then(|value| u32::try_from(value).ok());
                     api_version = Some(version.ok_or("`api_version` must be a whole number")?);
@@ -147,10 +154,11 @@ impl ModRegistry {
                         entries.push(EntryId(id.clone()));
                     }
                 }
-                ("namespace" | "name" | "entry" | "api_version" | "entries" | "version", _) => {
+                ("namespace" | "name" | "entry" | "api_version" | "entries" | "version" | "amml_version", _) => {
                     return Err(format!("`{key}` has the wrong type"));
                 }
-                _ => return Err(format!("unknown attribute `{key}`")),
+                // a key from a newer loader: ignored so the mod still loads, and logged by the host
+                _ => ignored.push(format!("attribute `{key}`")),
             }
         }
         let namespace = namespace.ok_or("`namespace` is missing")?;
@@ -185,7 +193,17 @@ impl ModRegistry {
         }
         entries.sort();
         entries.dedup();
-        Ok(ModSpec { namespace, name, dir: dir.to_path_buf(), entry, api_version, version, entries })
+        Ok(ModSpec {
+            namespace,
+            name,
+            dir: dir.to_path_buf(),
+            entry,
+            api_version,
+            version,
+            amml_version,
+            entries,
+            ignored,
+        })
     }
 
     /// The `(namespace, name)` of a `@<namespace>/<name>` folder, without the `@`.

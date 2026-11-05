@@ -1,9 +1,9 @@
 use crate::{
-    Asset, AssetFetcher, Cached, Compatibility, DefaultMods, HttpFetch, LauncherError, ModId, RegistryClient,
-    RegistrySet, ResolvedMod, VerifiedFile,
+    AmmlLevel, Asset, AssetFetcher, Cached, Compatibility, DefaultMods, HttpFetch, LauncherError, ModId, NeedsAmml,
+    RegistryClient, RegistrySet, ResolvedMod, VerifiedFile,
 };
 use amml_gdk::DownloadProgress;
-use amml_registry::{AmmlRelease, ModDocument};
+use amml_registry::{AmmlRelease, ModDocument, RegistryRoot};
 use std::collections::HashSet;
 
 // Finds mods across the registries and downloads what the player picks.
@@ -21,15 +21,17 @@ impl<H: HttpFetch> ModCatalogue<H> {
         &mut self.registries
     }
 
-    // The first registry, in settings order, whose document has a release for the API.
-    pub fn resolve(&mut self, id: &ModId, api: u32) -> Result<ResolvedMod, LauncherError> {
+    // The first registry, in settings order, whose document has a release for the API that the AMML level meets.
+    // When a document exists but only releases for a newer AMML match, the error names the first such minimum.
+    pub fn resolve(&mut self, id: &ModId, api: u32, level: &AmmlLevel) -> Result<ResolvedMod, LauncherError> {
+        let root = self.registries.official_root().cloned();
+        let mut blocked: Option<NeedsAmml> = None;
         for client in self.registries.clients_mut() {
             match client.document(id) {
-                Ok(cached) => {
-                    if let Some(resolved) = Self::pick(client, cached, api) {
-                        return Ok(resolved);
-                    }
-                }
+                Ok(cached) => match Self::pick(client, cached, api, level, root.as_ref()) {
+                    Ok(resolved) => return Ok(resolved),
+                    Err(needs) => blocked = blocked.or(needs),
+                },
                 Err(error) => {
                     curia::debug!("a registry has no document", {
                         registry: client.registry().base.clone(),
@@ -39,26 +41,41 @@ impl<H: HttpFetch> ModCatalogue<H> {
                 }
             }
         }
-        Err(LauncherError::UnknownMod(id.as_str()))
+        match blocked {
+            Some(needs) => Err(LauncherError::NeedsAmml { id: id.as_str(), needs }),
+            None => Err(LauncherError::UnknownMod(id.as_str())),
+        }
     }
 
     // Like `resolve`, but only in the registry with this base URL (the registry a mod came from).
-    pub fn resolve_in(&mut self, base: &str, id: &ModId, api: u32) -> Result<ResolvedMod, LauncherError> {
+    pub fn resolve_in(
+        &mut self,
+        base: &str,
+        id: &ModId,
+        api: u32,
+        level: &AmmlLevel,
+    ) -> Result<ResolvedMod, LauncherError> {
+        let root = self.registries.official_root().cloned();
         for client in self.registries.clients_mut() {
             if client.registry().base != base {
                 continue;
             }
             let cached = client.document(id)?;
-            return Self::pick(client, cached, api).ok_or_else(|| LauncherError::UnknownMod(id.as_str()));
+            return Self::pick(client, cached, api, level, root.as_ref()).map_err(|needs| match needs {
+                Some(needs) => LauncherError::NeedsAmml { id: id.as_str(), needs },
+                None => LauncherError::UnknownMod(id.as_str()),
+            });
         }
         Err(LauncherError::UnknownMod(id.as_str()))
     }
 
-    // Every mod marked `default`, and every `core` mod of the official registry, that has a release for the API.
+    // Every mod marked `default`, and every `core` mod of the official registry, that has a release for the API
+    // that the AMML level meets.
     // The first registry that lists an id decides about it. A page or a core mod's document of the official registry
     // that cannot be read is an error, because a core mod must not be left out unseen. In any other registry a
     // failure only skips what it hides.
-    pub fn defaults_for(&mut self, api: u32) -> Result<DefaultMods, LauncherError> {
+    pub fn defaults_for(&mut self, api: u32, level: &AmmlLevel) -> Result<DefaultMods, LauncherError> {
+        let mut official_root = self.registries.official_root().cloned();
         let mut seen: HashSet<String> = HashSet::new();
         let mut found = DefaultMods::default();
         for client in self.registries.clients_mut() {
@@ -72,6 +89,9 @@ impl<H: HttpFetch> ModCatalogue<H> {
                 }
                 continue;
             };
+            if official {
+                official_root = Some(root.clone());
+            }
             let Some(summary) = root.index.apis.get(&api.to_string()) else {
                 continue;
             };
@@ -96,11 +116,13 @@ impl<H: HttpFetch> ModCatalogue<H> {
                         continue;
                     };
                     match client.document(&id) {
-                        Ok(cached) => {
-                            if let Some(resolved) = Self::pick(client, cached, api) {
-                                found.mods.push(resolved);
+                        Ok(cached) => match Self::pick(client, cached, api, level, official_root.as_ref()) {
+                            Ok(resolved) => found.mods.push(resolved),
+                            Err(Some(needs)) => {
+                                found.skipped.push((card.id.clone(), format!("it needs AMML {}", needs.version)))
                             }
-                        }
+                            Err(None) => {}
+                        },
                         Err(error) if official && card.core => return Err(error),
                         Err(error) => found.skipped.push((card.id.clone(), error.to_string())),
                     }
@@ -146,10 +168,20 @@ impl<H: HttpFetch> ModCatalogue<H> {
         self.fetcher.discard(file);
     }
 
-    fn pick(client: &RegistryClient<H>, cached: Cached<ModDocument>, api: u32) -> Option<ResolvedMod> {
-        let release = Compatibility::newest_for_api(&cached.value, api)?;
+    // `Err(Some(needs))`: a release for the API exists, but all need a newer AMML. `Err(None)`: no release for the API.
+    fn pick(
+        client: &RegistryClient<H>,
+        cached: Cached<ModDocument>,
+        api: u32,
+        level: &AmmlLevel,
+        root: Option<&RegistryRoot>,
+    ) -> Result<ResolvedMod, Option<NeedsAmml>> {
+        let choice = Compatibility::choose(&cached.value, api, level, root);
+        let Some(release) = choice.fitting else {
+            return Err(choice.blocked);
+        };
         let registry = client.registry().clone();
         let core = cached.value.core && registry.is_official();
-        Some(ResolvedMod { registry, document: cached.value, release, stale: cached.stale, core })
+        Ok(ResolvedMod { registry, document: cached.value, release, stale: cached.stale, core })
     }
 }

@@ -2,6 +2,7 @@ use crate::support::{RecordingSink, Samples, StallingHost};
 use amml_gdk::{CancelFlag, GdkError, InstallJournal, JournalStore};
 use amml_launcher_bridge::{
     BridgeError, CatalogSortView, FaultKindView, InstallSteps, JobError, JobKind, JobStateView, LauncherSession,
+    RegistryStatusView,
 };
 use amml_launcher_core::{CoreServices, LauncherError, RegistryRef, SettingsStore};
 use std::path::Path;
@@ -54,7 +55,6 @@ fn a_second_action_while_a_job_runs_is_refused_with_busy_and_changes_nothing_on_
         session.catalog_search("play", "x").err(),
         session.catalog_sorted("play", "r", CatalogSortView::Size).err(),
         session.inspect_url("play", "https://x/a.zip").err(),
-        session.refresh_registries().err(),
         session.launch("play").err(),
         session.download_remove("a.zip").err(),
         session.downloads_remove_unfinished().err(),
@@ -72,6 +72,36 @@ fn a_second_action_while_a_job_runs_is_refused_with_busy_and_changes_nothing_on_
     assert_eq!(std::fs::read_to_string(Samples::paths(dir.path()).settings()).ok(), settings_before);
     release.send(()).unwrap();
     session.runner().wait();
+}
+
+#[test]
+fn a_registry_refresh_runs_while_a_job_runs() {
+    let dir = tempfile::tempdir().unwrap();
+    let session = offline_session(dir.path());
+    let release = blocking_job(&session);
+
+    let refreshed = session.refresh_registries();
+
+    assert!(refreshed.is_ok(), "{refreshed:?}");
+    release.send(()).unwrap();
+    session.runner().wait();
+}
+
+#[test]
+fn a_refresh_with_no_network_sends_offline_views() {
+    let dir = tempfile::tempdir().unwrap();
+    let sink = RecordingSink::new();
+    let cancel = CancelFlag::new();
+    let services =
+        CoreServices::new(Samples::paths(dir.path()), Some("https://127.0.0.1:1/".to_string()), cancel.clone());
+    let session = LauncherSession::new(services, sink.clone(), cancel);
+
+    let views = session.refresh_registries().unwrap();
+
+    assert!(!views.is_empty());
+    assert!(views.iter().all(|view| view.fetched.is_none() && view.status != RegistryStatusView::Ok), "{views:?}");
+    assert_eq!(sink.registry_events(), vec![views.clone()]);
+    assert_eq!(session.registry_views(), views);
 }
 
 #[test]
@@ -247,6 +277,29 @@ fn the_setup_data_job_copies_the_worlds_and_then_saves_the_settings() {
     assert_eq!(std::fs::read(copied.join("minecraftWorlds").join("w1").join("level.dat")).unwrap(), b"level");
     assert!(paths.settings().is_file());
     assert!(world.join("level.dat").is_file());
+    let ids: Vec<&str> = snapshot.steps.iter().map(|step| step.id.as_str()).collect();
+    assert_eq!(ids, vec!["setup-check", "setup-measure", "setup-copy", "setup-settings"]);
+    assert!(snapshot.steps.iter().all(|step| step.state == amml_launcher_bridge::JobStepStateView::Done));
+    assert_eq!(snapshot.title_name, "old");
+}
+
+#[test]
+fn a_failed_settings_save_removes_the_fresh_copy() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Samples::paths(dir.path());
+    let source = paths.gdk().instances().join("old").join("Minecraft Bedrock");
+    std::fs::create_dir_all(source.join("minecraftWorlds").join("w1")).unwrap();
+    std::fs::write(source.join("minecraftWorlds").join("w1").join("level.dat"), b"level").unwrap();
+    // a folder where the settings temp file goes makes the save fail
+    std::fs::create_dir_all(paths.settings().with_extension("hcl.tmp")).unwrap();
+    let session = session(dir.path());
+
+    let snapshot = run_setup(&session, "old");
+
+    assert_eq!(snapshot.state, JobStateView::Failed);
+    assert!(snapshot.fault.unwrap().restored);
+    assert!(!paths.default_data_dir().join("Minecraft Bedrock").exists());
+    assert!(source.join("minecraftWorlds").join("w1").join("level.dat").is_file());
 }
 
 #[test]
@@ -263,7 +316,7 @@ fn a_clean_start_saves_the_settings_and_copies_nothing() {
 }
 
 #[test]
-fn a_not_empty_shared_data_folder_gives_a_fault_copies_nothing_and_saves_no_settings() {
+fn a_not_empty_shared_data_folder_is_merged_and_settings_are_saved() {
     let dir = tempfile::tempdir().unwrap();
     let paths = Samples::paths(dir.path());
     let source = paths.gdk().instances().join("old").join("Minecraft Bedrock");
@@ -276,14 +329,10 @@ fn a_not_empty_shared_data_folder_gives_a_fault_copies_nothing_and_saves_no_sett
 
     let snapshot = run_setup(&session, "old");
 
-    assert_eq!(snapshot.state, JobStateView::Failed);
-    assert_eq!(snapshot.fault.unwrap().kind, FaultKindView::OperationFailed);
-    assert!(!paths.settings().exists());
-    let left: Vec<String> = std::fs::read_dir(&target)
-        .unwrap()
-        .map(|entry| entry.unwrap().file_name().to_string_lossy().to_string())
-        .collect();
-    assert_eq!(left, vec!["keep.txt"]);
+    assert_eq!(snapshot.state, JobStateView::Done);
+    assert!(paths.settings().exists());
+    assert_eq!(std::fs::read(target.join("keep.txt")).unwrap(), b"mine");
+    assert!(target.join("minecraftWorlds").join("w1").join("level.dat").is_file());
 }
 
 // a session whose official registry cannot be reached, so a refresh answers at once and touches no real host
@@ -294,7 +343,7 @@ fn offline_session(root: &Path) -> LauncherSession<RecordingSink> {
 }
 
 #[test]
-fn the_manager_after_a_registry_is_removed_sees_the_new_registry_list() {
+fn a_refresh_after_a_registry_is_removed_sees_the_new_registry_list() {
     let dir = tempfile::tempdir().unwrap();
     let paths = Samples::paths(dir.path());
     let session = offline_session(dir.path());
@@ -361,11 +410,17 @@ fn removing_a_registry_does_not_wait_for_a_reader_and_the_reader_does_not_keep_t
     let mut settings = store.load().unwrap();
     settings.registries.push(RegistryRef::parse(&extra.url()).unwrap());
     store.save(&settings).unwrap();
+    make_unmanaged_instance(dir.path(), "play");
     let reader = {
         let session = std::sync::Arc::clone(&session);
         std::thread::spawn(move || session.refresh_registries())
     };
-    // the reader holds the manager from the moment it connects to the first host
+    // a catalog search holds the manager from the moment it connects to the first host
+    let manager_reader = {
+        let session = std::sync::Arc::clone(&session);
+        std::thread::spawn(move || session.catalog_search("play", "x"))
+    };
+    // the refresh reader reads the registries without the manager slot
     let deadline = std::time::Instant::now() + READER_START_LIMIT;
     while official.accepted() == 0 {
         assert!(std::time::Instant::now() < deadline, "the reader never reached the host");
@@ -380,7 +435,41 @@ fn removing_a_registry_does_not_wait_for_a_reader_and_the_reader_does_not_keep_t
     assert!(waited < Duration::from_millis(600), "{waited:?}");
     assert!(!reader.is_finished());
     reader.join().unwrap().unwrap();
+    let _ = manager_reader.join();
     assert_eq!(session.refresh_registries().unwrap().len(), 1);
+}
+
+#[test]
+fn a_clean_start_does_not_wait_for_a_reader_that_holds_the_manager() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = Samples::paths(dir.path());
+    make_unmanaged_instance(dir.path(), "play");
+    let official = StallingHost::start(Duration::from_secs(3));
+    let cancel = CancelFlag::new();
+    let services = CoreServices::new(paths, Some(official.url()), cancel.clone());
+    let sink = RecordingSink::new();
+    let session = std::sync::Arc::new(LauncherSession::new(services, sink.clone(), cancel));
+    let reader = {
+        let session = std::sync::Arc::clone(&session);
+        std::thread::spawn(move || session.catalog_search("play", "x"))
+    };
+    // the reader holds the manager from the moment it connects to the host
+    let deadline = std::time::Instant::now() + READER_START_LIMIT;
+    while official.accepted() == 0 {
+        assert!(std::time::Instant::now() < deadline, "the reader never reached the host");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(!reader.is_finished());
+
+    let began = std::time::Instant::now();
+    let job = run_setup(&session, "scratch");
+    let waited = began.elapsed();
+
+    assert!(waited < Duration::from_secs(1), "{waited:?}");
+    assert_eq!(job.state, amml_launcher_bridge::JobStateView::Done);
+    assert!(!reader.is_finished());
+    assert!(sink.snapshots().iter().all(|snapshot| snapshot.steps.iter().all(|step| step.id != "manager-wait")));
+    let _ = reader.join();
 }
 
 #[test]

@@ -500,6 +500,31 @@ fn function_start_of_follows_pattern_and_rejects_a_number() {
 }
 
 #[test]
+fn vtable_holding_parses_after_function_start_of() {
+    let dir = TempDir::new().unwrap();
+    let steps = "step \"pattern\" {\n      bytes = \"48\"\n    }\n    step \"function_start_of\" {\n    }\n    step \"vtable_holding\" {\n    }";
+    Fixture::write(dir.path(), "p.hcl", &Fixture::entry_with_step("P", steps));
+    let set = RecipeLoader::load_dir(dir.path()).unwrap();
+    let last = set.entries()[0].recipes[0].steps.last().unwrap();
+    assert!(matches!(last, amml_data::Step::VtableHolding));
+}
+
+#[test]
+fn vtable_holding_refuses_first_position() {
+    let err = Bad::load("t.hcl", &Fixture::entry_with_step("E", "step \"vtable_holding\" {\n    }"));
+    assert!(matches!(err, DataError::BadFirstStep { recipe: 0, .. }));
+    let message = amml_data::Step::VtableHolding.result_type(None, None).unwrap_err();
+    assert!(message.contains("has no value to work on"));
+}
+
+#[test]
+fn vtable_holding_refuses_fields() {
+    let steps = "step \"pattern\" {\n      bytes = \"48\"\n    }\n    step \"vtable_holding\" {\n      slot = 3\n    }";
+    let err = Bad::load("t.hcl", &Fixture::entry_with_step("E", steps));
+    assert!(matches!(err, DataError::Parse { message, .. } if message.contains("unknown attribute `slot`")));
+}
+
+#[test]
 fn in_vtable_loads_on_a_function_and_makes_its_global_a_dependency() {
     let dir = TempDir::new().unwrap();
     let global = "entry \"VT\" {\n  kind = \"global\"\n  recipe {\n    step \"rtti_vtable\" {\n      class = \"c\"\n    }\n  }\n}\n";

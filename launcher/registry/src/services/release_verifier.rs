@@ -38,6 +38,7 @@ impl<S: ReleaseSource> ReleaseVerifier<S> {
         Self::only_inside(&archive, &folder)?;
         let manifest_text = Self::read_text(&mut archive, &format!("{folder}amml.hcl"))?;
         let manifest = ManifestReader::parse(&manifest_text)?;
+        ManifestReader::check_floor(&manifest)?;
         Self::expect("namespace", namespace, &manifest.namespace)?;
         Self::expect("name", name, &manifest.name)?;
         Self::expect("version", version, &manifest.version)?;
@@ -66,6 +67,7 @@ impl<S: ReleaseSource> ReleaseVerifier<S> {
             sha256,
             size: zip.len() as u64,
             published: now.to_string(),
+            min_amml: manifest.amml_version,
         };
         Ok(VerifiedMod { release, listing, icon })
     }

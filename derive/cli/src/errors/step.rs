@@ -54,4 +54,10 @@ pub enum StepError {
     NoAlternative,
     #[error("alternatives {0:?} matched the same spot, so `alternative` cannot tell them apart")]
     AmbiguousAlternative(Vec<usize>),
+    #[error("no vtable holds a pointer to function {rva:#x}")]
+    NoVtableHolds { rva: u32 },
+    #[error("a pointer to function {rva:#x} at {slot:#x} is in a table whose start the step cannot read")]
+    UnreadableTable { rva: u32, slot: u32 },
+    #[error("function {rva:#x} is in {count} vtables, so it does not name one")]
+    InSeveralVtables { rva: u32, count: usize },
 }

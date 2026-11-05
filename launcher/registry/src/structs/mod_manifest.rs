@@ -14,5 +14,7 @@ pub struct ModManifest {
     #[serde(default)]
     pub version: String,
     #[serde(default)]
+    pub amml_version: Option<String>,
+    #[serde(default)]
     pub listing: Option<Listing>,
 }

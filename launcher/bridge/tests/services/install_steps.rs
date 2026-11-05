@@ -210,3 +210,100 @@ fn a_step_that_had_not_begun_stays_waiting_after_the_wait() {
 
     assert!(steps.steps().iter().all(|step| step.state == JobStepStateView::Waiting));
 }
+
+fn setup_ids(steps: &InstallSteps) -> Vec<String> {
+    steps.steps().into_iter().map(|step| step.id).collect()
+}
+
+fn active_id(steps: &InstallSteps) -> Option<String> {
+    steps.steps().into_iter().find(|step| step.state == JobStepStateView::Active).map(|step| step.id)
+}
+
+fn copying(done: u64, total: u64) -> CoreProgress {
+    CoreProgress::CopyingData {
+        detail: "a -> b".to_string(),
+        progress: DownloadProgress { bytes_done: done, bytes_total: total },
+    }
+}
+
+#[test]
+fn setup_steps_move_through_check_measure_copy_and_settings() {
+    let mut steps = InstallSteps::for_setup(true);
+    let base = Instant::now();
+    steps.start(base);
+    let mut seen = vec![active_id(&steps).unwrap()];
+
+    steps.apply(&CoreProgress::MeasuringData { merge: false }, base);
+    seen.push(active_id(&steps).unwrap());
+    steps.apply(&copying(50, 100), base);
+    seen.push(active_id(&steps).unwrap());
+    let during = steps.progress().unwrap();
+    steps.apply(&CoreProgress::SavingSettings, base);
+    seen.push(active_id(&steps).unwrap());
+    steps.apply(&CoreProgress::Done, base);
+
+    assert_eq!(seen, vec!["setup-check", "setup-measure", "setup-copy", "setup-settings"]);
+    assert_eq!((during.done, during.total), (50, 100));
+    assert_eq!(during.file.as_deref(), Some("a -> b"));
+    assert_eq!(steps.total(), 4);
+    assert!(!setup_ids(&steps).contains(&"finish".to_string()));
+    assert!(steps.steps().iter().all(|step| step.state == JobStepStateView::Done));
+}
+
+#[test]
+fn a_scratch_setup_has_only_the_settings_step() {
+    let steps = InstallSteps::for_setup(false);
+
+    assert_eq!(setup_ids(&steps), vec!["setup-settings"]);
+}
+
+#[test]
+fn a_copy_job_has_check_measure_and_copy_and_no_finish() {
+    let steps = InstallSteps::for_copy();
+
+    assert_eq!(setup_ids(&steps), vec!["setup-check", "setup-measure", "setup-copy"]);
+}
+
+#[test]
+fn a_merge_failure_is_not_restored_and_a_fresh_failure_is() {
+    let mut merge = InstallSteps::for_setup(true);
+    merge.start(Instant::now());
+    merge.apply(&CoreProgress::MeasuringData { merge: true }, Instant::now());
+    let mut fresh = InstallSteps::for_setup(true);
+    fresh.start(Instant::now());
+    fresh.apply(&CoreProgress::MeasuringData { merge: false }, Instant::now());
+
+    assert!(!merge.restore_seen());
+    assert!(fresh.restore_seen());
+}
+
+#[test]
+fn a_failed_copy_of_worlds_on_its_own_is_never_restored() {
+    let mut steps = InstallSteps::for_copy();
+    steps.start(Instant::now());
+    steps.apply(&CoreProgress::MeasuringData { merge: false }, Instant::now());
+
+    assert!(!steps.restore_seen());
+}
+
+#[test]
+fn a_setup_that_fails_before_the_copy_began_is_restored() {
+    let mut steps = InstallSteps::for_setup(true);
+    steps.start(Instant::now());
+
+    assert!(steps.restore_seen());
+}
+
+#[test]
+fn a_copy_of_zero_bytes_shows_no_nan_percent() {
+    let mut steps = InstallSteps::for_setup(true);
+    let base = Instant::now();
+    steps.start(base);
+    steps.apply(&CoreProgress::MeasuringData { merge: false }, base);
+    steps.apply(&copying(0, 0), base);
+
+    let active = steps.steps().into_iter().find(|step| step.state == JobStepStateView::Active).unwrap();
+
+    assert!(matches!(active.percent, None | Some(100)), "{:?}", active.percent);
+    assert!(steps.progress().is_some());
+}

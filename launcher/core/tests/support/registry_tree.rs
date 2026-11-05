@@ -34,7 +34,12 @@ impl RegistryTree {
             sha256: sha256.to_string(),
             size,
             published: Self::NOW.to_string(),
+            min_amml: None,
         }
+    }
+
+    pub fn release_min(version: &str, api: u32, min_amml: Option<&str>) -> ModRelease {
+        ModRelease { min_amml: min_amml.map(str::to_string), ..Self::release(version, api, "u", "h", 1) }
     }
 
     pub fn listing(title: &str, tags: &[&str]) -> Listing {

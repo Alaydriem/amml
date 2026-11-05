@@ -67,7 +67,15 @@ impl InstanceReader {
         } else {
             None
         };
-        AmmlState { version, installed }
+        let local = version.as_deref().is_some_and(|text| text.ends_with(AmmlState::LOCAL_SUFFIX));
+        let local_api = if local {
+            std::fs::read_to_string(folder.join("amml").join("amml-api.txt"))
+                .ok()
+                .and_then(|text| text.trim().parse::<u32>().ok())
+        } else {
+            None
+        };
+        AmmlState { version, installed, local, local_api }
     }
 
     fn mods(folder: &Path, launcher: Option<&LauncherBlock>) -> Vec<InstalledMod> {

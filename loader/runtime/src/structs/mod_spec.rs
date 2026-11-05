@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use amml_abi::ModId;
 use amml_data::EntryId;
 
+use crate::structs::AmmlVersion;
+
 /// One validated `amml.hcl`: a mod folder, the DLL it loads and the entries it needs.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ModSpec {
@@ -15,8 +17,13 @@ pub struct ModSpec {
     pub api_version: u32,
     /// The release version the mod publishes, when its manifest carries one.
     pub version: Option<String>,
+    /// The lowest AMML release the mod accepts, when its manifest names one.
+    pub amml_version: Option<AmmlVersion>,
     /// Entry ids the mod needs; used for the coverage log line.
     pub entries: Vec<EntryId>,
+    /// Manifest keys this loader does not know, as "attribute `x`" or "block `y`", in file order. They are ignored
+    /// so that a mod made for a newer loader still loads; the host logs them.
+    pub ignored: Vec<String>,
 }
 
 impl ModSpec {

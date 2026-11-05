@@ -21,6 +21,7 @@ impl Adopter {
                 name: state.name,
                 game: state.game,
                 amml: state.amml.version,
+                amml_local: state.amml.local,
                 mod_count: state.mods.len(),
             })
             .collect()

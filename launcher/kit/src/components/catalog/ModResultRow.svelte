@@ -14,6 +14,7 @@
 <li
     class="amml-result amml-row"
     class:amml-row--selected={active}
+    class:amml-result--blocked={card.blockedNote !== undefined}
     style:height="{ResultPaging.ROW_HEIGHT}px"
     data-anchor={anchor ? "" : undefined}
 >
@@ -36,7 +37,16 @@
             <span class="amml-result__title">{card.title}</span>
             <span class="amml-result__id">{card.id}</span>
         </span>
-        <span class="amml-result__summary">{card.summary}</span>
+        {#if card.blockedNote !== undefined}
+            <span class="amml-result__summary amml-result__note">{card.blockedNote}</span>
+        {:else}
+            <span class="amml-result__summary">
+                {card.summary}
+                {#if card.laterNote !== undefined}
+                    <span class="amml-result__note">{card.laterNote}</span>
+                {/if}
+            </span>
+        {/if}
     </button>
     <span class="amml-result__version">{card.version}</span>
     <span class="amml-result__state">
@@ -122,6 +132,16 @@
         color: var(--color-rad-faint);
         font-size: var(--text-rad-small);
         line-height: 18px;
+    }
+
+    .amml-result__note {
+        color: var(--color-rad-dim);
+    }
+
+    .amml-result--blocked .amml-result__title,
+    .amml-result--blocked .amml-result__id,
+    .amml-result--blocked .amml-result__version {
+        opacity: var(--opacity-rad-disabled);
     }
 
     .amml-result__version {

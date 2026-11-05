@@ -2,7 +2,7 @@ use std::fs;
 
 use amml::{ModLoadError, ModLoader, ModPhase};
 use amml_abi::{AmmlStatus, AmmlStr};
-use amml_runtime::{ModRegistry, ModSpec};
+use amml_runtime::{AmmlVersion, ModRegistry, ModSpec};
 
 use crate::support::{EchoMod, Harness, HeapProbe, HookTarget, LogFile};
 
@@ -88,7 +88,9 @@ fn a_mod_needing_a_newer_api_is_refused_with_version_mismatch() {
         entry: "missing.dll".to_string(),
         api_version: 3,
         version: None,
+        amml_version: None,
         entries: Vec::new(),
+        ignored: Vec::new(),
     };
     reports.extend(loader.load_all(&[ahead]));
 
@@ -235,4 +237,56 @@ fn a_mod_cannot_remove_the_hook_of_another_mod() {
     loader.disable_all();
 
     assert_eq!(HookTarget::call(1), 2);
+}
+
+fn spec_needing(harness: &Harness, name: &str, needs: AmmlVersion) -> ModSpec {
+    ModSpec {
+        namespace: "echo".to_string(),
+        name: name.to_string(),
+        dir: harness.mods().join("@echo").join(name),
+        entry: "missing.dll".to_string(),
+        api_version: 2,
+        version: None,
+        amml_version: Some(needs),
+        entries: Vec::new(),
+        ignored: Vec::new(),
+    }
+}
+
+#[test]
+fn refuses_mod_needing_newer_amml() {
+    let plain = EchoMod::build("plain", &[]);
+    let harness = Harness::start();
+    harness.install_mod("echo", "echo", &plain, "echo.dll", 2);
+    let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
+    let loader = ModLoader::new(harness.state);
+    let future = AmmlVersion { major: 99, minor: 0, patch: 0 };
+    let mut specs = vec![spec_needing(&harness, "future", future)];
+    specs.extend(scan.mods);
+
+    let reports = loader.load_all(&specs);
+
+    assert_eq!(reports[0].phase, ModPhase::Refused);
+    assert!(matches!(reports[0].error, Some(ModLoadError::AmmlTooOld { needs, .. }) if needs == future));
+    assert_eq!(reports[0].error.as_ref().map(ModLoadError::status), Some(AmmlStatus::VERSION_MISMATCH));
+    assert_eq!(reports[1].phase, ModPhase::Loaded);
+    assert!(reports[1].is_ok());
+}
+
+#[test]
+fn loads_mod_at_exact_amml_version() {
+    let harness = Harness::start();
+    let loader = ModLoader::new(harness.state);
+    let own = ModLoader::amml_version();
+
+    let reports = loader.load_all(&[spec_needing(&harness, "exact", own)]);
+
+    // The AMML check passes; the missing DLL then fails the library step, not the version step.
+    assert!(!matches!(reports[0].error, Some(ModLoadError::AmmlTooOld { .. })));
+    assert!(matches!(reports[0].error, Some(ModLoadError::Library { .. })));
+}
+
+#[test]
+fn loader_version_matches_the_package_version() {
+    assert_eq!(Some(ModLoader::amml_version()), AmmlVersion::parse(env!("CARGO_PKG_VERSION")));
 }

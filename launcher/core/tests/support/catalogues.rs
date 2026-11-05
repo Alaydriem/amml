@@ -1,7 +1,7 @@
 use super::{FakeServer, RegistryTree, Route, Zips};
 use amml_gdk::Downloader;
 use amml_launcher_core::{
-    AssetFetcher, ModCatalogue, RegistryCache, RegistryClient, RegistryRef, RegistrySet, UreqHttpFetch,
+    AssetFetcher, CacheLock, ModCatalogue, RegistryCache, RegistryClient, RegistryRef, RegistrySet, UreqHttpFetch,
 };
 use amml_registry::{HashText, ModRelease};
 use std::path::Path;
@@ -19,7 +19,7 @@ impl Catalogues {
         RegistryClient::new(
             registry,
             UreqHttpFetch::new(UreqHttpFetch::agent()),
-            RegistryCache::new(cache.to_path_buf(), RegistryCache::BUDGET),
+            RegistryCache::new(cache.to_path_buf(), RegistryCache::BUDGET, CacheLock::new()),
         )
     }
 

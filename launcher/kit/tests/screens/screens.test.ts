@@ -150,6 +150,20 @@ describe("FirstRunAdoptScreen", () => {
         expect(onselect).toHaveBeenCalledExactlyOnceWith("store");
         expect(screen.getByRole("radio", { name: /1\.26\.60\.05 instance/ })).toHaveAttribute("aria-checked", "true");
     });
+
+    it("busy disables Next", () => {
+        const props = {
+            instances: SetupFixtures.adopted,
+            choices: SetupFixtures.choices,
+            selected: "instance",
+            text: firstRunAdoptEn,
+        };
+        const { unmount } = render(FirstRunAdoptScreen, props);
+        expect(screen.getByRole("button", { name: firstRunAdoptEn.next })).toBeEnabled();
+        unmount();
+        render(FirstRunAdoptScreen, { ...props, busy: true });
+        expect(screen.getByRole("button", { name: firstRunAdoptEn.next })).toBeDisabled();
+    });
 });
 
 describe("InstallProgressScreen", () => {
@@ -209,6 +223,39 @@ describe("InstallProgressScreen", () => {
     it("marks the failed step for assistive technology", () => {
         render(InstallProgressScreen, failed);
         expect(screen.getByText("Failed")).toHaveClass("amml-visually-hidden");
+    });
+
+    it("without onback and oncancel shows no back link and no cancel button", () => {
+        render(InstallProgressScreen, running);
+        expect(screen.queryByText("Instances")).toBeNull();
+        expect(screen.queryByRole("button", { name: "Cancel install" })).toBeNull();
+        expect(screen.getByRole("button", { name: "Show log" })).toBeInTheDocument();
+    });
+
+    it("shows the eyebrow above the title", () => {
+        render(InstallProgressScreen, {
+            ...running,
+            text: { ...installProgressEn, eyebrow: "Setting up shared data" },
+        });
+        const eyebrow = screen.getByText("Setting up shared data");
+        const title = screen.getByRole("heading", { name: "Creating 1.26.51.1-players" });
+        expect(eyebrow.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("failed with other shows Try again, the other action and Show log in that order, and other calls onother", async () => {
+        const onother = vi.fn();
+        render(InstallProgressScreen, {
+            ...failed,
+            text: { ...installProgressEn, other: "Choose another source" },
+            onretry: vi.fn(),
+            onother,
+        });
+        const names = screen.getAllByRole("button").map((button) => button.textContent?.trim());
+        expect(names).toEqual(["Try again", "Choose another source", "Show log"]);
+
+        await fireEvent.click(screen.getByRole("button", { name: "Choose another source" }));
+
+        expect(onother).toHaveBeenCalledOnce();
     });
 });
 

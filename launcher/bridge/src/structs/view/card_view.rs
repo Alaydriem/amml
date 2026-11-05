@@ -1,4 +1,4 @@
-use super::CardStateView;
+use super::{CardStateView, NeedsAmmlView};
 use serde::Serialize;
 use ts_rs::TS;
 
@@ -17,5 +17,7 @@ pub struct CardView {
     pub size: u64,
     pub icon_url: Option<String>,
     pub state: CardStateView,
+    // set when `state` is `NeedsAmml`
+    pub needs_amml: Option<NeedsAmmlView>,
     pub updated: String,
 }

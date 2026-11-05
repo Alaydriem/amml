@@ -124,6 +124,7 @@ impl RecipeLoader {
             "pattern" => &["bytes", "offset", "literal_ok"],
             "pattern_any" => &["patterns", "offset", "literal_ok"],
             "function_start_of" => &[],
+            "vtable_holding" => &[],
             "string_xref" => &["text", "nth"],
             "rtti_vtable" => &["class", "slot"],
             "ref" => &["entry"],
@@ -159,6 +160,7 @@ impl RecipeLoader {
                 Ok(Step::PatternAny { patterns, offset: reader.optional_i64("offset")?.unwrap_or(0), literal_ok })
             }
             "function_start_of" => Ok(Step::FunctionStartOf),
+            "vtable_holding" => Ok(Step::VtableHolding),
             "string_xref" => {
                 let text = reader.string("text")?;
                 if text.is_empty() || text.contains(char::from(0)) {

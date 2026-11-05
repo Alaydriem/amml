@@ -853,3 +853,32 @@ fn member_displacement_of_an_instruction_without_a_memory_operand_is_refused() {
     let recipe = MemberSteps::recipe("48 89 F0", 0, -4);
     assert!(matches!(MemberSteps::run(&[0x48, 0x89, 0xF0], &recipe), Err(StepError::NoOperand { .. })));
 }
+
+#[test]
+fn vtable_holding_step_runs_in_a_recipe() {
+    let mut fx = ImageFixture::new(BASE);
+    let body = fx.put_text(&NEEDLE);
+    fx.put_function(body, body + NEEDLE.len() as u32);
+    let filler = fx.put_text(&[0xC3]);
+    let mut slots = Vec::new();
+    for pointer in [filler, body, filler] {
+        slots.extend((BASE + u64::from(pointer)).to_le_bytes());
+    }
+    let mut bytes = 0u64.to_le_bytes().to_vec();
+    bytes.extend(slots);
+    let table = fx.put_data(&bytes) + 8;
+    let site = fx.put_text(&[]);
+    let mut code = vec![0x48, 0x8D, 0x05];
+    code.extend(table.wrapping_sub(site + 7).to_le_bytes());
+    code.extend([0x48, 0x89, 0x01, 0xC3]);
+    let start = fx.put_text(&code);
+    fx.put_function(start, start + code.len() as u32);
+    let recipe = Recipe {
+        steps: vec![
+            Step::Pattern { bytes: NEEDLE_PATTERN.to_string(), offset: 0, literal_ok: Vec::new() },
+            Step::FunctionStartOf,
+            Step::VtableHolding,
+        ],
+    };
+    assert_eq!(Alt::run(&fx, &recipe).unwrap(), u64::from(table));
+}

@@ -8,4 +8,6 @@ pub struct ModRelease {
     pub sha256: String,
     pub size: u64,
     pub published: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_amml: Option<String>,
 }

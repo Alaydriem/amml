@@ -11,8 +11,9 @@
         SettingsNav,
         SharedDataSettingsScreen,
     } from "@amml/launcher-kit";
-    import { getContext, onMount, untrack } from "svelte";
+    import { getContext, onDestroy, untrack } from "svelte";
     import { LauncherApi } from "#lib/api/LauncherApi.ts";
+    import { RegistryEvents } from "#lib/api/RegistryEvents.ts";
     import { FaultPresenter } from "#lib/present/FaultPresenter.ts";
     import { FaultActions } from "#lib/stores/FaultActions.ts";
     import { SettingsStore } from "#lib/stores/SettingsStore.svelte.ts";
@@ -27,6 +28,7 @@
         (path) => void goto(path),
         (text) => navigator.clipboard.writeText(text),
         (text) => shell.say(text),
+        RegistryEvents,
     );
     const actions = new FaultActions(shell, LauncherApi, (path) => void goto(path), (text) => navigator.clipboard.writeText(text));
     const fault = $derived(store.fault ? FaultPresenter.present(store.fault) : null);
@@ -38,7 +40,7 @@
         untrack(() => void store.open(id));
     });
 
-    onMount(() => void shell.refresh());
+    onDestroy(() => store.stopWatching());
 </script>
 
 <AppShell {shell} {fault} onfault={() => store.fault && actions.run(store.fault, () => store.open(section))}>

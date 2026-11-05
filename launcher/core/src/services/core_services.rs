@@ -1,5 +1,5 @@
 use crate::{
-    AmmlInstaller, AssetFetcher, DataChoice, GameInput, GameInputPackage, InstanceGuard, InstanceManager,
+    AmmlInstaller, AssetFetcher, CacheLock, DataChoice, GameInput, GameInputPackage, InstanceGuard, InstanceManager,
     LauncherError, LauncherPaths, LauncherSettings, LazyInstaller, ModCatalogue, ModInstaller, ProcessPatcher,
     RegistryCache, RegistryClient, RegistryRef, RegistrySet, SettingsStore, UreqHttpFetch,
 };
@@ -13,12 +13,13 @@ pub struct CoreServices {
     paths: LauncherPaths,
     official: Option<String>,
     cancel: CancelFlag,
+    cache_lock: CacheLock,
 }
 
 impl CoreServices {
     // `official` replaces the base of the official registry; the settings file is never changed by it
     pub fn new(paths: LauncherPaths, official: Option<String>, cancel: CancelFlag) -> CoreServices {
-        CoreServices { paths, official, cancel }
+        CoreServices { paths, official, cancel, cache_lock: CacheLock::new() }
     }
 
     pub fn paths(&self) -> &LauncherPaths {
@@ -44,6 +45,11 @@ impl CoreServices {
         &self.cancel
     }
 
+    // the lock every registry cache of this launcher shares
+    pub fn cache_lock(&self) -> CacheLock {
+        self.cache_lock.clone()
+    }
+
     pub fn game_input(&self) -> GameInput {
         let downloads = self.paths.gdk().downloads();
         let downloader = Downloader::new(
@@ -64,7 +70,7 @@ impl CoreServices {
                 RegistryClient::new(
                     registry.clone(),
                     UreqHttpFetch::new(UreqHttpFetch::agent()),
-                    RegistryCache::new(self.paths.registry_cache(), RegistryCache::BUDGET),
+                    RegistryCache::new(self.paths.registry_cache(), RegistryCache::BUDGET, self.cache_lock()),
                 )
             })
             .collect();

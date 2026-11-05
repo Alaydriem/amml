@@ -14,7 +14,9 @@ fn spec(name: &str, entries: &[&str]) -> ModSpec {
         entry: format!("{name}.dll"),
         api_version: 1,
         version: None,
+        amml_version: None,
         entries: entries.iter().map(|id| EntryId(id.to_string())).collect(),
+        ignored: Vec::new(),
     }
 }
 

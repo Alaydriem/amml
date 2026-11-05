@@ -1,4 +1,4 @@
-use super::{LanguagePacks, LogSetup, TauriJobSink, WindowFocus};
+use super::{LanguagePacks, LogSetup, RegistrySchedule, TauriJobSink, WindowFocus};
 use crate::commands;
 use amml_gdk::{AmmlPaths, CancelFlag};
 use amml_launcher_bridge::LauncherSession;
@@ -49,6 +49,7 @@ impl LauncherApp {
                 commands::catalog::catalog_sorted,
                 commands::catalog::catalog_detail,
                 commands::catalog::registries_refresh,
+                commands::catalog::registries_get,
                 commands::catalog::registry_add,
                 commands::catalog::registry_remove,
                 commands::catalog::versions_list,
@@ -91,6 +92,7 @@ impl LauncherApp {
         let session: Arc<Session> =
             Arc::new(LauncherSession::new(services, TauriJobSink::new(app.handle().clone()), cancel));
         app.manage(Arc::clone(&session));
+        RegistrySchedule::start(Arc::clone(&session))?;
 
         // finishing a cut-off install can take a while, so it runs off the window thread
         std::thread::Builder::new().name("launcher-recover".to_string()).spawn(move || {

@@ -34,12 +34,14 @@ import {
     type WorldLocation,
     type WorldSource,
 } from "@amml/launcher-kit";
+import { RegistryFeed, type RegistryFeedEvents } from "./RegistryFeed.ts";
 import type { Navigate } from "./Navigate.ts";
 
 export type SettingsApi = Pick<
     typeof LauncherApi,
     | "settingsGet"
     | "settingsSetPreview"
+    | "registriesGet"
     | "registriesRefresh"
     | "registryAdd"
     | "registryRemove"
@@ -108,12 +110,14 @@ export class SettingsStore {
     private readonly clipboard: (text: string) => Promise<void>;
     private readonly say: (text: string) => void;
     private readonly clock: () => number;
+    private readonly feed: RegistryFeed;
 
     constructor(
         api: SettingsApi,
         navigate: Navigate,
         clipboard: (text: string) => Promise<void>,
         say: (text: string) => void,
+        registryEvents: RegistryFeedEvents,
         clock: () => number = Date.now,
     ) {
         this.api = api;
@@ -121,6 +125,13 @@ export class SettingsStore {
         this.clipboard = clipboard;
         this.say = say;
         this.clock = clock;
+        this.feed = new RegistryFeed(registryEvents, (views) => {
+            this.registries = views;
+        });
+    }
+
+    stopWatching(): void {
+        this.feed.stopWatching();
     }
 
     // a section id from the address; anything unknown is the registries page
@@ -141,7 +152,7 @@ export class SettingsStore {
             if (this.settings === null) this.settings = await this.api.settingsGet();
             switch (this.section) {
                 case "registries":
-                    this.registries = await this.api.registriesRefresh();
+                    await this.feed.load(() => this.api.registriesGet());
                     break;
                 case "versions":
                     await this.loadVersions();

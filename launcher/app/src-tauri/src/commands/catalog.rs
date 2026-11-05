@@ -89,6 +89,11 @@ pub async fn registries_refresh(session: State<'_, Arc<Session>>) -> Result<Vec<
 }
 
 #[tauri::command]
+pub async fn registries_get(session: State<'_, Arc<Session>>) -> Result<Vec<RegistryView>, FaultView> {
+    Blocking::run(&session, |s| Ok(s.registry_views())).await
+}
+
+#[tauri::command]
 pub async fn registry_add(session: State<'_, Arc<Session>>, url: String) -> Result<(), FaultView> {
     Blocking::run(&session, move |s| s.add_registry(&url)).await
 }

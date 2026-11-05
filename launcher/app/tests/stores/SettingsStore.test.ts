@@ -3,6 +3,7 @@ import { ApiFault } from "#lib/api/ApiFault.ts";
 import type { AboutView } from "#lib/bindings/AboutView.ts";
 import type { RegistryView } from "#lib/bindings/RegistryView.ts";
 import { SettingsStore, type SettingsApi } from "#lib/stores/SettingsStore.svelte.ts";
+import { FakeRegistryEvents } from "../support/FakeRegistryEvents.ts";
 import { Samples } from "../support/Samples.ts";
 
 const registry = (id: string, official = false): RegistryView => ({
@@ -34,6 +35,7 @@ function api(overrides: Partial<SettingsApi> = {}): SettingsApi {
             logsDir: "C:\\Users\\me\\AppData\\Local\\amml\\launcher\\logs",
         })),
         settingsSetPreview: vi.fn(async () => {}),
+        registriesGet: vi.fn(async () => [registry("official", true), registry("friends")]),
         registriesRefresh: vi.fn(async () => [registry("official", true), registry("friends")]),
         registryAdd: vi.fn(async () => {}),
         registryRemove: vi.fn(async () => {}),
@@ -63,11 +65,34 @@ function api(overrides: Partial<SettingsApi> = {}): SettingsApi {
 // the time the stores see; a test moves it
 let now = 4 * 60_000;
 
-function store(overrides: Partial<SettingsApi> = {}, navigate = vi.fn(), say = vi.fn(), copy = vi.fn(async () => {})) {
-    return new SettingsStore(api(overrides), navigate, copy, say, () => now);
+function store(
+    overrides: Partial<SettingsApi> = {},
+    navigate = vi.fn(),
+    say = vi.fn(),
+    copy = vi.fn(async () => {}),
+    events = new FakeRegistryEvents(),
+) {
+    return new SettingsStore(api(overrides), navigate, copy, say, events, () => now);
 }
 
 describe("SettingsStore", () => {
+    it("open registries reads the stored registries and follows the event", async () => {
+        const registriesRefresh = vi.fn(async () => []);
+        const events = new FakeRegistryEvents();
+        const settings = store({ registriesRefresh }, vi.fn(), vi.fn(), vi.fn(async () => {}), events);
+
+        await settings.open("registries");
+        await settings.open("registries");
+
+        expect(registriesRefresh).not.toHaveBeenCalled();
+        expect(settings.registries).toHaveLength(2);
+        expect(events.listeners).toBe(1);
+        events.emit([registry("official", true)]);
+        expect(settings.registries).toHaveLength(1);
+        settings.stopWatching();
+        expect(events.listeners).toBe(0);
+    });
+
     it("sends an unknown section to registries", async () => {
         const settings = store();
 
@@ -106,7 +131,7 @@ describe("SettingsStore", () => {
         await settings.add("https://z/");
 
         expect(settings.addOpen).toBe(false);
-        expect(registriesRefresh).toHaveBeenCalledTimes(2);
+        expect(registriesRefresh).toHaveBeenCalledTimes(1);
     });
 
     it("removes a registry by its row id and never the official one", async () => {

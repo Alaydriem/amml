@@ -107,6 +107,24 @@ resolved "ActorShaderManager.setEntityConstants" {
   recipes = 2
 }
 
+resolved "AnimatedImageData.mImage" {
+  kind    = "field"
+  value   = "0x8"
+  recipes = 1
+}
+
+resolved "AnimatedImageData.size" {
+  kind    = "field"
+  value   = "0x40"
+  recipes = 1
+}
+
+resolved "AnimationComponent.applyAnimationsCallback" {
+  kind    = "function"
+  value   = "0x1bce340"
+  recipes = 1
+}
+
 resolved "BaseActorRenderer._extractRenderTextObject" {
   kind    = "function"
   value   = "0x1ed38a0"
@@ -413,6 +431,18 @@ resolved "CameraRegistry.mCameraEntities" {
   recipes = 2
 }
 
+resolved "ClientEntityWaypoint.mActorId" {
+  kind    = "field"
+  value   = "0x78"
+  recipes = 1
+}
+
+resolved "ClientEntityWaypoint.vtable" {
+  kind    = "global"
+  value   = "0xe7d08b0"
+  recipes = 1
+}
+
 resolved "ClientExitLevel.hook" {
   kind    = "function"
   value   = "0x5db4220"
@@ -467,6 +497,12 @@ resolved "ClientInstance.getLocalPlayer" {
   recipes = 2
 }
 
+resolved "ClientInstance.getMinecraftInput" {
+  kind    = "vslot"
+  value   = "0x10b"
+  recipes = 2
+}
+
 resolved "ClientInstance.getMouseGrabbed" {
   kind    = "vslot"
   value   = "0x93"
@@ -488,6 +524,12 @@ resolved "ClientInstance.getPacketSender" {
 resolved "ClientInstance.getRegion" {
   kind    = "vslot"
   value   = "0x1e"
+  recipes = 2
+}
+
+resolved "ClientInstance.getTextureGroup" {
+  kind    = "vslot"
+  value   = "0x69"
   recipes = 2
 }
 
@@ -527,6 +569,12 @@ resolved "ClientInstance.onStartJoinGame" {
   recipes = 2
 }
 
+resolved "ClientInstance.requestLeaveGame" {
+  kind    = "vslot"
+  value   = "0xf"
+  recipes = 2
+}
+
 resolved "ClientInstance.startExternalNetworkWorld" {
   kind    = "vslot"
   value   = "0x14c"
@@ -549,6 +597,12 @@ resolved "ClientLevel.getLevelData" {
   kind    = "vslot"
   value   = "0xac"
   recipes = 2
+}
+
+resolved "ClientLocatorBar.nodeWaypoint" {
+  kind    = "field"
+  value   = "0x20"
+  recipes = 1
 }
 
 resolved "ClientNetworkHandler.handle.CameraInstructionPacket" {
@@ -695,6 +749,12 @@ resolved "FontHandle.dtor" {
   recipes = 2
 }
 
+resolved "FontHandle.mDefaultFont" {
+  kind    = "field"
+  value   = "0x30"
+  recipes = 1
+}
+
 resolved "FontHandle.size" {
   kind    = "field"
   value   = "0x50"
@@ -755,6 +815,12 @@ resolved "GlobalConstantBuffers.entityConstantBuffer" {
   recipes = 1
 }
 
+resolved "GuiMessage.ctor" {
+  kind    = "function"
+  value   = "0x1559e00"
+  recipes = 1
+}
+
 resolved "HIDControllerGameCoreDesktop.onKeyDown" {
   kind    = "function"
   value   = "0x70d390"
@@ -776,7 +842,7 @@ resolved "HIDControllerGameCoreDesktop.vtable" {
 resolved "HudLocatorBarRenderer.drawIcon" {
   kind    = "function"
   value   = "0x5596cc0"
-  recipes = 1
+  recipes = 2
 }
 
 resolved "HudLocatorBarRenderer.render" {
@@ -845,6 +911,42 @@ resolved "ImageBuffer.ctorFromDescription" {
   recipes = 2
 }
 
+resolved "ImageBuffer.mData" {
+  kind    = "field"
+  value   = "0x8"
+  recipes = 2
+}
+
+resolved "ImageBuffer.mDeleter" {
+  kind    = "field"
+  value   = "0x0"
+  recipes = 1
+}
+
+resolved "ImageBuffer.mDescription" {
+  kind    = "field"
+  value   = "0x18"
+  recipes = 1
+}
+
+resolved "ImageBuffer.mSize" {
+  kind    = "field"
+  value   = "0x10"
+  recipes = 2
+}
+
+resolved "ImageBuffer.size" {
+  kind    = "field"
+  value   = "0x30"
+  recipes = 1
+}
+
+resolved "ImageDescription.depth" {
+  kind    = "field"
+  value   = "0x10"
+  recipes = 1
+}
+
 resolved "IntOption.set" {
   kind    = "function"
   value   = "0x91cda0"
@@ -896,6 +998,12 @@ resolved "ItemStackBase.dtor" {
 resolved "ItemStackBase.getMaxStackSize" {
   kind    = "function"
   value   = "0x247df40"
+  recipes = 2
+}
+
+resolved "JsonValue.toStyledString" {
+  kind    = "function"
+  value   = "0xe01ef80"
   recipes = 2
 }
 
@@ -993,6 +1101,12 @@ resolved "LevelRendererCamera.mCameraTargetPos" {
   kind    = "field"
   value   = "0x660"
   recipes = 2
+}
+
+resolved "LevelRendererCamera.mWireframeMaterial" {
+  kind    = "field"
+  value   = "0x2e8"
+  recipes = 1
 }
 
 resolved "LevelRendererCamera.preRenderUpdate" {
@@ -1295,6 +1409,12 @@ resolved "PacketSender.send" {
   recipes = 2
 }
 
+resolved "PacketTraceNetworkPeer.receivePacket" {
+  kind    = "function"
+  value   = "0x16c6070"
+  recipes = 2
+}
+
 resolved "ParticleSystemEngine.tick" {
   kind    = "function"
   value   = "0x216d250"
@@ -1313,9 +1433,27 @@ resolved "Player.playerInventory" {
   recipes = 2
 }
 
+resolved "PlayerListAddEntry.mId" {
+  kind    = "field"
+  value   = "0x18"
+  recipes = 1
+}
+
+resolved "PlayerListAddEntry.mName" {
+  kind    = "field"
+  value   = "0x20"
+  recipes = 1
+}
+
 resolved "PlayerListAddEntry.mSkin" {
   kind    = "field"
   value   = "0x88"
+  recipes = 1
+}
+
+resolved "PlayerListAddEntry.mUUID" {
+  kind    = "field"
+  value   = "0x8"
   recipes = 1
 }
 
@@ -1325,10 +1463,28 @@ resolved "PlayerListAddEntry.size" {
   recipes = 1
 }
 
+resolved "PlayerListPacket.mEntries" {
+  kind    = "field"
+  value   = "0x30"
+  recipes = 1
+}
+
 resolved "PlayerListPacket.variantIndex" {
   kind    = "field"
   value   = "0xb0"
   recipes = 1
+}
+
+resolved "PlayerSkinPacket.mSkin" {
+  kind    = "field"
+  value   = "0x40"
+  recipes = 1
+}
+
+resolved "PlayerSkinPacket.mUUID" {
+  kind    = "field"
+  value   = "0x30"
+  recipes = 2
 }
 
 resolved "PredictedMovementSystem.tickPredictedMovement" {
@@ -1361,10 +1517,76 @@ resolved "ReadOnlyBinaryStream.vtable" {
   recipes = 2
 }
 
+resolved "RenderMaterial.mBlendDestination" {
+  kind    = "field"
+  value   = "0x181"
+  recipes = 1
+}
+
+resolved "RenderMaterial.mBlendSource" {
+  kind    = "field"
+  value   = "0x180"
+  recipes = 1
+}
+
+resolved "RenderMaterial.mDepthWriteMask" {
+  kind    = "field"
+  value   = "0x193"
+  recipes = 1
+}
+
+resolved "RenderMaterial.mEnableBlend" {
+  kind    = "field"
+  value   = "0x185"
+  recipes = 2
+}
+
+resolved "RenderMaterialInfo.mMaterial" {
+  kind    = "field"
+  value   = "0x40"
+  recipes = 1
+}
+
 resolved "ResourceLocation.ctor" {
   kind    = "function"
   value   = "0x2709a0"
   recipes = 2
+}
+
+resolved "ResourceLocation.mFullHash" {
+  kind    = "field"
+  value   = "0x30"
+  recipes = 1
+}
+
+resolved "ResourceLocation.size" {
+  kind    = "field"
+  value   = "0x38"
+  recipes = 1
+}
+
+resolved "ScreenContext.camera" {
+  kind    = "field"
+  value   = "0x18"
+  recipes = 1
+}
+
+resolved "ScreenContext.constantBuffers" {
+  kind    = "field"
+  value   = "0x20"
+  recipes = 1
+}
+
+resolved "ScreenContext.currentShaderColor" {
+  kind    = "field"
+  value   = "0x30"
+  recipes = 1
+}
+
+resolved "ScreenContext.meshContext" {
+  kind    = "field"
+  value   = "0x10"
+  recipes = 1
 }
 
 resolved "ScreenContext.tessellator" {
@@ -1376,6 +1598,24 @@ resolved "ScreenContext.tessellator" {
 resolved "ScreenController.dtor" {
   kind    = "function"
   value   = "0x4818830"
+  recipes = 2
+}
+
+resolved "SerializedSkinImpl.mGeometryData" {
+  kind    = "field"
+  value   = "0x118"
+  recipes = 1
+}
+
+resolved "SerializedSkinImpl.mResourcePatch" {
+  kind    = "field"
+  value   = "0x60"
+  recipes = 1
+}
+
+resolved "SerializedSkinImpl.mSkinAnimatedImages" {
+  kind    = "field"
+  value   = "0x100"
   recipes = 2
 }
 
@@ -1439,9 +1679,21 @@ resolved "Tessellator.mTessellating" {
   recipes = 1
 }
 
+resolved "TextureGroup.baseOffset" {
+  kind    = "field"
+  value   = "0x18"
+  recipes = 2
+}
+
 resolved "TextureGroup.getTexture" {
   kind    = "function"
   value   = "0x1d0cfd0"
+  recipes = 2
+}
+
+resolved "TextureGroup.textureGroupBase" {
+  kind    = "field"
+  value   = "0x18"
   recipes = 2
 }
 

@@ -81,6 +81,11 @@ impl<S: JobSink> JobRunner<S> {
         self.shared.busy.load(Ordering::SeqCst)
     }
 
+    // the sink the jobs report to; a registry refresh reports to it too
+    pub(crate) fn sink(&self) -> &S {
+        &self.shared.sink
+    }
+
     // the flag a cancel sets; a job that waits for the manager reads it too
     pub fn cancel_flag(&self) -> &CancelFlag {
         &self.shared.cancel

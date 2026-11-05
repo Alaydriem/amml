@@ -1,5 +1,8 @@
 use super::UnixMillis;
-use crate::{DataModeView, InstanceView, ModOriginView, ModView, RegistryStatusView, RegistryView, UpdateStatusView};
+use crate::{
+    DataModeView, InstanceView, ModOriginView, ModView, NeedsAmmlView, RegistryStatusView, RegistryView,
+    UpdateStatusView,
+};
 use amml_launcher_core::{
     InstalledMod, InstanceState, LauncherPaths, LauncherSettings, ModSource, RegistryRef, RegistryStatus, RunningGame,
     UpdateChecker, UpdateRow, UpdateStatus,
@@ -27,6 +30,7 @@ impl ViewMapper {
             game: state.game.instance_name(),
             preview: state.preview,
             amml_version: state.amml.version.clone(),
+            amml_local: state.amml.local,
             amml_installed: state.amml.installed,
             mod_count: state.mods.len() as u32,
             data_mode: if own { DataModeView::Own } else { DataModeView::Shared },
@@ -55,10 +59,18 @@ impl ViewMapper {
             available_version: amml_row.and_then(|row| row.available.clone()),
             api: 0,
             update: amml_row.map_or(UpdateStatusView::Unknown, |row| Self::update_status(row.status)),
+            needs_amml: None,
         });
         for installed in &state.mods {
             let id = installed.id.as_str();
             let row = rows.iter().find(|row| row.id == id);
+            let update = Self::mod_update(installed, row);
+            let needs_amml = match update {
+                UpdateStatusView::NeedsAmml | UpdateStatusView::Available => {
+                    row.and_then(|row| row.needs_amml.as_ref()).map(NeedsAmmlView::from)
+                }
+                _ => None,
+            };
             views.push(ModView {
                 origin: Self::origin(installed, core_ids.contains(&id)),
                 registry_base: match &installed.source {
@@ -70,7 +82,8 @@ impl ViewMapper {
                 installed_version: installed.version.clone(),
                 available_version: row.and_then(|row| row.available.clone()),
                 api: installed.api_version,
-                update: Self::mod_update(installed, row),
+                update,
+                needs_amml,
                 id,
             });
         }
@@ -112,6 +125,8 @@ impl ViewMapper {
             UpdateStatus::NotListed => UpdateStatusView::NotListed,
             UpdateStatus::Unofficial => UpdateStatusView::Unofficial,
             UpdateStatus::Offline => UpdateStatusView::Offline,
+            UpdateStatus::LocalBuild => UpdateStatusView::LocalBuild,
+            UpdateStatus::NeedsAmml => UpdateStatusView::NeedsAmml,
         }
     }
 

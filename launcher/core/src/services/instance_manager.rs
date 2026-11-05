@@ -1,14 +1,14 @@
 use crate::{
-    AmmlInstaller, Compatibility, CoreProgress, HttpFetch, InstanceGuard, InstanceHclFile, InstanceReader,
-    InstanceState, LauncherBlock, LauncherBlockStore, LauncherError, LauncherPaths, ModCatalogue, ModChange, ModId,
-    ModInstaller, ModSource, NewInstanceOutcome, NewInstanceRequest, Patcher, ResolvedMod, UpdateChecker, UpdateRow,
-    UrlInspection, VersionJsonFile,
+    AmmlInstaller, AmmlLevel, Compatibility, CoreProgress, HttpFetch, InstanceApi, InstanceGuard, InstanceHclFile,
+    InstanceReader, InstanceState, LauncherBlock, LauncherBlockStore, LauncherError, LauncherPaths, ModCatalogue,
+    ModChange, ModId, ModInstaller, ModSource, NewInstanceOutcome, NewInstanceRequest, Patcher, ResolvedMod,
+    UpdateChecker, UpdateRow, UrlInspection, VersionJsonFile,
 };
 use amml_gdk::{
     Channel, GameVersion, InstallRequest, Installer, InstanceFolder, InstanceService, ProcessInspector, TreeOps,
     VersionStore,
 };
-use amml_registry::{AmmlRelease, RegistryRoot};
+use amml_registry::{AmmlRelease, RegistryRoot, ReleaseVersion};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -173,9 +173,10 @@ impl<I: Installer, T: Patcher, P: ProcessInspector, H: HttpFetch> InstanceManage
         let folder = self.instance_folder(name)?;
         let state = InstanceReader::read(&folder)?;
         let api = self.instance_api(&state)?;
+        let level = AmmlLevel::of(&state.amml);
         match source {
-            Some(ModSource::Registry(base)) => self.catalogue.resolve_in(base, id, api),
-            _ => self.catalogue.resolve(id, api),
+            Some(ModSource::Registry(base)) => self.catalogue.resolve_in(base, id, api, &level),
+            _ => self.catalogue.resolve(id, api, &level),
         }
     }
 
@@ -234,7 +235,13 @@ impl<I: Installer, T: Patcher, P: ProcessInspector, H: HttpFetch> InstanceManage
         let state = InstanceReader::read(&folder)?;
         let api = self.instance_api(&state)?;
         let mut installed = Vec::new();
-        for resolved in self.catalogue.defaults_for(api)?.mods.into_iter().filter(|resolved| resolved.core) {
+        for resolved in self
+            .catalogue
+            .defaults_for(api, &AmmlLevel::of(&state.amml))?
+            .mods
+            .into_iter()
+            .filter(|resolved| resolved.core)
+        {
             if state.mods.iter().any(|held| held.id.as_str() == resolved.document.id) {
                 continue;
             }
@@ -264,7 +271,9 @@ impl<I: Installer, T: Patcher, P: ProcessInspector, H: HttpFetch> InstanceManage
         LauncherBlockStore::set_amml(&path, &version)?;
         InstanceHclFile::write(&InstanceReader::instance_hcl(&path), &request.data)?;
 
-        let defaults = self.catalogue.defaults_for(release.api_version)?;
+        // the AMML of this instance is the release just installed
+        let level = ReleaseVersion::parse(&release.version).map_or(AmmlLevel::Unknown, AmmlLevel::Release);
+        let defaults = self.catalogue.defaults_for(release.api_version, &level)?;
         let mut wanted = defaults.mods;
         // core mods first; the sort keeps the registry order inside each group
         wanted.sort_by_key(|resolved| !resolved.core);
@@ -364,18 +373,8 @@ impl<I: Installer, T: Patcher, P: ProcessInspector, H: HttpFetch> InstanceManage
 
     // The API of the AMML in the instance: from the official registry's entry for its version, else from a mod in it.
     fn instance_api(&mut self, state: &InstanceState) -> Result<u32, LauncherError> {
-        if let Some(version) = &state.amml.version
-            && let Ok(root) = self.official_root()
-            && let Some(release) = root.amml.versions.iter().find(|release| &release.version == version)
-        {
-            return Ok(release.api_version);
-        }
-        state
-            .mods
-            .iter()
-            .map(|installed| installed.api_version)
-            .find(|api| *api != 0)
-            .ok_or_else(|| LauncherError::UnknownApi(state.name.clone()))
+        let root = self.official_root().ok();
+        InstanceApi::of(state, root.as_ref()).ok_or_else(|| LauncherError::UnknownApi(state.name.clone()))
     }
 
     fn instance_folder(&self, name: &str) -> Result<PathBuf, LauncherError> {

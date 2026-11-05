@@ -1,9 +1,9 @@
 use crate::{
-    Adopter, AmmlCommand, CliArgs, CliCommand, CliProgress, CoreProgress, CoreServices, DataCommand, DataMigrator,
-    InstanceCommand, InstanceReader, InstanceState, LaunchService, LaunchState, LauncherError, LauncherPaths,
-    LauncherSettings, ModChange, ModCommand, ModId, NewInstanceRequest, PreviewSwitch, ProcessGameStarter,
-    RegistryCommand, RegistryRef, RegistryStatus, SettingsCommand, SettingsStore, UpdateChecker, UpdateRow,
-    UpdateStatus, UrlInspector, WindowsWindowProbe,
+    Adopter, AmmlCommand, AmmlState, CliArgs, CliCommand, CliProgress, CoreProgress, CoreServices, DataCommand,
+    DataMigrator, InstanceCommand, InstanceReader, InstanceState, LaunchService, LaunchState, LauncherError,
+    LauncherPaths, LauncherSettings, ModChange, ModCommand, ModId, NewInstanceRequest, PreviewSwitch,
+    ProcessGameStarter, RegistryCommand, RegistryRef, RegistryStatus, SettingsCommand, SettingsStore, UpdateChecker,
+    UpdateRow, UpdateStatus, UrlInspector, WindowsWindowProbe,
 };
 use amml_gdk::{AmmlPaths, CancelFlag, DownloadProgress, GameVersion, InstanceService, VersionStore};
 use std::io::Write;
@@ -137,7 +137,7 @@ impl LauncherCli {
                                 "{}  {}  amml {}  mods {}",
                                 state.name,
                                 state.game.instance_name(),
-                                state.amml.version.as_deref().unwrap_or("none"),
+                                AmmlState::label(state.amml.version.as_deref(), state.amml.local),
                                 state.mods.len()
                             ),
                         ),
@@ -178,7 +178,7 @@ impl LauncherCli {
                             "{}  {}  amml {}  mods {}  {}",
                             candidate.name,
                             candidate.game.instance_name(),
-                            candidate.amml.as_deref().unwrap_or("none"),
+                            AmmlState::label(candidate.amml.as_deref(), candidate.amml_local),
                             candidate.mod_count,
                             if candidate.has_version_in_store { "version in store" } else { "version not in store" }
                         ),
@@ -322,8 +322,13 @@ impl LauncherCli {
             }
             DataCommand::Copy { source } => {
                 let data_dir = self.services.settings()?.data_dir(&self.paths);
-                let copied = migrator.copy(source, &data_dir, &mut |_| {})?;
-                Self::line(out, format!("Copied {copied} files to {}", data_dir.join("Minecraft Bedrock").display()));
+                let mode = migrator.check(source, &data_dir)?;
+                let plan = migrator.measure(source, &data_dir, mode)?;
+                migrator.copy(&plan, &mut |_, _| {})?;
+                Self::line(
+                    out,
+                    format!("Copied {} files to {}", plan.files.len(), data_dir.join("Minecraft Bedrock").display()),
+                );
             }
         }
         Ok(0)
@@ -392,7 +397,7 @@ impl LauncherCli {
             format!("{}  {}{}", state.name, state.game.instance_name(), if state.preview { " (preview)" } else { "" }),
         );
         Self::line(out, format!("  folder: {}", state.folder.display()));
-        Self::line(out, format!("  amml: {}", state.amml.version.as_deref().unwrap_or("none")));
+        Self::line(out, format!("  amml: {}", AmmlState::label(state.amml.version.as_deref(), state.amml.local)));
         Self::line(out, format!("  managed: {}", state.managed));
         if let Some(data_dir) = &state.data_dir {
             Self::line(out, format!("  data: {}", data_dir.display()));
@@ -428,6 +433,8 @@ impl LauncherCli {
             UpdateStatus::NotListed => "not-listed",
             UpdateStatus::Unofficial => "unofficial",
             UpdateStatus::Offline => "offline",
+            UpdateStatus::LocalBuild => "local-build",
+            UpdateStatus::NeedsAmml => "needs-amml",
         }
     }
 

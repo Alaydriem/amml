@@ -32,6 +32,7 @@ one document per mod.
    - the zip holds one folder `@<namespace>/<name>/`, and its `amml.hcl` names the same namespace, name and version;
    - the `listing` block of `amml.hcl` passes every rule (title, summary, authors, licence, links, tags, icon);
    - the repo is the one named for that mod in `mods.hcl`.
+   - a mod's `amml_version`, when set, is at least 26.60.6 and no newer than the newest listed AMML.
 3. The workflow opens a pull request with the changed mod document and the derived files, merges it, and deploys the
    tree to GitHub Pages. A failed check leaves nothing merged and nothing deployed.
 4. Running the same release again changes nothing. The same version with a different checksum is refused.

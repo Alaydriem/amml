@@ -9,6 +9,12 @@ export interface ModNoteText {
     fromUrl: string;
     // template with an `{api}` slot
     api: string;
+    // template with a `{version}` slot
+    needsAmml: string;
+    // template with `{version}` and `{game}` slots
+    needsAmmlGame: string;
+    // template with a `{version}` slot
+    laterNeedsAmml: string;
 }
 
 export class ModNoteTextSet {
@@ -20,6 +26,9 @@ export class ModNoteTextSet {
             local: I18n.t("local"),
             fromUrl: I18n.t("from a URL"),
             api: I18n.t("api {api}"),
+            needsAmml: I18n.t("Needs AMML {version}"),
+            needsAmmlGame: I18n.t("Needs AMML {version} (game {game})"),
+            laterNeedsAmml: I18n.t("Later release needs AMML {version}"),
         };
     }
 }

@@ -24,6 +24,8 @@ export interface FirstRunAdoptScreenProps {
     /** Id of the chosen source. The screen never changes it: the parent answers `onselect` with a new value. */
     selected?: string;
     text: FirstRunAdoptScreenText;
+    /** A job is starting: Next stays disabled. */
+    busy?: boolean;
     onselect?: (id: string) => void;
     onnext?: () => void;
     onback?: () => void;

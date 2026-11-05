@@ -129,11 +129,36 @@ describe("SetupStore adopt", () => {
         }
     });
 
+    it("adopt of a copy source starts the job and goes to the progress page at once", async () => {
+        const navigate = vi.fn();
+        const setupRun = vi.fn(async () => 9);
+        const store = new SetupStore(setupApi({ adoptCandidates: vi.fn(async () => found), setupRun }), new FakeEvents(), navigate);
+        await store.loadAdopt();
+
+        await store.adopt();
+
+        expect(setupRun).toHaveBeenCalledExactlyOnceWith("appdata");
+        expect(navigate).toHaveBeenCalledExactlyOnceWith("/setup/progress");
+    });
+
+    it("adopt pressed twice starts one job", async () => {
+        const setupRun = vi.fn(async () => 9);
+        const store = new SetupStore(setupApi({ adoptCandidates: vi.fn(async () => found), setupRun }), new FakeEvents(), vi.fn());
+        await store.loadAdopt();
+
+        const first = store.adopt();
+        const second = store.adopt();
+        await Promise.all([first, second]);
+
+        expect(setupRun).toHaveBeenCalledTimes(1);
+    });
+
     it("shows a failed setup job's fault and stays on the screen", async () => {
         const events = new FakeEvents();
         const navigate = vi.fn();
         const store = new SetupStore(setupApi({ adoptCandidates: vi.fn(async () => found) }), events, navigate);
         await store.loadAdopt();
+        store.select("scratch");
 
         const adopting = store.adopt();
         await FakeEvents.settle();

@@ -243,6 +243,18 @@ fn lint_manifest_accepts_a_good_manifest_and_names_the_bad_field() {
 }
 
 #[test]
+fn lint_manifest_refuses_amml_version_below_the_floor() {
+    let rig = Rig::new();
+    let path = rig._dir.path().join("amml.hcl");
+    let text = ZipFixture::manifest("zoom", Some("26.60.1"), None)
+        .replace("api_version = 2\n", "api_version = 2\namml_version = \"26.60.5\"\n");
+    fs::write(&path, text).unwrap();
+    let low = rig.run(&["lint-manifest", path.to_str().unwrap()]);
+    assert_eq!(low.code, 1);
+    assert!(low.stderr.contains("26.60.6"), "{}", low.stderr);
+}
+
+#[test]
 fn lint_manifest_checks_the_icon_file_next_to_the_manifest() {
     let rig = Rig::new();
     let path = rig._dir.path().join("amml.hcl");
@@ -365,4 +377,22 @@ fn lint_manifest_checks_namespace_name_and_api_version() {
     let no_api = rig.run(&["lint-manifest", p]);
     assert_eq!(no_api.code, 1);
     assert!(no_api.stderr.contains("api_version"), "{}", no_api.stderr);
+}
+
+#[test]
+fn add_mod_refuses_min_amml_above_newest() {
+    let rig = Rig::new();
+    let manifest = ZipFixture::manifest("zoom", Some("26.62.1"), None).replacen(
+        "api_version = 2\n",
+        "api_version = 2\namml_version = \"26.62.5\"\n",
+        1,
+    );
+    let zip = ZipFixture::new().file("@alaydriem/zoom/amml.hcl", manifest.as_bytes()).build();
+    rig.source().put_release(REPO, "26.62.1", "zoom-26.62.1-windows-x64.zip", &zip);
+    let before = rig.snapshot();
+    let output = rig.add_mod("26.62.1");
+    assert_ne!(output.code, 0);
+    assert_ne!(output.code, 10);
+    assert!(output.stderr.contains("26.62.5"), "{}", output.stderr);
+    assert_eq!(rig.snapshot(), before);
 }

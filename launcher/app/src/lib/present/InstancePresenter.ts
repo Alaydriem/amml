@@ -15,6 +15,7 @@ export class InstancePresenter {
             swatch: SwatchRules.forName(view.name),
             gameVersion: view.game,
             ammlVersion: view.ammlVersion ?? text.unknownVersion,
+            ammlLocal: view.ammlLocal,
             modCount: view.modCount,
             dataMode: view.dataMode,
             folder: InstancePresenter.shownFolder(view.folder),

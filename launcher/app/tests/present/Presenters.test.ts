@@ -22,6 +22,7 @@ const instance: InstanceView = {
     game: "1.26.60.05",
     preview: false,
     ammlVersion: null,
+    ammlLocal: false,
     ammlInstalled: true,
     modCount: 4,
     dataMode: "shared",
@@ -43,6 +44,7 @@ function mod(overrides: Partial<ModView>): ModView {
         availableVersion: "1.1.0",
         api: 2,
         update: "available",
+        needsAmml: null,
         ...overrides,
     };
 }
@@ -131,6 +133,36 @@ describe("ModPresenter", () => {
         expect(unlisted.availableVersion).toBeUndefined();
         expect(ModPresenter.toInstalled(mod({}), [official], notes).availableVersion).toBe("1.1.0");
     });
+
+    it("mod_presenter_needs_amml_sets_blocked_note", () => {
+        const row = ModPresenter.toInstalled(
+            mod({ update: "needsAmml", needsAmml: { version: "26.62.0", game: "1.26.70.1" } }),
+            [official],
+            notes,
+        );
+        expect(row.blockedNote).toBe("Needs AMML 26.62.0 (game 1.26.70.1)");
+        expect(row.laterNote).toBeUndefined();
+    });
+
+    it("mod_presenter_needs_amml_without_game", () => {
+        const row = ModPresenter.toInstalled(
+            mod({ update: "needsAmml", needsAmml: { version: "26.62.0", game: null } }),
+            [official],
+            notes,
+        );
+        expect(row.blockedNote).toBe("Needs AMML 26.62.0");
+    });
+
+    it("mod_presenter_available_with_later_note_keeps_update", () => {
+        const row = ModPresenter.toInstalled(
+            mod({ update: "available", needsAmml: { version: "26.62.0", game: "1.26.70.1" } }),
+            [official],
+            notes,
+        );
+        expect(row.blockedNote).toBeUndefined();
+        expect(row.laterNote).toBe("Later release needs AMML 26.62.0");
+        expect(row.availableVersion).toBe("1.1.0");
+    });
 });
 
 describe("RegistryPresenter", () => {
@@ -206,6 +238,7 @@ describe("CatalogPresenter", () => {
             size: 5,
             iconUrl: "https://r.test/icons/b.png",
             state: "update",
+            needsAmml: null,
             updated: "2026-10-01",
         };
         const shown = CatalogPresenter.toCard(view);
@@ -213,6 +246,37 @@ describe("CatalogPresenter", () => {
         expect(shown.icon).toBe("https://r.test/icons/b.png");
         expect(CatalogPresenter.toCard({ ...view, iconUrl: null }).icon).toBeUndefined();
         expect(shown.swatch).toBe(SwatchRules.forName("@a/b"));
+    });
+
+    it("catalog_presenter_maps_needs_amml_card", () => {
+        const view: CardView = {
+            id: "@a/b",
+            registryId: "r",
+            title: "B",
+            summary: "s",
+            tags: [],
+            version: "2.0.0",
+            size: 5,
+            iconUrl: null,
+            state: "needsAmml",
+            needsAmml: { version: "26.62.0", game: "1.26.70.1" },
+            updated: "2026-10-01",
+        };
+        const blocked = CatalogPresenter.toCard(view);
+        expect(blocked.state).toBe("needsAmml");
+        expect(blocked.blockedNote).toBe("Needs AMML 26.62.0 (game 1.26.70.1)");
+        expect(CatalogPresenter.toCard({ ...view, needsAmml: { version: "26.62.0", game: null } }).blockedNote).toBe(
+            "Needs AMML 26.62.0",
+        );
+        const installed = CatalogPresenter.toCard({ ...view, state: "installed" });
+        expect(installed.blockedNote).toBeUndefined();
+        expect(installed.laterNote).toBe("Later release needs AMML 26.62.0");
+        for (const state of ["available", "update"] as const) {
+            const older = CatalogPresenter.toCard({ ...view, state });
+            expect(older.blockedNote).toBeUndefined();
+            expect(older.laterNote).toBe("Later release needs AMML 26.62.0");
+        }
+        expect(CatalogPresenter.toCard({ ...view, state: "available", needsAmml: null }).laterNote).toBeUndefined();
     });
 });
 
@@ -259,5 +323,36 @@ describe("FaultPresenter", () => {
         expect(FaultPresenter.present({ kind: "download-failed", code: null, values: {}, restored: false }).fault.primaryAction).toBe(true);
         expect(FaultPresenter.present({ kind: "install-interrupted", code: null, values: { version: "1" }, restored: false }).fault.severity).toBe("info");
         expect(FaultPresenter.present({ kind: "disk-space", code: null, values: {}, restored: false }).fault.severity).toBe("warn");
+    });
+});
+
+describe("local AMML build", () => {
+    const notes = ModNoteTextSet.build();
+
+    it("local_build_row_gets_available_version_and_badge", () => {
+        const view = mod({
+            id: ModPresenter.AMML_ID,
+            origin: "core",
+            installedVersion: "26.60.5+local",
+            availableVersion: "26.60.5",
+            update: "localBuild",
+        });
+
+        const row = ModPresenter.toInstalled(view, [official], notes);
+
+        expect(row.availableVersion).toBe("26.60.5");
+        expect(row.localBuild).toBe(true);
+    });
+
+    it("instance_row_gets_local_flag", () => {
+        const local = InstancePresenter.toInstance(
+            { ...instance, ammlVersion: "26.60.5+local", ammlLocal: true },
+            { unknownVersion: "?" },
+            0,
+        );
+        const release = InstancePresenter.toInstance({ ...instance, ammlVersion: "26.60.5" }, { unknownVersion: "?" }, 0);
+
+        expect(local.ammlLocal).toBe(true);
+        expect(release.ammlLocal).toBe(false);
     });
 });

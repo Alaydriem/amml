@@ -134,3 +134,48 @@ fn an_empty_registry_has_a_root_and_an_empty_names_file() {
     assert!(names.rows.is_empty());
     assert!(!tree.files.keys().any(|path| path.starts_with("index/")));
 }
+
+#[test]
+fn index_card_carries_min_amml_of_its_release() {
+    let mut old = Samples::release("26.60.1", 2, "aa", Samples::NOW);
+    old.min_amml = Some("26.62.0".to_string());
+    let mut new = Samples::release("26.60.2", 2, "bb", Samples::NOW);
+    new.min_amml = Some("26.62.1".to_string());
+    let tree = build(&[Samples::document("alaydriem", "zoom", vec![old, new])]);
+    let card = &page(&tree, "index/api-2/0001.json").cards[0];
+    assert_eq!(card.version, "26.60.2");
+    assert_eq!(card.min_amml.as_deref(), Some("26.62.1"));
+
+    let plain = build(&[simple("zoom", 2)]);
+    assert_eq!(page(&plain, "index/api-2/0001.json").cards[0].min_amml, None);
+}
+
+#[test]
+fn index_card_lists_releases_only_when_one_needs_amml() {
+    let mut gated = Samples::release("26.60.2", 2, "bb", Samples::NOW);
+    gated.min_amml = Some("26.62.0".to_string());
+    let other_api = Samples::release("26.60.3", 3, "cc", Samples::NOW);
+    let old = Samples::release("26.60.1", 2, "aa", Samples::NOW);
+    let tree = build(&[Samples::document("alaydriem", "zoom", vec![old.clone(), gated, other_api])]);
+    let card = &page(&tree, "index/api-2/0001.json").cards[0];
+    let listed: Vec<(&str, Option<&str>)> =
+        card.releases.iter().map(|r| (r.version.as_str(), r.min_amml.as_deref())).collect();
+    assert_eq!(listed, vec![("26.60.2", Some("26.62.0")), ("26.60.1", None)]);
+    assert_eq!(card.releases[1].size, 1000);
+    assert_eq!(card.releases[1].updated, Samples::NOW);
+    assert!(page(&tree, "index/api-3/0001.json").cards[0].releases.is_empty());
+
+    let plain = build(&[Samples::document("alaydriem", "zoom", vec![old])]);
+    assert!(page(&plain, "index/api-2/0001.json").cards[0].releases.is_empty());
+}
+
+#[test]
+fn documents_without_min_amml_round_trip_byte_identical() {
+    let document = "{\n  \"schema\": 2,\n  \"id\": \"@alaydriem/zoom\",\n  \"namespace\": \"alaydriem\",\n  \"name\": \"zoom\",\n  \"repo\": \"alaydriem/amml-zoom\",\n  \"core\": false,\n  \"default\": true,\n  \"listing\": {\n    \"title\": \"Zoom\",\n    \"summary\": \"Hold a key to zoom.\",\n    \"authors\": [\n      \"Charles R. Portwood II\"\n    ],\n    \"license\": \"BSD-3-Clause\",\n    \"source\": \"https://github.com/alaydriem/amml-zoom\",\n    \"tags\": [\n      \"camera\"\n    ]\n  },\n  \"versions\": [\n    {\n      \"version\": \"26.60.1\",\n      \"api_version\": 2,\n      \"asset\": \"https://example.test/zoom.zip\",\n      \"sha256\": \"aa\",\n      \"size\": 1000,\n      \"published\": \"2026-11-02T10:00:00Z\"\n    }\n  ]\n}\n";
+    let parsed: ModDocument = serde_json::from_str(document).unwrap();
+    assert_eq!(amml_registry::JsonText::pretty(&parsed).unwrap(), document.as_bytes());
+
+    let index = "{\"schema\":2,\"api_version\":2,\"page\":1,\"cards\":[{\"id\":\"@alaydriem/zoom\",\"title\":\"Zoom\",\"summary\":\"Hold a key to zoom.\",\"version\":\"26.60.1\",\"size\":1000,\"core\":false,\"default\":true,\"updated\":\"2026-11-02T10:00:00Z\"}]}\n";
+    let parsed: IndexPage = serde_json::from_str(index).unwrap();
+    assert_eq!(amml_registry::JsonText::compact(&parsed).unwrap(), index.as_bytes());
+}

@@ -185,3 +185,41 @@ fn mod_add_refuses_a_plain_http_url() {
     assert_eq!(code, 1, "{out}");
     assert!(out.contains("https"), "{out}");
 }
+
+fn local_instance(harness: &Harness, name: &str) {
+    let dir = instance(harness, name);
+    InstanceFolder::create(&dir, "1.26.62.01").with_amml(Some("26.60.5+local")).with_amml_api("2");
+}
+
+#[test]
+fn instance_list_marks_local_build() {
+    let harness = Harness::new();
+    local_instance(&harness, "loc");
+
+    let (code, out) = run(&harness, &["instance", "list"]);
+
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("loc  1.26.62.01  amml 26.60.5+local (local build)  mods 0"), "{out}");
+}
+
+#[test]
+fn instance_show_marks_local_build() {
+    let harness = Harness::new();
+    local_instance(&harness, "loc");
+
+    let (code, out) = run(&harness, &["instance", "show", "loc"]);
+
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("  amml: 26.60.5+local (local build)"), "{out}");
+}
+
+#[test]
+fn adopt_candidates_mark_local_build() {
+    let harness = Harness::new();
+    local_instance(&harness, "loc");
+
+    let (code, out) = run(&harness, &["instance", "adopt"]);
+
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("loc  1.26.62.01  amml 26.60.5+local (local build)  mods 0"), "{out}");
+}

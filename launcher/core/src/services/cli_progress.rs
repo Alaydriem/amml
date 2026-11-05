@@ -28,6 +28,9 @@ impl CliProgress {
             CoreProgress::Done => Some("Done".to_string()),
             CoreProgress::WaitingForManager { waiting: true } => Some("Waiting for another task".to_string()),
             CoreProgress::WaitingForManager { waiting: false } => None,
+            CoreProgress::MeasuringData { .. } => Some("Measuring the worlds".to_string()),
+            CoreProgress::CopyingData { detail, progress } => self.download(&format!("Copying {detail}"), *progress),
+            CoreProgress::SavingSettings => Some("Saving launcher settings".to_string()),
         }
     }
 
