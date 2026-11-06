@@ -1,4 +1,4 @@
-use amml_registry::{RegistryError, ReleaseVerifier};
+use amml_registry::{RegistryError, ReleaseSource, ReleaseVerifier};
 use tempfile::TempDir;
 
 use crate::support::{DirReleaseSource, Samples, ZipFixture};
@@ -321,4 +321,30 @@ fn check_mod_without_amml_version_has_none() {
     source.put_release(REPO, "26.60.1", ASSET, &good_mod_zip());
     let verified = verify(source).unwrap();
     assert_eq!(verified.release.min_amml, None);
+}
+
+/// A source that serves from a folder but names its own base URL, as the HTTP source does.
+struct LocalUrlSource(DirReleaseSource);
+
+impl ReleaseSource for LocalUrlSource {
+    fn fetch(&self, repo: &str, tag: &str, asset: &str) -> Result<Vec<u8>, RegistryError> {
+        self.0.fetch(repo, tag, asset)
+    }
+
+    fn asset_url(&self, repo: &str, tag: &str, asset: &str) -> String {
+        format!("http://127.0.0.1:1/{repo}/releases/download/{tag}/{asset}")
+    }
+}
+
+#[test]
+fn verifier_writes_the_url_of_its_source() {
+    let (_dir, source) = rig();
+    source.put_release(REPO, "26.60.1", ASSET, &good_mod_zip());
+    let verified = ReleaseVerifier::new(LocalUrlSource(source))
+        .check_mod(REPO, "alaydriem", "zoom", "26.60.1", Samples::NOW)
+        .unwrap();
+    assert_eq!(
+        verified.release.asset,
+        "http://127.0.0.1:1/alaydriem/amml-zoom/releases/download/26.60.1/zoom-26.60.1-windows-x64.zip"
+    );
 }

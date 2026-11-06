@@ -1,0 +1,47 @@
+{
+  "schema": 2,
+  "id": "@alaydriem/levels",
+  "namespace": "alaydriem",
+  "name": "levels",
+  "repo": "alaydriem/amml-levels",
+  "core": false,
+  "default": true,
+  "listing": {
+    "title": "Levels",
+    "summary": "Light levels, chunk borders, and spawn sphere markers.",
+    "description": "View levels and place markers in your world to see light levels, chunk borders, spawn spheres, and more.\n",
+    "authors": [
+      "Charles R. Portwood II"
+    ],
+    "license": "BSD-3-Clause",
+    "source": "https://github.com/alaydriem/amml-levels",
+    "homepage": "https://github.com/alaydriem/amml-levels#readme",
+    "tags": [
+      "light-level",
+      "spawning",
+      "chunk-borders",
+      "overlay",
+      "client"
+    ],
+    "icon": "icons/@alaydriem/levels.png"
+  },
+  "versions": [
+    {
+      "version": "26.62.0",
+      "api_version": 2,
+      "asset": "https://github.com/alaydriem/amml-levels/releases/download/26.62.0/levels-26.62.0-windows-x64.zip",
+      "sha256": "5acac63552bad2024a4425cd60b24e776953f7c63de26d3dfd4bd438f368ddaa",
+      "size": 613399,
+      "published": "2026-11-05T23:20:23Z",
+      "min_amml": "26.60.6"
+    },
+    {
+      "version": "26.60.6",
+      "api_version": 2,
+      "asset": "https://github.com/alaydriem/amml-levels/releases/download/26.60.6/levels-26.60.6-windows-x64.zip",
+      "sha256": "7b402cb40eba6d391952278302d8b1a80f3297ae139ca5e028900af9a9ed7f72",
+      "size": 613047,
+      "published": "2026-11-05T00:04:22Z"
+    }
+  ]
+}

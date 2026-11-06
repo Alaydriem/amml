@@ -288,7 +288,7 @@ fn detail_falls_back_to_fitting_release() {
 
     assert_eq!(detail.card.version, "1.0.0");
     assert_eq!(detail.card.state, CardStateView::Available);
-    assert_eq!(detail.card.needs_amml, None);
+    assert_eq!(detail.card.needs_amml.map(|needs| needs.version), Some("26.62.0".to_string()));
 }
 
 #[test]

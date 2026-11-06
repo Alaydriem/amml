@@ -1,0 +1,47 @@
+{
+  "schema": 2,
+  "id": "@alaydriem/toggles",
+  "namespace": "alaydriem",
+  "name": "toggles",
+  "repo": "alaydriem/amml-toggles",
+  "core": false,
+  "default": true,
+  "listing": {
+    "title": "Toggles",
+    "summary": "Toggle sneak and auto-walk without holding a key.",
+    "description": "Toggle sneak and walking with a single key for a hands-free experience.\n",
+    "authors": [
+      "Charles R. Portwood II"
+    ],
+    "license": "BSD-3-Clause",
+    "source": "https://github.com/alaydriem/amml-toggles",
+    "homepage": "https://github.com/alaydriem/amml-toggles#readme",
+    "tags": [
+      "sneak",
+      "auto-walk",
+      "movement",
+      "client",
+      "utility"
+    ],
+    "icon": "icons/@alaydriem/toggles.png"
+  },
+  "versions": [
+    {
+      "version": "26.62.0",
+      "api_version": 2,
+      "asset": "https://github.com/alaydriem/amml-toggles/releases/download/26.62.0/toggles-26.62.0-windows-x64.zip",
+      "sha256": "7ed1cee33e6ddca5ee84246594f5dfda4d1ff8b7e82428f706f6da6c11dfef32",
+      "size": 537062,
+      "published": "2026-11-05T23:49:01Z",
+      "min_amml": "26.60.6"
+    },
+    {
+      "version": "26.60.6",
+      "api_version": 2,
+      "asset": "https://github.com/alaydriem/amml-toggles/releases/download/26.60.6/toggles-26.60.6-windows-x64.zip",
+      "sha256": "ea5e22a0bea558eb9454ce009f0a6da4ff44f8f452743d112a75c1a7ad462508",
+      "size": 537161,
+      "published": "2026-11-05T00:11:01Z"
+    }
+  ]
+}

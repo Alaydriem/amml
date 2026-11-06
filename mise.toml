@@ -22,7 +22,20 @@ dir = "{{config_root}}"
 run = [
   "cargo nextest run --workspace --no-tests=pass",
   "cargo test --doc -p amml-i18n -p amml-ui -p amml-studio-ui -p amml-game",
+  "mise run proof-old-loader",
 ]
+
+[tasks.proof-old-loader]
+description = "Builds the released 26.60.5 loader in a git worktree under target/proof-old-loader and proves it skips a mod folder with amml_version (unknown attribute), the fail-safe the registry floor 26.60.6 relies on; prints PROOF-OLD-LOADER-REFUSES from inside the passing test and fails on a failed build"
+dir = "{{config_root}}"
+shell = "bash -c"
+run = "bash scripts/proof-old-loader.sh"
+
+[tasks.registry-proof]
+description = "Copies the tracked files of the sibling ../amml-registry checkout (git archive HEAD) to target/registry-proof, runs build-tree on the copy and diffs it byte for byte; prints registry-proof: identical or exits 1; AMML_REGISTRY_DIR overrides the checkout"
+dir = "{{config_root}}"
+shell = "bash -c"
+run = "bash scripts/registry-proof.sh"
 
 [tasks.derive]
 description = "Derives the address data of one game build: --exe, --recipes, --out, --report, optional --compare and --jobs <dir>"

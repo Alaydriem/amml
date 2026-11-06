@@ -125,7 +125,8 @@ impl CatalogService {
         // the newest release that fits; when none fits, the newest one, shown as needing a newer AMML
         let choice = Compatibility::choose(&document, api, level, official.as_ref());
         let (release, state, needs_amml) = match choice.fitting {
-            Some(release) => (release, CardStateView::Available, None),
+            // an older release fits: keep the note that a later release needs a newer AMML, as the browse card does
+            Some(release) => (release, CardStateView::Available, choice.blocked.as_ref().map(NeedsAmmlView::from)),
             None => {
                 let newest = Compatibility::newest_for_api(&document, api)
                     .ok_or_else(|| LauncherError::UnknownMod(document.id.clone()))?;

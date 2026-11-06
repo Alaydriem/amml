@@ -51,6 +51,10 @@ impl HttpReleaseSource {
 }
 
 impl ReleaseSource for HttpReleaseSource {
+    fn asset_url(&self, repo: &str, tag: &str, asset: &str) -> String {
+        self.url(repo, tag, asset)
+    }
+
     // a 404 is retried: the asset may not be visible yet right after the release is created
     fn fetch(&self, repo: &str, tag: &str, asset: &str) -> Result<Vec<u8>, RegistryError> {
         let url = self.url(repo, tag, asset);

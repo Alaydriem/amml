@@ -290,3 +290,101 @@ fn loads_mod_at_exact_amml_version() {
 fn loader_version_matches_the_package_version() {
     assert_eq!(Some(ModLoader::amml_version()), AmmlVersion::parse(env!("CARGO_PKG_VERSION")));
 }
+
+#[test]
+fn folder_without_amml_version_loads() {
+    let plain = EchoMod::build("plain", &[]);
+    let harness = Harness::start();
+    harness.install_mod("echo", "echo", &plain, "echo.dll", 2);
+
+    let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
+    let reports = ModLoader::new(harness.state).load_all(&scan.mods);
+
+    assert!(scan.skipped.is_empty(), "no minimum / plain / scan: {:?}", scan.skipped);
+    assert_eq!(scan.mods[0].amml_version, None, "no minimum / plain / scan");
+    assert_eq!(reports.len(), 1);
+    assert_eq!(reports[0].phase, ModPhase::Loaded, "no minimum / plain / load");
+    assert!(reports[0].is_ok());
+}
+
+#[test]
+fn folder_at_loader_version_loads() {
+    let plain = EchoMod::build("plain", &[]);
+    let harness = Harness::start();
+    harness.install_mod_needing("echo", "echo", &plain, "echo.dll", 2, env!("CARGO_PKG_VERSION"));
+
+    let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
+    let reports = ModLoader::new(harness.state).load_all(&scan.mods);
+
+    assert!(scan.skipped.is_empty(), "loader version / plain / scan: {:?}", scan.skipped);
+    assert_eq!(scan.mods[0].amml_version, Some(ModLoader::amml_version()), "loader version / plain / scan");
+    assert_eq!(reports[0].phase, ModPhase::Loaded, "loader version / plain / load");
+    assert!(reports[0].is_ok());
+}
+
+#[test]
+fn folder_one_patch_above_is_refused_and_others_load() {
+    let plain = EchoMod::build("plain", &[]);
+    let harness = Harness::start();
+    let loader_version = ModLoader::amml_version();
+    let above = AmmlVersion { patch: loader_version.patch + 1, ..loader_version };
+    harness.install_mod_needing("echo", "gated", &plain, "gated.dll", 2, &above.to_string());
+    harness.install_mod("echo", "echo", &plain, "echo.dll", 2);
+
+    let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
+    let reports = ModLoader::new(harness.state).load_all(&scan.mods);
+
+    assert!(scan.skipped.is_empty(), "above loader / gated / scan: {:?}", scan.skipped);
+    assert_eq!(reports.len(), 2);
+    assert_eq!(reports[1].id, "@echo/gated");
+    assert_eq!(reports[1].phase, ModPhase::Refused, "above loader / gated / load");
+    let error = reports[1].error.as_ref().unwrap();
+    assert!(
+        matches!(error, ModLoadError::AmmlTooOld { needs, loader } if *needs == above && *loader == loader_version)
+    );
+    assert_eq!(error.status(), AmmlStatus::VERSION_MISMATCH);
+    assert!(
+        error.to_string().contains(&format!("needs AMML {above} or newer and this loader is {loader_version}")),
+        "above loader / gated / reason: {error}"
+    );
+    assert_eq!(reports[0].id, "@echo/echo");
+    assert_eq!(reports[0].phase, ModPhase::Loaded, "above loader / plain / load");
+    assert!(reports[0].is_ok());
+}
+
+#[test]
+fn folder_with_unknown_attribute_loads() {
+    let plain = EchoMod::build("plain", &[]);
+    let harness = Harness::start();
+    harness.install_mod_with("echo", "echo", &plain, "echo.dll", 2, "future_field = \"x\"\n");
+
+    let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
+    let reports = ModLoader::new(harness.state).load_all(&scan.mods);
+
+    assert!(scan.skipped.is_empty(), "unknown attribute / echo / scan: {:?}", scan.skipped);
+    assert_eq!(scan.mods[0].ignored, ["attribute `future_field`"], "unknown attribute / echo / scan");
+    assert_eq!(reports[0].phase, ModPhase::Loaded, "unknown attribute / echo / load");
+    assert!(reports[0].is_ok());
+}
+
+#[test]
+fn folder_with_malformed_amml_version_is_skipped() {
+    let plain = EchoMod::build("plain", &[]);
+    let harness = Harness::start();
+    harness.install_mod_needing("echo", "broken", &plain, "broken.dll", 2, "26.62");
+    harness.install_mod("echo", "echo", &plain, "echo.dll", 2);
+
+    let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
+    let reports = ModLoader::new(harness.state).load_all(&scan.mods);
+
+    assert_eq!(scan.skipped.len(), 1, "malformed / broken / scan");
+    assert!(scan.skipped[0].dir.ends_with("broken"));
+    assert!(
+        scan.skipped[0].reason.contains("`amml_version` must look like 26.62.0"),
+        "malformed / broken / reason: {}",
+        scan.skipped[0].reason
+    );
+    assert_eq!(reports.len(), 1);
+    assert_eq!(reports[0].id, "@echo/echo");
+    assert_eq!(reports[0].phase, ModPhase::Loaded, "malformed / plain / load");
+}
