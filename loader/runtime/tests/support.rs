@@ -1,14 +1,14 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 
 use amml_data::{
-    BuildData, BuildDataStore, BuildId, BuildIdReader, Entry, EntryId, EntryKind, OperandKind, Recipe, RecipeLoader,
-    RecipeSet, Resolved, Step,
+    BuildData, BuildDataStore, BuildId, BuildIdReader, Entry, EntryFingerprints, EntryId, EntryKind, Fingerprint,
+    OperandKind, Recipe, RecipeLoader, RecipeSet, Resolved, Step,
 };
-use amml_runtime::{
-    CacheFile, CacheSource, DeriveSource, HostResolver, ImageLayout, LeviLaminaSource, RecipeDigest, SymbolLookup,
-};
+use amml_derive::DERIVER_VERSION;
+use amml_runtime::{CacheFile, CacheSource, DeriveSource, HostResolver, ImageLayout, LeviLaminaSource, SymbolLookup};
 use pelite::pe64::exports::GetProcAddress;
 use pelite::pe64::{Pe, PeFile};
 
@@ -20,10 +20,11 @@ pub const DATA_START: u64 = 0xF0_0000;
 
 pub struct Fixtures;
 
-// The recipes and data directories of a run on the probe dll.
+// The recipes, cache and shipped data directories of a run on the probe dll.
 pub struct ProbeDir {
     pub recipes: PathBuf,
-    pub data: PathBuf,
+    pub cache: PathBuf,
+    pub shipped: PathBuf,
     // RVA of the exported `amml_probe`
     pub rva: u32,
 }
@@ -65,19 +66,43 @@ impl Fixtures {
         Resolved { kind, value, recipes_agreeing: 2 }
     }
 
-    // writes the cache file of (`file_for`, `digest`) holding `contents_build` and `entries`
+    pub fn prints(set: &RecipeSet) -> BTreeMap<EntryId, Fingerprint> {
+        EntryFingerprints::of(set, DERIVER_VERSION).unwrap()
+    }
+
+    // writes `path` for `contents_build`: the resolved `entries` and the `failed` ids, each with its current
+    // fingerprint in `set` (an id outside `set` gets fingerprint 0)
+    pub fn write_data(
+        path: &Path,
+        contents_build: BuildId,
+        set: &RecipeSet,
+        entries: Vec<(&str, Resolved)>,
+        failed: Vec<&str>,
+    ) {
+        let prints = Self::prints(set);
+        let mut data = BuildData::new(contents_build);
+        let print = |id: &EntryId| prints.get(id).copied().unwrap_or(Fingerprint(0));
+        for (name, resolved) in entries {
+            data.fingerprints.insert(Self::id(name), print(&Self::id(name)));
+            data.entries.insert(Self::id(name), resolved);
+        }
+        for name in failed {
+            data.fingerprints.insert(Self::id(name), print(&Self::id(name)));
+            data.failed.insert(Self::id(name), "all recipes failed".to_string());
+        }
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        BuildDataStore::write(path, &data).unwrap();
+    }
+
+    // writes the cache file of `file_for` holding `contents_build` and `entries`, with current fingerprints
     pub fn write_cache(
         dir: &Path,
         file_for: BuildId,
-        digest: &str,
         contents_build: BuildId,
+        set: &RecipeSet,
         entries: Vec<(&str, Resolved)>,
     ) {
-        let mut data = BuildData::new(contents_build);
-        for (name, resolved) in entries {
-            data.entries.insert(Self::id(name), resolved);
-        }
-        BuildDataStore::write(&CacheFile::path(dir, file_for, digest), &data).unwrap();
+        Self::write_data(&CacheFile::path(dir, file_for), contents_build, set, entries, Vec::new());
     }
 
     pub fn probe_dll() -> PathBuf {
@@ -104,7 +129,7 @@ impl Fixtures {
         let recipes = root.join("recipes");
         std::fs::create_dir_all(&recipes).unwrap();
         std::fs::write(recipes.join("probe.hcl"), text).unwrap();
-        ProbeDir { recipes, data: root.join("data"), rva }
+        ProbeDir { recipes, cache: root.join("cache"), shipped: root.join("shipped"), rva }
     }
 
     pub fn probe_build() -> BuildId {
@@ -113,12 +138,12 @@ impl Fixtures {
 
     pub fn probe_cache(probe: &ProbeDir) -> CacheSource {
         let set = RecipeLoader::load_dir(&probe.recipes).unwrap();
-        let digest = RecipeDigest::of_dir(&probe.recipes).unwrap();
-        CacheSource::new(probe.data.clone(), Self::probe_build(), digest, set)
+        CacheSource::new(probe.cache.clone(), probe.shipped.clone(), Self::probe_build(), set)
     }
 
     pub fn probe_derive(probe: &ProbeDir) -> (DeriveSource, Arc<AtomicUsize>) {
-        let derive = DeriveSource::new(Self::probe_dll(), probe.recipes.clone(), probe.data.clone());
+        let derive =
+            DeriveSource::new(Self::probe_dll(), probe.recipes.clone(), probe.cache.clone(), probe.shipped.clone());
         let runs = derive.run_counter();
         (derive, runs)
     }

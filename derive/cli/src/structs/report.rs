@@ -13,6 +13,12 @@ pub struct Report {
     pub build: BuildId,
     pub total: usize,
     pub derived: usize,
+    // entries taken from an earlier data file instead of derived
+    pub reused: usize,
+    // the ids of the reused entries, sorted
+    pub reused_ids: Vec<EntryId>,
+    // reused failures with the stored reason text, sorted by entry id
+    pub stored_failures: Vec<(EntryId, String)>,
     // sorted by entry id
     pub failures: Vec<Failure>,
     // resolved entries with a failed recipe or a single unchecked recipe, sorted by entry id
@@ -48,12 +54,14 @@ impl Report {
     pub fn summary_line(&self) -> String {
         let determinism = if self.deterministic { "deterministic" } else { "not deterministic" };
         format!(
-            "derived {}/{} ({:.2}%) in {:.1}s, {}",
+            "derived {}/{} ({:.2}%) in {:.1}s, {}; reused {}, derived {}",
             self.derived,
             self.total,
             self.percent(),
             self.elapsed.as_secs_f64(),
-            determinism
+            determinism,
+            self.reused,
+            self.total.saturating_sub(self.reused)
         )
     }
 }

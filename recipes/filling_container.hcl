@@ -65,3 +65,35 @@ entry "FillingContainer.setItem" {
     max = 20
   }
 }
+
+entry "FillingContainer.mItems" {
+  kind     = "field"
+  notes    = "Offset of std::vector<ItemStack> FillingContainer::mItems (its first pointer; the last pointer follows 8 bytes later): 198h on 6aea437e-7eff13daabb430da (26.62). Found from the FillingContainer vtable (the tables that hold FillingContainer.swapSlots at slot 45 on this build): slot 7 (getItem, a leaf) tests the slot against the vector size, [this+198h] and [this+1A0h] divided by the ItemStack size 98h (`shr 3; imul 286BCA1Bh`, the inverse of 19 mod 2^32), and returns [this+198h] + slot * 98h; slot 45 (swapSlots, a leaf) indexes [this+198h] by both int slots with the stride 98h. Neither leaf has .pdata, so neither is used (the lint cannot decode a match in them, and five other container classes have the getItem body with another member offset). Recipe 0 is in void FillingContainer::removeResource(ItemStack const&, bool, bool, int) at slot 44 (a .pdata function): after the call that finds the next matching slot, `test eax,eax; js; mov eax,edi; mov rbx,[r15+disp]; imul r12,rax,98h; lea rdx,[rbx+r12]; mov rcx,r13; call`, ended at that call. Recipe 1 is the bounds test at the start of the slot-48 function (a .pdata function that clears one slot through setItem with the empty stack): `test edx,edx; js; mov rax,[rcx+disp]; mov r8,[rcx+disp]; sub r8,rax; shr r8,3; imul r8d,r8d,imm; cmp edx,r8d; jle`. Both read the displacement of the first load. The two recipes are in two functions, share no bytes and have different shapes (an index without a bounds test, a bounds test). Every displacement, immediate and branch byte is a wildcard, the stride 98h too; the register and opcode bytes make each pattern unique. Range window 100h..300h. The inventory chain reaches this vector through Player.playerInventory and PlayerInventory::mInventory (the Inventory is a FillingContainer). Value 198h on 6aa482fd-2658118eba0dbac5 (26.51), 6ad79ee4-17d51891a1119914 (26.60), 6aea437e-7eff13daabb430da (26.62) and 6aed1906-b127418e74d2f2f9 (26.63). On 26.51 recipe 0 does not match (a degraded row; removeResource has another shape there) and the entry resolves on recipe 1 and the range check."
+
+  recipe {
+    step "pattern" {
+      bytes  = "85 C0 0F 88 ?? ?? ?? ?? 89 F8 49 8B 9F ?? ?? ?? ?? 4C 69 E0 ?? ?? ?? ?? 4A 8D 14 23 4C 89 E9 E8"
+      offset = 10
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "85 D2 78 ?? 48 8B 81 ?? ?? ?? ?? 4C 8B 81 ?? ?? ?? ?? 49 29 C0 49 C1 E8 ?? 45 69 C0 ?? ?? ?? ?? 44 39 C2 7E ??"
+      offset = 4
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 256
+    max = 768
+  }
+}

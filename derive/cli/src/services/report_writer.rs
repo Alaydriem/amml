@@ -28,11 +28,21 @@ impl ReportWriter {
             .filter(|entry| !entry.notes.is_empty())
             .map(|entry| (entry.id.clone(), entry.notes.clone()))
             .collect();
+        let stored_failures: Vec<(EntryId, String)> = outcome
+            .reused
+            .iter()
+            .filter_map(|id| outcome.data.failed.get(id).map(|reason| (id.clone(), reason.clone())))
+            .collect();
+        let mut reused_ids = outcome.reused.clone();
+        reused_ids.sort();
         let moved = previous.map(|old| Self::moved(old, &outcome.data)).unwrap_or_default();
         Report {
             build: outcome.data.build,
             total: set.entries().len(),
             derived: outcome.data.entries.len(),
+            reused: outcome.reused.len(),
+            reused_ids,
+            stored_failures,
             failures,
             degraded,
             notes,
@@ -57,9 +67,10 @@ impl ReportWriter {
         } else {
             text.push_str("- deterministic: no (the two runs differ, so no data file was written)\n");
         }
+        text.push_str(&format!("- reused {}, derived {}\n", report.reused, report.total.saturating_sub(report.reused)));
         text.push_str(&format!("- elapsed: {:.1}s\n", report.elapsed.as_secs_f64()));
         text.push_str("\n## Failures\n\n");
-        if report.failures.is_empty() {
+        if report.failures.is_empty() && report.stored_failures.is_empty() {
             text.push_str("none\n");
         } else {
             text.push_str("| id | reason | notes |\n| --- | --- | --- |\n");
@@ -72,8 +83,23 @@ impl ReportWriter {
                     Self::cell(note)
                 ));
             }
+            for (id, reason) in &report.stored_failures {
+                let note = report.notes.get(id).and_then(|notes| notes.lines().next()).unwrap_or("");
+                text.push_str(&format!(
+                    "| {} | {} | {} |\n",
+                    Self::cell(&id.0),
+                    Self::cell(&format!("{reason} (stored)")),
+                    Self::cell(note)
+                ));
+            }
         }
         Self::render_degraded(report, &mut text);
+        if !report.reused_ids.is_empty() {
+            text.push_str("\n## Reused\n\n");
+            for id in &report.reused_ids {
+                text.push_str(&format!("- {id}\n"));
+            }
+        }
         if !report.moved.is_empty() {
             text.push_str("\n## Moved\n\n");
             text.push_str("| id | old | new |\n| --- | --- | --- |\n");

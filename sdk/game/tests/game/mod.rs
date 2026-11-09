@@ -44,6 +44,7 @@ mod option_impl_layout;
 mod option_reader;
 mod owned_item_stack;
 mod packet_layout;
+mod player_inventory_ref;
 mod player_join_world_context_layout;
 mod primitive_shape_layout;
 mod projection;

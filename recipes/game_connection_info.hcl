@@ -83,3 +83,68 @@ entry "GameConnectionInfo.ctor" {
 
   check "function_start" {}
 }
+
+entry "GameConnectionInfo.mUnresolvedUrl" {
+  kind  = "field"
+  notes = "Social::GameConnectionInfo::mUnresolvedUrl, a std::string (32 bytes): 28h on 26.51, 26.60, 26.62 and 26.63. It holds the host text before name resolution: a runtime tap of the Play > Servers join on 26.63 read `bedrock-voice-chat.nodecraft.gg` here while mHostIpAddress (+8h) held the resolved `79.127.172.199`. The name is the LeviLamina member name (src/mc/network/GameConnectionInfo.h): mType 0, mTransportType 4, mHostIpAddress 8, mUnresolvedUrl 28h, mServerRegion 48h, mExternalServerName 68h, mServiceQuality 88h, mPort 8Ch. The `#[repr(C)]` mirror GameConnectionInfoLayout calls it `url` at 28h. How it was found: the four constructors that start with `mov [rcx],dx; mov [rcx+4],r8d` (type, transport) and copy the ip string to +8h were read on 26.63 (0x4ec4f0, 0x4ec8b0, 0x4ecf00, 0x4ed380). The constructor (type, transport, ip, port, std::string& serverRegion, int serviceQuality) at 0x4ed380 copies its serverRegion argument to +48h and its serviceQuality to +88h, and the one with an externalServerName argument (0x4ecf00) copies that argument to +68h (see GameConnectionInfo.mExternalServerName); the string member between mHostIpAddress (+8h) and mServerRegion (+48h) is mUnresolvedUrl at 28h, which no constructor fills. Recipe 0 is inside GameConnectionInfo.ctor (type, transport, ip, port): right after the ip copy, `mov eax,[rbp+..] (the port argument); lea rcx,[r15+..]; mov [rbp+..],rcx; xorps xmm6,xmm6; movups [r15+28h],xmm6`, the first of the three empty-string inits that follow mHostIpAddress; it reads the store displacement at offset 14. Recipe 1 is in the serverRegion constructor (0xd775e0 in 26.51, 0x4ed4a0 in 26.60 and 26.62, 0x4ed380 in 26.63): `mov rsi,[rbp+..] (the serverRegion argument); xorps xmm0,xmm0; movups [r12+28h],xmm0; mov qword ptr [r12+38h],0; mov qword ptr [r12+40h],0Fh; movups [r12+48h],xmm0; movups [r12+58h],xmm0; mov rdi,[rsi+10h]; cmp qword ptr [rsi+18h],10h; jb`: the empty string just before the string that receives a copy of the argument (two movups instead of size and capacity stores). It reads the first store displacement at offset 7. The six-argument externalServerName constructor has one more empty init in that run and does not match. The two recipes are in two functions and share no bytes. Every displacement and immediate byte is a wildcard; both patterns are unique in all four exes. Check: range 10h..80h (after mHostIpAddress, before mPort). Not a hook; a mod writes the host text here before it passes the info to the join call."
+
+  recipe {
+    step "ref" { entry = "GameConnectionInfo.ctor" }
+    step "pattern" {
+      bytes  = "8B 45 ?? 49 8D 4F ?? 48 89 4D ?? 0F 57 F6 41 0F 11 77 ??"
+      offset = 14
+    }
+    step "operand" {
+      index = 0
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "48 8B 75 ?? 0F 57 C0 41 0F 11 44 24 ?? 49 C7 44 24 ?? ?? ?? ?? ?? 49 C7 44 24 ?? ?? ?? ?? ?? 41 0F 11 44 24 ?? 41 0F 11 44 24 ?? 48 8B 7E ?? 48 83 7E ?? ?? 72"
+      offset = 7
+    }
+    step "operand" {
+      index = 0
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 16
+    max = 128
+  }
+}
+
+entry "GameConnectionInfo.mExternalServerName" {
+  kind  = "field"
+  notes = "Social::GameConnectionInfo::mExternalServerName, a std::string (32 bytes): 68h on 26.51, 26.60, 26.62 and 26.63. It holds the server list name: a runtime tap of the Play > Servers join on 26.63 read `Nodecraft` here. The name is the LeviLamina member name (src/mc/network/GameConnectionInfo.h; the order is mHostIpAddress 8, mUnresolvedUrl 28h, mServerRegion 48h, mExternalServerName 68h, mServiceQuality 88h, mPort 8Ch). How it was found: LeviLamina lists a constructor (type, transport, std::string const& ip, int port, ThirdPartyInfo const& serverInfo, std::string const& externalServerName). On 26.63 it is 0x4ecf00 (0xd77160 in 26.51, 0x4ed020 in 26.60 and 26.62): it copies ip to +8h, stores the port at +8Ch, copy-constructs the ThirdPartyInfo argument at +0D0h and copies its last stack argument (externalServerName) to +68h. A second, independent fact: the serverRegion constructor (0x4ed380 in 26.63) copies serverRegion to +48h and serviceQuality to +88h, and inits the one string member between them at +68h. Recipe 0 is in the externalServerName constructor: `mov rsi,[rbp+..] (the externalServerName argument); xorps xmm0,xmm0; movups [r12+28h],xmm0; size and capacity stores; movups [r12+48h],xmm0; size and capacity stores; movups [r12+68h],xmm0; movups [r12+78h],xmm0; mov rdi,[rsi+10h]; cmp qword ptr [rsi+18h],10h; jb`: the string zeroed with two movups is the one that then receives the copy of the argument. It reads the store displacement at offset 58. Recipe 1 is in the serverRegion constructor after the region copy (the pattern starts after that call): `mov eax,[rbp+..] (serviceQuality); mov ecx,[rbp+..] (port); lea rdx,[r12+..]; mov [rbp+..],rdx; xorps xmm6,xmm6; movups [r12+68h],xmm6; mov qword ptr [r12+78h],0; mov qword ptr [r12+80h],0Fh; mov [r12+88h],eax; mov [r12+8Ch],ecx`: the empty string just before mServiceQuality and mPort. It reads the store displacement at offset 21. The two recipes are in two functions and share no bytes. Every displacement and immediate byte is a wildcard; both patterns are unique in all four exes. Check: range 10h..88h (after mHostIpAddress, before mServiceQuality). Not a hook; a mod writes the server name here before it passes the info to the join call."
+
+  recipe {
+    step "pattern" {
+      bytes  = "48 8B B5 ?? ?? ?? ?? 0F 57 C0 41 0F 11 44 24 ?? 49 C7 44 24 ?? ?? ?? ?? ?? 49 C7 44 24 ?? ?? ?? ?? ?? 41 0F 11 44 24 ?? 49 C7 44 24 ?? ?? ?? ?? ?? 49 C7 44 24 ?? ?? ?? ?? ?? 41 0F 11 44 24 ?? 41 0F 11 44 24 ?? 48 8B 7E ?? 48 83 7E ?? ?? 72"
+      offset = 58
+    }
+    step "operand" {
+      index = 0
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "8B 85 ?? ?? ?? ?? 8B 4D ?? 49 8D 54 24 ?? 48 89 55 ?? 0F 57 F6 41 0F 11 74 24 ?? 49 C7 44 24 ?? ?? ?? ?? ?? 49 C7 84 24 ?? ?? ?? ?? ?? ?? ?? ?? 41 89 84 24 ?? ?? ?? ?? 41 89 8C 24"
+      offset = 21
+    }
+    step "operand" {
+      index = 0
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 16
+    max = 136
+  }
+}

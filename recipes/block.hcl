@@ -55,3 +55,40 @@ entry "Block.tryGetComponent.BlockMapColorComponent" {
 
   check "function_start" {}
 }
+
+entry "Block.mDirectData.mLightEmission" {
+  kind  = "field"
+  notes = "Offset, from the start of the Block, of BlockComponentDirectData::mLightEmission (a 1-byte Brightness, 0..15, the light level the block emits), inside Block::mDirectData. LeviLamina headers world/level/block/Block.h and components/BlockComponentDirectData.h: the vtable (8), mComponents (60h), mBlockType at 68h, mCachedComponentData (8) at 70h, mDirectData at 78h; in mDirectData five component pointers (28h), four bools, then mLightEmission at +2Ch and mLight (the light the block absorbs) at +2Dh, so A4h and A5h from the Block. The game reads it from the Block, not through BlockType. Recipe 0 is the light spread core (the function that LightPropagationCoordinator.propagateForMesh calls first): for every block of a subchunk that is not air it loads the emission and the absorption, writes the absorption into a 4-bit-per-block array and, when the emission is not 0, pushes the block, its position and the emission byte (+0Bh of a 10h record) into the emitter list. It is a pattern_any with one alternative per shape, both starting at the emission load at offset 0, read as the displacement of operand 1. Alternative 0 (26.60, 26.62, 26.63): `movzx r9d,byte ptr [r14+..]; movzx eax,byte ptr [r14+..]; mov ecx,eax; or cl,r9b; je`; the fixed `mov ecx,eax; or cl,r9b` bytes tie the first load (r9b, the emitter byte) and the second (al, the absorption written to the array). Alternative 1 (Preview): the absorption, a new byte at +71h and the emission are loaded in that order, and the pattern starts at the third load: `movzx edx,byte ptr [rdi+..]; mov eax,ecx; mov [rbp+..],dl; or al,dl; setne al; or al,r9b; cmp al,..; jne`; the emission is kept in a frame slot and pushed into the emitter list from there. Recipe 1 is the point light function of Vibrant Visuals (26.62 0x790b9d0, the function just before PointLightCoordinator.getAnalyticalLights in the image): it loads the emission of the block before it asks the block for a component (`movzx r14d,byte ptr [rdi+..]; mov rcx,rdi; call`) and keeps it for the light it adds. Step 0 is a pattern_any that finds that function, one alternative per shape: `movaps xmm7,xmm8; movzx; mov; call` (26.60..26.63) and `xor r14d,r14d; movzx; mov; call` (Preview); step 1 scans only that function for `movzx r..,byte ptr [r..+disp32]; mov rcx,r..; call` (once in it on every build), offset 0, read as the displacement of operand 1. The two recipes are in two functions and share no pattern bytes; each pattern ends at a call or before one. Every displacement, immediate and branch byte is a wildcard. Range window 80h..100h. Values: A4h on 6ad79ee4-17d51891a1119914 (26.60), 6aea437e-7eff13daabb430da (26.62) and 6aed1906-b127418e74d2f2f9 (26.63); A5h on 6ae4eeee-4dd4fa7acacb4c41 (Preview 1.26.70.23), where the members after it moved one byte (the absorption is at A6h) and the code also reads a new byte at +71h. On 6aa482fd-2658118eba0dbac5 (26.51) neither recipe matches and the entry refuses; 26.51 is out of scope. Evidence: (1) on 26.63 the emitter list of the spread core is filled from +A4h and the absorption array from +A5h; on the Preview the same loop (the first direct call of propagateForMesh, the same per-block virtual getBlock and air test) fills the emitter list from +A5h and the absorption array from +A6h; (2) the point light function, found on the Preview by the same body after the load (`call; nop; movaps xmm0,[rip+..]; movss xmm8,[rip+..]; test rax,rax; je; mov eax,[rax+10h]; cmp eax,2; je; cmp eax,71h; jne`), reads +A4h on 26.62 and +A5h on the Preview. Also on 26.60..26.63: LevelChunk::_lightingCallbacks (26.63 0x384e460) compares the old and the new block at +A4h and +A5h before it calls the lighting update, and Item::getLightEmission(int) (Item vtable slot 121 on 26.63, 0x3f976b0) returns the byte at +A4h of the item's block state. What changed in 6ae4eeee-4dd4fa7acacb4c41: the member moved one byte and the spread loop has a new shape; the meaning is the same."
+
+  recipe {
+    step "pattern_any" {
+      patterns = [
+        "45 0F B6 ?? ?? ?? ?? ?? 41 0F B6 ?? ?? ?? ?? ?? 89 C1 44 08 C9 74 ??",
+        "0F B6 ?? ?? ?? ?? ?? 89 C8 88 95 ?? ?? ?? ?? 08 D0 0F 95 C0 44 08 C8 3C ?? 75 ??",
+      ]
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "pattern_any" {
+      patterns = [
+        "41 0F 28 F8 44 0F B6 ?? ?? ?? ?? ?? 48 89 ?? E8",
+        "45 31 F6 44 0F B6 ?? ?? ?? ?? ?? 48 89 ?? E8",
+      ]
+    }
+    step "pattern" { bytes = "44 0F B6 ?? ?? ?? ?? ?? 48 89 ?? E8" }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 128
+    max = 256
+  }
+}

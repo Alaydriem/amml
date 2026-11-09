@@ -76,6 +76,11 @@ impl EntryTable {
         self.found.get(id).map(|(_, source)| *source)
     }
 
+    /// How many found entries came from the source named `source`.
+    pub fn count_from(&self, source: &str) -> usize {
+        self.found.values().filter(|(_, found)| *found == source).count()
+    }
+
     pub fn add_notes(&mut self, notes: Vec<SourceNote>) {
         self.notes.extend(notes);
     }

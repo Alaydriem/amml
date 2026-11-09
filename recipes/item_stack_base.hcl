@@ -124,3 +124,39 @@ entry "ItemStackBase.isDamaged" {
     value = 456
   }
 }
+
+entry "ItemStackBase.mBlock" {
+  kind  = "field"
+  notes = "Offset in ItemStackBase of mBlock, the Block const* the stack holds (null for an item that places no block). LeviLamina header world/item/ItemStackBase.h: the vtable, mItem (WeakPtr<Item>) at 8, mUserData at 10h, mBlock at 18h, mAuxValue at 20h, mCount at 22h; amml_game::ItemInstanceLayout has it at 18h. Recipe 0 is ItemStackBase::_loadItem (the only function that loads the strings `WasPickedUp`, `CanPlaceOn` and `CanDestroy`): it reads the `Block` compound tag (a 5-character string view), turns it into a Block and stores the result in mBlock, then tests it and, when the stack has an item, reads the block's BlockType (`mov rdi,[rax+68h]`, Block.mBlockType) to compare names; without the tag it stores the item's legacy block state for the aux value, or that BlockType's default state, into the same member. It is a pattern_any with one alternative per shape, both starting at the store `mov [reg+disp8],rax`, offset 0, read as the displacement of operand 0: alternative 0 (26.60, 26.62, 26.63) keeps the stack in rsi (`mov [rsi+..],rax; test rax,rax; je; mov rcx,[rsi+..]; test rcx,rcx; je; mov rcx,[rcx]; test rcx,rcx; je; mov rdi,[rax+..]`); alternative 1 (26.51 and Preview) reloads it from the frame (`mov [rcx+..],rax; test rax,rax; je; mov rcx,[rbp+..]; mov rcx,[rcx+..]; test rcx,rcx; je; mov r..,[rcx]; test r..,r..; je`; the two ModRM bytes are wildcards because 26.51 uses rcx there and the Preview rdx). Recipe 1 is the ItemStackBase copy constructor, the first direct call of ItemStack.copyCtor (`ref`, then `call nth = 0`): it copies mBlock first of the members it does not zero and tests it (`mov rax,[rdx+..]; mov [rcx+..],rax; test rax,rax; setne dl`), and when the aux value is 7FFFh it reads the block's BlockType at +68h; the pattern is read at the store, offset 4, the displacement of operand 0. The pattern alone is also unique in the whole exe on all five builds. The two recipes are in two functions and share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. Range window 8..40h. Value 18h on 6aa482fd-2658118eba0dbac5 (26.51), 6ad79ee4-17d51891a1119914 (26.60), 6aea437e-7eff13daabb430da (26.62), 6aed1906-b127418e74d2f2f9 (26.63) and 6ae4eeee-4dd4fa7acacb4c41 (Preview 1.26.70.23). Evidence on the Preview: (1) the `WasPickedUp` function (26.63 0x1ad5e80, Preview 0x2066ac0) stores the block from the `Block` tag and the legacy block state into [stack+18h] on both builds and then reads [block+68h]; (2) the first call of ItemStack.copyCtor copies [source+18h] and reads [block+68h] on both builds. What changed in 6ae4eeee-4dd4fa7acacb4c41: the member did not move (the Item's legacy BlockType moved from 178h to 188h); recipe 0 has the frame-reload shape of 26.51 there."
+
+  recipe {
+    step "pattern_any" {
+      patterns = [
+        "48 89 46 ?? 48 85 C0 0F 84 ?? ?? ?? ?? 48 8B 4E ?? 48 85 C9 0F 84 ?? ?? ?? ?? 48 8B 09 48 85 C9 0F 84 ?? ?? ?? ?? 48 8B 78 ??",
+        "48 89 41 ?? 48 85 C0 0F 84 ?? ?? ?? ?? 48 8B 8D ?? ?? ?? ?? 48 8B 49 ?? 48 85 C9 0F 84 ?? ?? ?? ?? 48 8B ?? 48 85 ?? 0F 84 ?? ?? ?? ??",
+      ]
+    }
+    step "operand" {
+      index = 0
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "ref" { entry = "ItemStack.copyCtor" }
+    step "call" { nth = 0 }
+    step "pattern" {
+      bytes  = "48 8B 42 ?? 48 89 41 ?? 48 85 C0 0F 95 C2"
+      offset = 4
+    }
+    step "operand" {
+      index = 0
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 8
+    max = 64
+  }
+}

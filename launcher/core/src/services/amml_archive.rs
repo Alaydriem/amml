@@ -4,7 +4,7 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use zip::ZipArchive;
 
-// An AMML release zip: the loader, the patcher, the recipes and the version file.
+// An AMML release zip: the loader, the patcher, the recipes, optional solved data (`amml/data`) and the version file.
 #[derive(Debug, Clone)]
 pub struct AmmlArchive {
     path: PathBuf,

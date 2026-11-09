@@ -148,6 +148,28 @@ impl EntryId {
     pub const ITEM_STACK_BASE_GET_DAMAGE_VALUE: Self = Self("ItemStackBase.getDamageValue");
     /// `bool ItemStackBase::isDamaged() const`, a function address.
     pub const ITEM_STACK_BASE_IS_DAMAGED: Self = Self("ItemStackBase.isDamaged");
+    /// The offset of `std::unique_ptr<PlayerInventory> Player::mInventory` in `Player`.
+    pub const PLAYER_PLAYER_INVENTORY: Self = Self("Player.playerInventory");
+    /// The offset of `std::vector<ItemStack> FillingContainer::mItems` (its first pointer) in `FillingContainer`.
+    pub const FILLING_CONTAINER_ITEMS: Self = Self("FillingContainer.mItems");
+    /// The base `GameMode` vtable (no RTTI).
+    pub const GAME_MODE_VTABLE: Self = Self("GameMode.vtable");
+    /// The offset of `Player& GameMode::mPlayer` in `GameMode`.
+    pub const GAME_MODE_M_PLAYER: Self = Self("GameMode.mPlayer");
+    /// The slot of `bool startDestroyBlock(BlockPos const&, uchar, bool&)` in the `GameMode` vtable.
+    pub const GAME_MODE_START_DESTROY_BLOCK: Self = Self("GameMode.startDestroyBlock");
+    /// The slot of `bool continueDestroyBlock(BlockPos const&, uchar, Vec3 const&, bool&)` in the `GameMode` vtable.
+    pub const GAME_MODE_CONTINUE_DESTROY_BLOCK: Self = Self("GameMode.continueDestroyBlock");
+    /// The slot of `bool attack(Actor&, Vec3 const&)` in the `GameMode` vtable. The `SurvivalMode` table holds its
+    /// own leaf in this slot, which does not run the base slot.
+    pub const GAME_MODE_ATTACK: Self = Self("GameMode.attack");
+    /// The slot of `bool useItem(ItemStack&, bool)` in the `GameMode` vtable.
+    pub const GAME_MODE_USE_ITEM: Self = Self("GameMode.useItem");
+    /// The vtable of `SurvivalMode`, the `GameMode` subclass of a player in survival (no RTTI).
+    pub const SURVIVAL_MODE_VTABLE: Self = Self("SurvivalMode.vtable");
+    /// `InteractionResult Item::useOn(ItemStack&, Actor&, BlockPos const&, uchar, uchar, Vec3 const&, u64) const`,
+    /// a function address; the result comes back through a hidden pointer.
+    pub const ITEM_USE_ON: Self = Self("Item.useOn");
     /// `ItemRenderer::renderGuiItemNew`, a function address.
     pub const ITEM_RENDERER_RENDER_GUI_ITEM_NEW: Self = Self("ItemRenderer.renderGuiItemNew");
     /// The constructor of `BaseActorRenderContext`, a function address.

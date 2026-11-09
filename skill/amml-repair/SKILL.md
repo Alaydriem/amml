@@ -78,6 +78,7 @@ decimal; the data files write `vslot` values in hex, so convert them.
 | `mise run inspect -- similar --exe <NEW> --old-exe <OLD> <old rva> [--top <n>]` | Functions of the new build that look like the old function (weak, see method 4) |
 | `mise run decompile -- --exe <exe> --rva <rva> --out <file>` | C code of one function, from Ghidra headless (method 6). `--out` is one absolute file path; its folder must exist |
 | `mise run derive -- --exe <exe> --recipes recipes --out <dir> --report <dir> [--compare <data file>] [--jobs <dir>]` | Derives one build. Writes `<dir>/<BuildId>.hcl` (the data) and `<dir>/<BuildId>.md` (the report). Exit 0 also when entries fail; exit 3 when its two internal runs differ (then no data file) |
+| `mise run derive-check -- --exe <exe>` | Derives the exe in full into a temp folder and compares it byte for byte with `data/<BuildId>.hcl` (incremental equals full). Exit 1 and both paths when they differ. Run once per batch before review; not on 26.51 |
 | `mise run lint -- --exe <exe> --recipes recipes --report <file>` | Lists the open findings of every recipe on one exe: fixed bytes in immediates, displacements or branch offsets, recipes that did not run, matches it cannot decode, literal vtable slots on function entries and narrow range windows. Exit 1 on findings |
 | `mise run signature -- --exe <exe> --out <file>` | The argument registers of every `hooked = true` entry |
 | `mise run signature -- --exe <exe> --compare <file>` | `same`, `changed` or `unknown` per hooked entry. Exit 1 on any changed or unknown |
@@ -108,7 +109,8 @@ line-ending warning, which is not a difference). Exit 1 means the files differ.
    `--compare <OLDDATA>` into `<R>/baseline` the same way. In both cases the report `<R>/baseline/<OLD_ID>.md`
    must say `derived N/N`, `deterministic: yes`, and have no `## Moved` section. If not, stop the run and tell
    the user: the recipes are not in a known-good state for the old build.
-5. **The cold derive of the new build.** Change nothing before it:
+5. **The cold derive of the new build.** Change nothing before it. A new build has no data file, and the `--out`
+   folder `<R>/cold` is empty, so this is a full derive (every entry runs; nothing is reused):
    `mise run derive -- --exe <NEW> --recipes recipes --out <R>/cold --report <R>/cold --compare <OLDDATA> --jobs reports/repair > <R>/cold.txt 2>&1`.
    - Exit 3 (the report says `deterministic: no`): stop the whole run. Write it into the ledger and tell the
      user. A build that does not derive the same way twice cannot be repaired by recipes.

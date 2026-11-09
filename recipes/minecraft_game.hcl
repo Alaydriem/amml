@@ -297,3 +297,68 @@ entry "MinecraftGame.endFrame" {
 
   check "function_start" {}
 }
+
+entry "MinecraftGame.joinMultiplayerWithAddress" {
+  kind      = "vslot"
+  notes     = "Slot of virtual void MinecraftGame::joinMultiplayerWithAddress(Social::GameConnectionInfo, bool isLocal, const std::string&, const std::string&, NetworkType, std::shared_ptr<bool>, PlayerJoinWorldContext) in the MinecraftGame.vtable global: 39 on 26.63 (0x8b1970). The Play > Servers join handler and the localhost join call it through `mov rax,[rax+138h]` and the CFG guard; both reach ClientInstance::onStartJoinGame, not ClientInstance::startExternalNetworkWorld. Arguments: rcx = MinecraftGame, rdx = pointer to the by-value GameConnectionInfo, r8b = isLocal, r9 = first std::string, then stack arguments at entry+28h (second std::string), +30h (NetworkType), +38h (pointer to a shared_ptr<bool> block) and +40h (pointer to the PlayerJoinWorldContext). Recipe 0 is the head after the frame set-up: `mov rbx,r9; mov r14b,r8b; mov [rbp+..],rdx; mov r15,rcx; call; nop; test al,al; jne rel32; mov r13d,[rbp+..]; mov rdi,[rbp+..]; test r14b,r14b; jne rel32`, then `function_start_of` and `slot_of` MinecraftGame.vtable. Recipe 1 shares no bytes with it: the function loads its own __FUNCSIG__ text, so `string_xref` finds it, then `slot_of`. Every displacement, immediate and branch byte of the pattern is a wildcard. The range check is a window around slot 39. Value slot 39 (0x8b1970) on 6aed1906-b127418e74d2f2f9 (26.63)."
+
+  recipe {
+    step "pattern" {
+      bytes = "4C 89 CB 45 88 C6 48 89 95 ?? ?? ?? ?? 49 89 CF E8 ?? ?? ?? ?? 90 84 C0 0F 85 ?? ?? ?? ?? 44 8B AD ?? ?? ?? ?? 48 8B BD ?? ?? ?? ?? 45 84 F6 0F 85"
+    }
+    step "function_start_of" {}
+    step "slot_of" { vtable = "MinecraftGame.vtable" }
+  }
+
+  recipe {
+    step "string_xref" { text = "virtual void __cdecl MinecraftGame::joinMultiplayerWithAddress(Social::GameConnectionInfo, bool, const std::string &, const std::string &, NetworkType, std::shared_ptr<bool>, PlayerJoinWorldContext)" }
+    step "slot_of" { vtable = "MinecraftGame.vtable" }
+  }
+
+  check "range" {
+    min = 24
+    max = 60
+  }
+}
+
+entry "MinecraftGame.getWorldSystem" {
+  kind  = "vslot"
+  notes = "Slot of virtual World::WorldSystem& IMinecraftGame::getWorldSystem() const in the MinecraftGame.vtable global: 152 (byte offset 4C0h) on 26.51, 26.60, 26.62 and 26.63 (the LeviLamina header order minus 6 at this point). `this` in rcx is the MinecraftGame; rax returns the World::WorldSystem*. The body is an 8-byte leaf with no .pdata entry, `mov rax,[rcx+member]; ret` (1538h on 26.51, 1598h on 26.60 to 26.63), and the next leaf, slot 153, is isWorldSystemReady: `cmp qword ptr [rcx+member],0; setne al; ret` on the same member, the header pair getWorldSystem / isWorldSystemReady. Found from the join chain: MinecraftGame::_handleMultiplayerServiceJoinResult (it loads its own __FUNCSIG__) calls this slot on its own `this` and adds [result+WorldSystem.mNetworkWorldJoiner] to NetworkWorldJoiner.mServerWorldJoiner, the same sum that Parties::PartyTravelManager::_travelToDestination passes as `this` to ServerWorldJoiner::joinExternalServer. Recipe 0: `string_xref` on that __FUNCSIG__ text (one function on every build), then, inside it, the call site `add r14,imm; mov rax,[rdi]; mov rax,[rax+disp]; mov rcx,rdi; call [guard]` (rdi is the MinecraftGame in that case branch), offset 10, the displacement of operand 1, `displacement_to_slot`. Recipe 1: a second caller (0xa243c0 on 26.63, 0x978420 on 26.51) found by its prologue and the chain `mov rdi,[rcx+..]; mov rax,[rdi]; mov rcx,[rax+..]; mov rax,[rcx]; mov rax,[rax+disp]; call [guard]`, offset 43, the displacement, `displacement_to_slot`; the pattern ends at the call. Recipe 2: the two leaves, getter, eight int3, isWorldSystemReady, at offset 0, then `slot_of` MinecraftGame.vtable; it relies on the link order of the two leaves, the same on all four builds. Every immediate, displacement and branch byte is a wildcard (the immediate 0 of the `cmp` too). The three recipes share no bytes, and all three agree on every build. The range check is a window around slot 152 (144 to 160), well inside the IMinecraftGame interface; a range check alone is weak, so the entry relies on its agreeing recipes. Values: slot 152 (0x98) on 6aa482fd-2658118eba0dbac5 (26.51, leaf 0x81d9c0), 6ad79ee4-17d51891a1119914 (26.60, 0x8bc6c0), 6aea437e-7eff13daabb430da (26.62, 0x8bc6a0) and 6aed1906-b127418e74d2f2f9 (26.63, 0x8bc5d0). What changed: only the member offset (1538h to 1598h on 26.60); the slot did not move."
+
+  recipe {
+    step "string_xref" { text = "Bedrock::Threading::Async<void> __cdecl MinecraftGame::_handleMultiplayerServiceJoinResult(const Social::MultiplayerServiceIdentifier, Social::JoinGameStatus, const Social::MultiplayerGameInfo &, bool)" }
+    step "pattern" {
+      bytes  = "49 81 C6 ?? ?? ?? ?? 48 8B 07 48 8B 80 ?? ?? ?? ?? 48 89 F9 FF 15"
+      offset = 10
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+    step "displacement_to_slot" {}
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "55 56 57 48 81 EC ?? ?? ?? ?? 48 8D AC 24 ?? ?? ?? ?? 48 C7 85 ?? ?? ?? ?? ?? ?? ?? ?? 48 8B 79 ?? 48 8B 07 48 8B 48 ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15"
+      offset = 43
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+    step "displacement_to_slot" {}
+  }
+
+  recipe {
+    step "pattern" {
+      bytes = "48 8B 81 ?? ?? ?? ?? C3 CC CC CC CC CC CC CC CC 48 83 B9 ?? ?? ?? ?? ?? 0F 95 C0 C3"
+    }
+    step "slot_of" { vtable = "MinecraftGame.vtable" }
+  }
+
+  check "range" {
+    min = 144
+    max = 160
+  }
+}

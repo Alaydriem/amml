@@ -42,6 +42,31 @@ description = "Derives the address data of one game build: --exe, --recipes, --o
 dir = "{{config_root}}"
 run = "cargo run -p amml-derive --release -- derive"
 
+[tasks.derive-check]
+description = "Derives one exe in full (--full) into a temp folder and compares the result byte for byte with data/<build>.hcl: --exe; exits 1 and prints both paths when they differ"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = 'flag "--exe <exe>" help="The game executable to derive"'
+run = '''
+set -e
+exe="${usage_exe:?--exe is required}"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+cargo run -p amml-derive --release -- derive --full --exe "$exe" --recipes recipes --out "$tmp/data" --report "$tmp/reports"
+for fresh in "$tmp"/data/*.hcl; do
+  committed="data/$(basename "$fresh")"
+  if [ ! -f "$committed" ]; then
+    echo "derive-check: no committed file: $committed"
+    exit 1
+  fi
+  if ! cmp -s "$fresh" "$committed"; then
+    echo "derive-check: differs: $fresh $committed"
+    exit 1
+  fi
+  echo "derive-check: identical: $committed"
+done
+'''
+
 [tasks.lint]
 description = "Lists the open findings of every recipe on one exe: fixed bytes in immediates, displacements or branch offsets, recipes that did not run, matches it cannot decode, literal vtable slots on function entries and narrow range windows: --exe, optional --recipes (default recipes) and --report; exits 1 on findings"
 dir = "{{config_root}}"
@@ -124,6 +149,9 @@ cp target/release/amml.dll "$target/amml.dll"
 cp loader/dll/packaging/ll/manifest.json "$target/manifest.json"
 rm -rf "$target/recipes"
 cp -r recipes "$target/recipes"
+rm -rf "$target/data"
+mkdir -p "$target/data"
+cp data/*.hcl "$target/data/"
 echo "packaged into $target"
 '''
 
@@ -231,6 +259,9 @@ cp target/release/amml.dll "$instance/amml.dll"
 rm -rf "$instance/amml/recipes"
 mkdir -p "$instance/amml"
 cp -r recipes "$instance/amml/recipes"
+rm -rf "$instance/amml/data"
+mkdir -p "$instance/amml/data"
+cp data/*.hcl "$instance/amml/data/"
 if [ -d "$game/mods/amml" ]; then
   mkdir -p "$instance/mods"
   rm -rf "$instance/mods/amml"
@@ -1297,6 +1328,9 @@ cp target/release/amml.dll "$game/amml.dll"
 rm -rf "$game/amml/recipes"
 mkdir -p "$game/amml/cache" "$game/mods/amml"
 cp -r recipes "$game/amml/recipes"
+rm -rf "$game/amml/data"
+mkdir -p "$game/amml/data"
+cp data/*.hcl "$game/amml/data/"
 # amml-loader takes the workspace version; `+local` tells the launcher this AMML is not a core release
 version="$(sed -nE '/^\[workspace\.package\]/,/^\[/{s/^version *= *"([^"]+)".*/\1/p}' Cargo.toml)"
 api="$(sed -nE 's/^pub const AMML_API_VERSION: u32 = ([0-9]+);.*/\1/p' loader/abi/src/amml_api.rs)"
@@ -1307,44 +1341,6 @@ fi
 printf '%s+local' "$version" > "$game/amml/amml-version.txt"
 printf '%s' "$api" > "$game/amml/amml-api.txt"
 echo "installed loader $version+local (API $api) into $game"
-'''
-
-[tasks.install-mods]
-description = "Builds the manager and every mod in its own repo (../<repo>) and copies each dist/@<ns>/<name>/ into <game>/mods/amml/@<ns>/<name>/ without deleting what is there (config/ stays); prints built or failed per repo and exits 1 when any failed: --game, default %LOCALAPPDATA%/amml/instances/1.26.60.05"
-dir = "{{config_root}}"
-shell = "bash -c"
-usage = 'flag "--game <game>" help="The standalone game folder"'
-run = '''
-game="${usage_game:-$LOCALAPPDATA/amml/instances/1.26.60.05}"
-failed=0
-results=""
-for row in \
-  "modmanager-amml build-mod amml modmanager" \
-  "zoom build-mod alaydriem zoom" \
-  "minimap package alaydriem minimap" \
-  "levels package alaydriem levels" \
-  "freecam package alaydriem freecam" \
-  "stratum package alaydriem stratum" \
-  "dejavu-amml package alaydriem dejavu" \
-  "heads package alaydriem heads" \
-  "peek package alaydriem peek" \
-  "toggles build-mod alaydriem toggles"; do
-  set -- $row
-  repo="../$1"; task="$2"; ns="$3"; name="$4"
-  dest="$game/mods/amml/@$ns/$name"
-  if (cd "$repo" && mise run "$task") && [ -d "$repo/dist/@$ns/$name" ]; then
-    mkdir -p "$dest"
-    cp -r "$repo/dist/@$ns/$name/." "$dest/"
-    results="$results
-built  @$ns/$name -> $dest"
-  else
-    failed=1
-    results="$results
-failed @$ns/$name ($1 $task)"
-  fi
-done
-echo "$results"
-exit $failed
 '''
 
 [tasks."launcher-kit:install"]

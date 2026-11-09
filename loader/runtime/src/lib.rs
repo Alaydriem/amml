@@ -7,8 +7,8 @@ pub mod structs;
 pub use amml_derive::LayoutRefusal;
 
 pub use services::{
-    CacheFile, CacheSource, DeriveSource, Grade, HookChain, HostResolver, LeviLaminaSource, ModRegistry, RecipeDigest,
-    ResolverChain, ResolverSource, SymbolLookup,
+    CacheFile, CacheSource, DeriveSource, Grade, HookChain, HostResolver, LeviLaminaSource, ModRegistry, ResolverChain,
+    ResolverSource, SymbolLookup,
 };
 pub use structs::{
     AmmlVersion, ChainChange, ChainError, EntryTable, GradeReport, GradeRow, GradeVerdict, HookEntry, ImageLayout,

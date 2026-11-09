@@ -32,3 +32,40 @@ entry "ScreenContext.tessellator" {
   }
 
 }
+
+entry "ScreenContext.guiData" {
+  kind     = "field"
+  notes    = "Offset in ScreenContext of the GuiData pointer: A0h on 26.60 and 26.62. The member is a Bedrock::NotNullNonOwnerPtr<GuiData> (24 bytes from +90h: the shared control block pointer, its counter block, then the raw GuiData pointer); the entry is the offset of the raw pointer, which GuiData.getGuiScale takes as this. Recipe 0 is MinecraftUIRenderContext::drawImage (slot 8 of MinecraftUIRenderContext.vtable): `mov rbx,[rax+..]; mov [rbp+..],rbx; mov [rbp+..],rcx; mov [rbp+..],rcx; mov r15,[rax+..]; mov [rbp+..],r15; test rbx,rbx; je; cmp byte ptr [rbx],..; je; movss xmm6,[r12]; mov rcx,r15; call <getGuiScale>`, read as the displacement of the load of r15. Recipe 1 is a second UI draw function that does the same on the ScreenContext in rdi (`mov r15,[rdi+..]; mov [rbp+..],r15; mov [rbp+..],rax; mov r13,[rdi+..]; mov [rbp+..],r13; test r15,r15; je; cmp byte ptr [r15],..; je; mov rcx,r13; call <getGuiScale>`), read as the displacement of the load of r13; the same function then loads the tessellator from [rdi+0B0h] (ScreenContext.tessellator), which shows rdi is the ScreenContext. The recipes are in two functions and share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. The check is a window around the value. The gate (check entry_is) LevelChunk.mSubChunks = 456 (1C8h, the 26.60 layout) is a build gate: the entry refuses as not for this build on 26.51. Value A0h on 6ad79ee4-17d51891a1119914 (26.60) and 6aea437e-7eff13daabb430da (26.62)."
+
+  recipe {
+    step "pattern" {
+      bytes  = "48 8B 98 ?? ?? ?? ?? 48 89 5D ?? 48 89 4D ?? 48 89 4D ?? 4C 8B B8 ?? ?? ?? ?? 4C 89 7D ?? 48 85 DB 0F 84 ?? ?? ?? ?? 80 3B ?? 0F 84 ?? ?? ?? ?? F3 41 0F 10 34 24 4C 89 F9 E8"
+      offset = 19
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "4C 8B BF ?? ?? ?? ?? 4C 89 7D ?? 48 89 45 ?? 4C 8B AF ?? ?? ?? ?? 4C 89 AD ?? ?? ?? ?? 4D 85 FF 0F 84 ?? ?? ?? ?? 41 80 3F ?? 0F 84 ?? ?? ?? ?? 4C 89 E9 E8"
+      offset = 15
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 96
+    max = 256
+  }
+
+  check "entry_is" {
+    entry = "LevelChunk.mSubChunks"
+    value = 456
+  }
+}

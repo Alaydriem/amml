@@ -151,3 +151,39 @@ entry "ItemStack.fromTag" {
     value = 456
   }
 }
+
+entry "ItemStack.mNetIdVariant" {
+  kind  = "field"
+  notes = "Offset of ItemStack::mNetIdVariant, the std::variant<ItemStackNetId, ItemStackRequestId, ItemStackLegacyRequestId> that ItemStack adds after ItemStackBase: the 4-byte id payload at this offset, the variant index byte 10h later. Value 80h (index byte at 90h) on all four builds. Found from the code that builds and destroys an ItemStack: ItemStack.copyCtor stores the ItemStack vtable and then clears the variant (`lea rax,[rdi+80h]; mov dword ptr [rdi+80h],0; mov byte ptr [rdi+90h],0`, then copies the source variant with `movsx rcx,byte ptr [rsi+90h]; sub rsi,-80h`); the ItemStack deleting destructor (slot 0 of ItemStack.vtable) stores the ItemStack vtable, tests the index byte (`movzx eax,byte ptr [rcx+90h]; dec al; cmp al,..; ja`) and destroys the payload through `lea rcx,[rsi+80h]`, then calls the ItemStackBase destructor and frees 98h bytes. Recipe 0 is inside ItemStack.copyCtor: `mov [rdi],rax; lea rax,[rdi+..]; mov dword ptr [rdi+..],..; mov byte ptr [rdi+..],..`, offset 3 (the lea), read as the displacement of operand 1. Recipe 1 is the destructor: ref ItemStack.vtable, vtable_slot 0 (the deleting destructor is slot 0 of every MSVC vtable whose class declares a virtual destructor first, as ItemStackBase does), read_pointer, then `movzx eax,byte ptr [rcx+..]; dec al; cmp al,..; ja; lea rcx,[rsi+..]` inside that function, offset 13 (the lea), read as the displacement of operand 1. The same destructor head as a standalone pattern matches twice on every build (the second is the destructor of a class that holds an ItemStack at F0h, with its variant at 170h), so recipe 1 starts from the vtable instead. The two recipes are in two functions and share no pattern bytes. Every displacement, immediate and branch byte is a wildcard; the cmp immediate differs per build (1 on 26.51, FDh on 26.60 and later). The check is range 60h..80h: the stack is 98h bytes (the destructor frees 98h) and the variant takes 18h, so the payload cannot start after 80h. Values: 80h on 6aa482fd-2658118eba0dbac5 (26.51), 6ad79ee4-17d51891a1119914 (26.60), 6aea437e-7eff13daabb430da (26.62) and 6aed1906-b127418e74d2f2f9 (26.63). On 26.60 and later the default constructor is inlined into the callers (see ItemStack.emptyCtor), but the copy constructor and the destructor keep their 26.51 shape."
+
+  recipe {
+    step "ref" { entry = "ItemStack.copyCtor" }
+    step "pattern" {
+      bytes  = "48 89 07 48 8D 87 ?? ?? ?? ?? C7 87 ?? ?? ?? ?? ?? ?? ?? ?? C6 87 ?? ?? ?? ?? ??"
+      offset = 3
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "ref" { entry = "ItemStack.vtable" }
+    step "vtable_slot" { slot = 0 }
+    step "read_pointer" {}
+    step "pattern" {
+      bytes  = "0F B6 81 ?? ?? ?? ?? FE C8 3C ?? 77 ?? 48 8D 8E ?? ?? ?? ??"
+      offset = 13
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 96
+    max = 128
+  }
+}

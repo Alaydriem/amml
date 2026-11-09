@@ -25,3 +25,57 @@ entry "core.operator_delete" {
 
   check "function_start" {}
 }
+
+entry "core.tls_index" {
+  kind  = "global"
+  notes = "The game's _tls_index (a u32 the Windows loader writes; the slot of the exe's TLS block in the gs:[58h] ThreadLocalStoragePointer array). Every thread_local access in the game reads it as `mov eax|ecx,[rip+..]; mov reg,gs:[58h]; mov reg,[reg+rax*8]`. Requested by dynamic-lighting to reach LightPropagation.tlsEmitterVector. Found by the requester (vv-hand-emitter report section 4) and checked here with inspect disasm. Recipe 0: ref LightPropagationCoordinator.propagateForMesh, call 0 (the light spread core), then the emitter vector reset `mov eax,[rip+..]; mov rcx,gs:[58h]; mov rcx,[rcx+rax*8]; lea reg,[rcx+..]; mov rax,[rcx+..]; cmp rax,[rcx+..]; je`, operand 1 rip_target. Recipe 1: ref MinecraftGame.endFrame, its thread-safe static guard `mov eax,[rip+..]; mov ecx,[rip+..]; mov rdx,gs:[58h]; mov rcx,[rdx+rcx*8]; cmp eax,[rcx+..]; mov [rbp+..],rdi`, offset 6 (the `mov ecx`), rip_target: another class and another function. Recipe 2: the spread core's init block `mov byte [rax+..],imm; lea rcx,[rip+dtor]; call`, the lea's rip_target (the TLS destructor of the emitter vector), then its first TLS load `mov eax,[rip+..]; mov rcx,gs:[58h]; mov rax,[rcx+rax*8]; mov rcx,[rax+..]`, rip_target. Every displacement, immediate and branch byte is wildcarded except the four bytes of gs:[58h] in each pattern (literal_ok, fixed by the Windows x64 ABI). Check: section .data. Values: 26.60 0x128747c8, 26.62 0x128767c8, 26.63 0x128767c8. 26.51 not looked at (out of scope). 6ae4eeee-4dd4fa7acacb4c41 (Preview 1.26.70.23): 0x18246a78 from recipes 0 and 2; recipe 1 does not run there because MinecraftGame.endFrame does not resolve on the Preview yet."
+
+  recipe {
+    step "ref" { entry = "LightPropagationCoordinator.propagateForMesh" }
+    step "call" { nth = 0 }
+    step "pattern" {
+      bytes      = "8B 05 ?? ?? ?? ?? 65 48 8B 0C 25 58 00 00 00 48 8B 0C C1 48 8D ?? ?? ?? ?? ?? 48 8B 81 ?? ?? ?? ?? 48 3B 81 ?? ?? ?? ?? 74"
+      literal_ok = ["11: gs:[58h] is the TEB slot that holds the thread-local storage array, fixed by the Windows x64 ABI", "12: gs:[58h] is the TEB slot that holds the thread-local storage array, fixed by the Windows x64 ABI", "13: gs:[58h] is the TEB slot that holds the thread-local storage array, fixed by the Windows x64 ABI", "14: gs:[58h] is the TEB slot that holds the thread-local storage array, fixed by the Windows x64 ABI"]
+    }
+    step "operand" {
+      index = 1
+      kind  = "rip_target"
+    }
+  }
+
+  recipe {
+    step "ref" { entry = "MinecraftGame.endFrame" }
+    step "pattern" {
+      bytes      = "8B 05 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? 65 48 8B 14 25 58 00 00 00 48 8B 0C CA 3B 81 ?? ?? ?? ?? 48 89 BD"
+      offset     = 6
+      literal_ok = ["17: gs:[58h] is the TEB slot that holds the thread-local storage array, fixed by the Windows x64 ABI", "18: gs:[58h] is the TEB slot that holds the thread-local storage array, fixed by the Windows x64 ABI", "19: gs:[58h] is the TEB slot that holds the thread-local storage array, fixed by the Windows x64 ABI", "20: gs:[58h] is the TEB slot that holds the thread-local storage array, fixed by the Windows x64 ABI"]
+    }
+    step "operand" {
+      index = 1
+      kind  = "rip_target"
+    }
+  }
+
+  recipe {
+    step "ref" { entry = "LightPropagationCoordinator.propagateForMesh" }
+    step "call" { nth = 0 }
+    step "pattern" {
+      bytes  = "C6 80 ?? ?? ?? ?? ?? 48 8D 0D ?? ?? ?? ?? E8"
+      offset = 7
+    }
+    step "operand" {
+      index = 1
+      kind  = "rip_target"
+    }
+    step "pattern" {
+      bytes      = "8B 05 ?? ?? ?? ?? 65 48 8B 0C 25 58 00 00 00 48 8B 04 C1 48 8B 88"
+      literal_ok = ["11: gs:[58h] is the TEB slot that holds the thread-local storage array, fixed by the Windows x64 ABI", "12: gs:[58h] is the TEB slot that holds the thread-local storage array, fixed by the Windows x64 ABI", "13: gs:[58h] is the TEB slot that holds the thread-local storage array, fixed by the Windows x64 ABI", "14: gs:[58h] is the TEB slot that holds the thread-local storage array, fixed by the Windows x64 ABI"]
+    }
+    step "operand" {
+      index = 1
+      kind  = "rip_target"
+    }
+  }
+
+  check "section" { name = ".data" }
+}

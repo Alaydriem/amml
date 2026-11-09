@@ -144,6 +144,26 @@ impl LoaderState {
         Ok(handle)
     }
 
+    /// Installs a hook that the loader itself owns (not a mod): it is not tied to a mod callback and
+    /// no mod can remove it.
+    ///
+    /// # Safety
+    /// The contract of `HookEngine::hook`.
+    pub(crate) unsafe fn install_loader_hook(
+        &self,
+        target: *const c_void,
+        detour: *const c_void,
+        priority: i32,
+        original: *mut *const c_void,
+    ) -> Result<u64, AmmlStatus> {
+        let mut engine = self.engine.lock().map_err(|_| AmmlStatus::FAILED)?;
+        // SAFETY: the caller upholds the contract of `HookEngine::hook`.
+        unsafe { engine.hook(target, detour, priority, original) }.map_err(|error| {
+            curia::warn!("a loader hook was refused", { error: error.to_string() });
+            error.status()
+        })
+    }
+
     /// Removes a hook for the mod whose callback is running. The mod has to hold the handle; a
     /// handle of another mod, an unknown handle and a call from outside a mod callback get `FAILED`.
     pub(crate) fn remove_hook(&self, handle: u64) -> Result<(), AmmlStatus> {

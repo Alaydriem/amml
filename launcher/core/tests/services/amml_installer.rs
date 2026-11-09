@@ -148,3 +148,85 @@ fn a_folder_without_a_backup_is_not_an_instance() {
     let result = installer(&setup, FakePatcher::new()).install(&setup.dir, "one", &setup.zip, &mut |_| {});
     assert!(matches!(result, Err(LauncherError::NotAnInstance(_))));
 }
+
+fn data_zip(setup: &Setup) -> VerifiedFile {
+    let path = Zips::raw(
+        &setup._root.path().join("with-data.zip"),
+        &[
+            ("amml.dll", b"loader"),
+            ("amml-patch.exe", b"patcher"),
+            ("amml/recipes/a.hcl", b"recipe a"),
+            ("amml/data/new.hcl", b"new data"),
+            ("amml/amml-version.txt", b"26.60.2"),
+        ],
+    );
+    VerifiedFile { path, sha256: String::new() }
+}
+
+#[test]
+fn an_archive_with_data_installs_it() {
+    let setup = setup();
+    InstanceFolder::create(&setup.dir, "1.26.60.05").with_amml(Some("26.60.0"));
+    let data = setup.dir.join("amml").join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::write(data.join("old.hcl"), b"old data").unwrap();
+
+    installer(&setup, FakePatcher::new()).install(&setup.dir, "one", &data_zip(&setup), &mut |_| {}).unwrap();
+
+    assert_eq!(std::fs::read(data.join("new.hcl")).unwrap(), b"new data");
+    assert!(!data.join("old.hcl").exists());
+    assert!(leftovers(&setup.dir).is_empty());
+}
+
+#[test]
+fn installing_a_release_without_data_removes_old_data() {
+    let setup = setup();
+    InstanceFolder::create(&setup.dir, "1.26.60.05").with_amml(Some("26.60.0"));
+    let data = setup.dir.join("amml").join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::write(data.join("old.hcl"), b"old data").unwrap();
+
+    installer(&setup, FakePatcher::new()).install(&setup.dir, "one", &setup.zip, &mut |_| {}).unwrap();
+
+    assert!(!data.exists());
+    assert!(leftovers(&setup.dir).is_empty());
+}
+
+#[test]
+fn a_failure_after_the_old_data_moved_aside_brings_the_data_back() {
+    let setup = setup();
+    InstanceFolder::create(&setup.dir, "1.26.60.05").with_amml(Some("26.60.0"));
+    let data = setup.dir.join("amml").join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::write(data.join("old.hcl"), b"old data").unwrap();
+    let before = InstanceFolder::hashes(&setup.dir);
+    // an open file inside the recipes folder stops that folder from being renamed, after the data moved aside
+    let held = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(0)
+        .open(setup.dir.join("amml").join("recipes").join("old.hcl"))
+        .unwrap();
+
+    let result = installer(&setup, FakePatcher::new()).install(&setup.dir, "one", &setup.zip, &mut |_| {});
+
+    drop(held);
+    assert!(matches!(result, Err(LauncherError::Io(_))), "{result:?}");
+    assert_eq!(std::fs::read(data.join("old.hcl")).unwrap(), b"old data");
+    assert_eq!(InstanceFolder::hashes(&setup.dir), before);
+    assert!(leftovers(&setup.dir).is_empty());
+}
+
+#[test]
+fn a_failed_patch_keeps_old_data_when_the_release_has_none() {
+    let setup = setup();
+    InstanceFolder::create(&setup.dir, "1.26.60.05").with_amml(Some("26.60.0"));
+    let data = setup.dir.join("amml").join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::write(data.join("old.hcl"), b"old data").unwrap();
+    let before = InstanceFolder::hashes(&setup.dir);
+
+    let result = installer(&setup, FakePatcher::failing()).install(&setup.dir, "one", &setup.zip, &mut |_| {});
+
+    assert!(result.is_err());
+    assert_eq!(InstanceFolder::hashes(&setup.dir), before);
+}

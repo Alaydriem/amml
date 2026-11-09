@@ -4,12 +4,12 @@ use crate::LoaderDirs;
 
 /// Where the loader keeps its files, derived from the game executable.
 ///
-/// In the standalone host the loader folder is `<game>/amml/` (`recipes/`, `cache/` and the
+/// In the standalone host the loader folder is `<game>/amml/` (`recipes/`, `cache/`, `data/` and the
 /// optional `amml.hcl` and `instance.hcl`), logs go to `<game>/amml/logs/`, and AMML mods live in
 /// `<game>/mods/amml/<name>/`.
 ///
 /// In the LeviLamina host the loader package is `<game>/mods/amml-loader/` (the DLL, `recipes/`,
-/// `cache/` and the optional `amml.hcl` and `instance.hcl`), logs go to `<game>/logs/amml/`, and AMML mods live in
+/// `cache/`, `data/` and the optional `amml.hcl` and `instance.hcl`), logs go to `<game>/logs/amml/`, and AMML mods live in
 /// `<game>/mods/amml/<name>/` (with `config/` and `data/` inside) so LeviLamina does not try to load
 /// them itself.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -19,6 +19,7 @@ pub struct HostPaths {
     pub loader: PathBuf,
     pub recipes: PathBuf,
     pub cache: PathBuf,
+    pub data: PathBuf,
     pub settings: PathBuf,
     pub instance: PathBuf,
     pub logs: PathBuf,
@@ -41,6 +42,7 @@ impl HostPaths {
             exe: exe_path.to_path_buf(),
             recipes: loader.join("recipes"),
             cache: loader.join("cache"),
+            data: loader.join("data"),
             settings: loader.join(Self::SETTINGS_FILE),
             instance: loader.join(Self::INSTANCE_FILE),
             logs: game.join("logs").join("amml"),
@@ -58,6 +60,7 @@ impl HostPaths {
             exe: exe_path.to_path_buf(),
             recipes: loader.join("recipes"),
             cache: loader.join("cache"),
+            data: loader.join("data"),
             settings: loader.join(Self::SETTINGS_FILE),
             instance: loader.join(Self::INSTANCE_FILE),
             logs: loader.join("logs"),

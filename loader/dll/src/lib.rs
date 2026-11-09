@@ -43,6 +43,7 @@ pub mod startup_gate;
 mod target_hook;
 #[cfg(feature = "folder-trace")]
 mod trace_hooks;
+pub mod version_label;
 
 pub use api_table::ApiTable;
 pub use boundary::Boundary;
@@ -81,3 +82,4 @@ pub use mod_report::ModReport;
 pub use settings_error::SettingsError;
 pub use standalone_host::StandaloneHost;
 pub use startup_gate::StartupGate;
+pub use version_label::VersionLabel;

@@ -3,13 +3,17 @@ use amml_data::EntryId;
 /// Something a source met that the host should log; none of these stops the chain.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum SourceNote {
-    #[error("no cache file for this build and recipe set")]
+    #[error("no cache file for this build")]
     CacheMissing,
     #[error("cache file unreadable: {0}")]
     CacheUnreadable(String),
     #[error("cache file is for build {found}, this build is {expected}")]
     CacheForeignBuild { found: String, expected: String },
-    #[error("cache entry {0} has another kind than the recipe set and was dropped")]
+    #[error("shipped data file unreadable: {0}")]
+    ShippedUnreadable(String),
+    #[error("shipped data file is for build {found}, this build is {expected}")]
+    ShippedForeignBuild { found: String, expected: String },
+    #[error("cached or shipped entry {0} has another kind than the recipe set and was dropped")]
     CacheKindMismatch(EntryId),
     #[error("recipes unreadable: {0}")]
     RecipesUnreadable(String),
@@ -19,6 +23,8 @@ pub enum SourceNote {
     DeriveFailed(String),
     #[error("cache file not written: {0}")]
     CacheWriteFailed(String),
+    #[error("derive ran: {hits} reused, {derived} derived in {elapsed_ms} ms")]
+    DeriveRan { hits: usize, derived: usize, elapsed_ms: u64 },
     #[error("LeviLamina returned no address for {0}")]
     LookupMissing(EntryId),
     #[error(
