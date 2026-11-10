@@ -1,5 +1,5 @@
 // What an instance holds of AMML: `installed` when `amml.dll` is there, `version` from `amml\amml-version.txt`.
-// `local` when that version ends in `+local` (a build that `install-game` put in, not a core release);
+// `local` when that version ends in `+local` (a build that `install` put in, not a core release);
 // `local_api` from `amml\amml-api.txt`, read only for a local build.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AmmlState {

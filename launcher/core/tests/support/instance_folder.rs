@@ -46,7 +46,7 @@ impl InstanceFolder {
         self
     }
 
-    // `ammlmml-api.txt`, as `install-game` writes it next to a local build
+    // `ammlmml-api.txt`, as `install` writes it next to a local build
     pub fn with_amml_api(self, api: &str) -> InstanceFolder {
         std::fs::create_dir_all(self.dir.join("amml")).unwrap();
         std::fs::write(self.dir.join("amml").join("amml-api.txt"), api).unwrap();

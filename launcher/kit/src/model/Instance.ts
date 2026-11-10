@@ -8,7 +8,7 @@ export interface Instance {
     swatch: Swatch;
     gameVersion: string;
     ammlVersion: string;
-    /** The AMML is a local build (`install-game`), not a core release. */
+    /** The AMML is a local build (`install`), not a core release. */
     ammlLocal?: boolean;
     modCount: number;
     dataMode: DataMode;

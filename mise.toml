@@ -1309,14 +1309,17 @@ flag "--with <mod>" help="One more mod repo beside amml to package and keep inst
 '''
 run = "bash scripts/ingame-peek.sh"
 
-[tasks.install-game]
-description = "Builds release amml.dll and amml-patch, patches <game>/Minecraft.Windows.exe from Minecraft.Windows.exe.bak, copies amml.dll and the recipes next to it, and marks the AMML as a local build (amml/amml-version.txt = <version>+local, amml/amml-api.txt): --game, default %LOCALAPPDATA%/amml/instances/1.26.60.05"
+[tasks.install]
+description = "Builds release amml.dll and amml-patch, patches Minecraft.Windows.exe from Minecraft.Windows.exe.bak of an AMML instance under %LOCALAPPDATA%/amml/instances (--instance, required), copies amml.dll, the recipes and the data next to it, and marks the AMML as a local build (amml/amml-version.txt = <version>+local, amml/amml-api.txt). Close the game first: a running game locks the DLL"
 dir = "{{config_root}}"
 shell = "bash -c"
-usage = 'flag "--game <game>" help="The standalone game folder that holds Minecraft.Windows.exe.bak"'
+usage = '''
+flag "--instance <name>" required=#true help="The instance folder under %LOCALAPPDATA%/amml/instances"
+'''
 run = '''
 set -e
-game="${usage_game:-$LOCALAPPDATA/amml/instances/1.26.60.05}"
+[ -n "$LOCALAPPDATA" ] || { echo "LOCALAPPDATA is not set; the instances live under %LOCALAPPDATA%/amml/instances"; exit 1; }
+game="$LOCALAPPDATA/amml/instances/${usage_instance:?--instance is required}"
 cargo build --release -p amml-loader -p amml-patch
 if [ ! -f "$game/Minecraft.Windows.exe.bak" ]; then
   echo "missing $game/Minecraft.Windows.exe.bak" >&2

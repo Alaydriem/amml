@@ -1,7 +1,7 @@
 use amml_launcher_core::{Patcher, ProcessPatcher};
 use std::path::PathBuf;
 
-// Operator test. Set AMML_PATCH_INSTANCE to a test instance that `mise run install-game` patched, and build
+// Operator test. Set AMML_PATCH_INSTANCE to a test instance that `mise run install` patched, and build
 // `amml-patch` in release mode first. The launcher's patcher run over the instance's `.bak` must give the same bytes.
 #[test]
 #[ignore = "needs a test instance and a release build of amml-patch"]

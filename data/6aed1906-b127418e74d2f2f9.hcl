@@ -1167,6 +1167,27 @@ resolved "FrameRenderObject.mViews" {
   fingerprint = "e4732c62b988ed54"
 }
 
+resolved "FriendWorldListProperty.toBinder" {
+  kind        = "function"
+  value       = "0xa002b80"
+  recipes     = 1
+  fingerprint = "33d36a536da0eb24"
+}
+
+resolved "FriendWorldListProperty.toBinderNamed" {
+  kind        = "function"
+  value       = "0xa002a60"
+  recipes     = 1
+  fingerprint = "8027f16012112744"
+}
+
+resolved "FriendWorldListProperty.vtable" {
+  kind        = "global"
+  value       = "0xf3c8cd0"
+  recipes     = 1
+  fingerprint = "ff845ae1039926cb"
+}
+
 resolved "GameConnectionInfo.ctor" {
   kind        = "function"
   value       = "0x4ec4f0"
