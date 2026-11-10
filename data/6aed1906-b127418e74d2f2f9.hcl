@@ -341,6 +341,13 @@ resolved "BlockSource.getDimensionId" {
   fingerprint = "14ac4ffeb571d96c"
 }
 
+resolved "BlockSource.getLightColor" {
+  kind        = "function"
+  value       = "0x32d0c90"
+  recipes     = 2
+  fingerprint = "c0252b3c1d94c99e"
+}
+
 resolved "BlockSource.removeListener" {
   kind        = "vslot"
   value       = "0x1d"

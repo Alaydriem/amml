@@ -239,12 +239,23 @@ impl ModLoader {
             .collect()
     }
 
-    fn dirs_of(&self, spec: &ModSpec) -> Option<[String; 3]> {
+    fn dirs_of(&self, spec: &ModSpec) -> Option<[String; 4]> {
         Some([
             spec.dir.to_str()?.to_string(),
             spec.dir.join("config").to_str()?.to_string(),
             spec.dir.join("data").to_str()?.to_string(),
+            self.shared_data_of(spec),
         ])
+    }
+
+    // Empty when the host has no shared data root, the mod is outside the mods folder, or the path is not UTF-8.
+    fn shared_data_of(&self, spec: &ModSpec) -> String {
+        let dirs = self.state.dirs();
+        let shared = dirs.mod_data.as_ref().and_then(|root| {
+            let relative = spec.dir.strip_prefix(&dirs.mods).ok()?;
+            root.join(relative).to_str().map(str::to_string)
+        });
+        shared.unwrap_or_default()
     }
 
     // An entry an `entry_is` check refused is not for this build: it counts apart and is not missing, so a mod

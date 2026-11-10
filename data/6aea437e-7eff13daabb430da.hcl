@@ -341,6 +341,13 @@ resolved "BlockSource.getDimensionId" {
   fingerprint = "14ac4ffeb571d96c"
 }
 
+resolved "BlockSource.getLightColor" {
+  kind        = "function"
+  value       = "0x32d0f30"
+  recipes     = 2
+  fingerprint = "c0252b3c1d94c99e"
+}
+
 resolved "BlockSource.removeListener" {
   kind        = "vslot"
   value       = "0x1d"
@@ -1165,6 +1172,27 @@ resolved "FrameRenderObject.mViews" {
   value       = "0x10"
   recipes     = 1
   fingerprint = "e4732c62b988ed54"
+}
+
+resolved "FriendWorldListProperty.toBinder" {
+  kind        = "function"
+  value       = "0xa001cb0"
+  recipes     = 1
+  fingerprint = "33d36a536da0eb24"
+}
+
+resolved "FriendWorldListProperty.toBinderNamed" {
+  kind        = "function"
+  value       = "0xa001b90"
+  recipes     = 1
+  fingerprint = "8027f16012112744"
+}
+
+resolved "FriendWorldListProperty.vtable" {
+  kind        = "global"
+  value       = "0xf3c8cc0"
+  recipes     = 1
+  fingerprint = "ff845ae1039926cb"
 }
 
 resolved "GameConnectionInfo.ctor" {

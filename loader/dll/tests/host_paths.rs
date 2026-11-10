@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
 
 use amml::HostPaths;
 
@@ -50,4 +51,16 @@ fn levilamina_instance_file_is_in_loader_folder() {
     let paths = HostPaths::levilamina(Path::new("C:/game/Minecraft.Windows.exe"));
 
     assert_eq!(paths.instance, Path::new("C:/game/mods/amml-loader/instance.hcl"));
+}
+
+#[test]
+fn mod_data_root_is_amml_mod_data_under_local_app_data() {
+    let root = HostPaths::mod_data_root(Some(OsString::from(r"C:\Users\x\AppData\Local")));
+
+    assert_eq!(root, Some(PathBuf::from(r"C:\Users\x\AppData\Local\amml\mod-data")));
+}
+
+#[test]
+fn mod_data_root_is_none_without_local_app_data() {
+    assert_eq!(HostPaths::mod_data_root(None), None);
 }

@@ -201,15 +201,19 @@ impl LoaderState {
         }
     }
 
-    /// A view of one folder of a mod: `kind` 0 mod folder, 1 config folder, 2 data folder. The
-    /// bytes stay valid for the life of the process.
+    /// A view of one folder of a mod: `kind` 0 mod folder, 1 config folder, 2 data folder, 3 shared
+    /// data folder (`INVALID_ARGUMENT` when the host has no shared data root). The bytes stay valid
+    /// for the life of the process.
     pub(crate) fn mod_dir(&self, module: &str, kind: u8) -> Result<AmmlStr, AmmlStatus> {
         let index = usize::from(kind);
-        if index > 2 {
+        if index > 3 {
             return Err(AmmlStatus::INVALID_ARGUMENT);
         }
         let mods = self.lock_mods();
         let record = mods.iter().find(|record| record.id == module).ok_or(AmmlStatus::INVALID_ARGUMENT)?;
+        if record.dirs[index].is_empty() {
+            return Err(AmmlStatus::INVALID_ARGUMENT);
+        }
         Ok(AmmlStr::from_str(&record.dirs[index]))
     }
 }

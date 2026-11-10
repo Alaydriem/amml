@@ -21,8 +21,14 @@ impl Harness {
     pub const BASE: u64 = 0x1000;
 
     pub fn start() -> Self {
+        Self::start_with(true)
+    }
+
+    // `with_mod_data` false gives the loader no shared data root.
+    pub fn start_with(with_mod_data: bool) -> Self {
         let root = tempdir().unwrap();
-        let dirs = LoaderDirs::new(root.path().join("mods"), root.path().join("logs"));
+        let mod_data = with_mod_data.then(|| root.path().join("mod-data"));
+        let dirs = LoaderDirs::new(root.path().join("mods"), root.path().join("logs"), mod_data);
         // SAFETY: the only entries that are called are the two heap entries, which point to `HeapProbe`.
         let state = unsafe { LoaderState::init(LoaderConfig::new(Self::BASE, Self::table(), dirs)) }.unwrap();
         Self { root, state }
@@ -30,6 +36,10 @@ impl Harness {
 
     pub fn logs(&self) -> PathBuf {
         self.root.path().join("logs")
+    }
+
+    pub fn mod_data(&self) -> PathBuf {
+        self.root.path().join("mod-data")
     }
 
     pub fn mods(&self) -> PathBuf {

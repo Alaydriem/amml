@@ -47,8 +47,22 @@ impl FakeLoader {
 
     unsafe extern "C" fn heap_delete(_: *mut u8, _: usize) {}
 
-    unsafe extern "C" fn mod_dir(_: AmmlStr, _: u8, _: *mut AmmlStr) -> AmmlStatus {
-        AmmlStatus::FAILED
+    // The module name picks the answer: `shared` has a shared data folder, `old` is a loader that
+    // refuses kind 3, `broken` fails kind 3 another way, `rootless` answers kind 3 with an empty folder as a loader
+    // with no shared data root does. Any other module fails every kind.
+    unsafe extern "C" fn mod_dir(module: AmmlStr, kind: u8, out: *mut AmmlStr) -> AmmlStatus {
+        // SAFETY: the SDK passes a live string view.
+        let module = unsafe { module.as_str() }.unwrap();
+        let text = match (module, kind) {
+            ("shared" | "old" | "broken" | "rootless", 0..=2) => r"C:\m",
+            ("shared", 3) => r"C:\s",
+            ("rootless", 3) => "",
+            ("old", 3) => return AmmlStatus::INVALID_ARGUMENT,
+            _ => return AmmlStatus::FAILED,
+        };
+        // SAFETY: the SDK passes a writable AmmlStr and the text is 'static.
+        unsafe { out.write(AmmlStr::from_str(text)) };
+        AmmlStatus::OK
     }
 
     pub fn table(size: u32, version: u32) -> AmmlApi {

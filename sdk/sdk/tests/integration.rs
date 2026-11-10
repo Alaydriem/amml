@@ -2,5 +2,6 @@
 
 mod api;
 mod detour_guard;
+mod mod_dirs;
 mod mod_glue;
 mod support;

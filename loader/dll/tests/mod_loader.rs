@@ -188,6 +188,29 @@ fn config_and_data_folders_are_inside_the_mod_folder() {
     assert_eq!(dir(0), mod_dir);
     assert_eq!(dir(1), mod_dir.join("config"));
     assert_eq!(dir(2), mod_dir.join("data"));
+    assert_eq!(dir(3), harness.mod_data().join("@echo").join("echo"));
+}
+
+#[test]
+fn without_a_shared_data_root_kind_3_is_refused_and_the_mod_still_loads() {
+    let dll = EchoMod::build("plain", &[]);
+    let harness = Harness::start_with(false);
+    harness.install_mod("echo", "echo", &dll, "echo.dll", 2);
+    let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
+    ModLoader::new(harness.state).load_all(&scan.mods);
+
+    // SAFETY: the table lives for the process and has the full v1 size.
+    let api = unsafe { &*harness.state.api() };
+    let status = |kind: u8| {
+        let mut out = AmmlStr::EMPTY;
+        // SAFETY: `out` is a writable AmmlStr and the name is a live view.
+        unsafe { (api.mod_dir)(AmmlStr::from_str("@echo/echo"), kind, &mut out) }
+    };
+
+    assert_eq!(status(0), AmmlStatus::OK);
+    assert_eq!(status(1), AmmlStatus::OK);
+    assert_eq!(status(2), AmmlStatus::OK);
+    assert_eq!(status(3), AmmlStatus::INVALID_ARGUMENT);
 }
 
 #[test]

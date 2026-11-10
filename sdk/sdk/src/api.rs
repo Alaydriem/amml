@@ -139,7 +139,8 @@ impl Api {
         unsafe { (self.heap_delete)(ptr, size) }
     }
 
-    /// Asks for a folder of `module`: `kind` 0 mod folder, 1 config folder, 2 data folder.
+    /// Asks for a folder of `module`: `kind` 0 mod folder, 1 config folder, 2 data folder, 3 shared data
+    /// folder (`INVALID_ARGUMENT` from a loader that has none).
     pub fn mod_dir(&self, module: &str, kind: u8) -> Result<String, SdkError> {
         let mut out = AmmlStr::EMPTY;
         // SAFETY: `module` lives for the call and `out` is a live AmmlStr.

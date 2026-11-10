@@ -10,7 +10,7 @@ pub struct ModRecord {
     pub phase: ModPhase,
     /// Handles of the hooks this mod installed.
     pub hooks: Vec<u64>,
-    /// Mod folder, config folder and data folder. The boxed strings never move, so `mod_dir` can
-    /// hand out views of them.
-    pub dirs: Box<[String; 3]>,
+    /// Mod folder, config folder, data folder and shared data folder. The shared data folder is empty
+    /// when the host gave no root. The boxed strings never move, so `mod_dir` can hand out views of them.
+    pub dirs: Box<[String; 4]>,
 }

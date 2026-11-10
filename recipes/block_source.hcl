@@ -154,6 +154,30 @@ entry "BlockSource.getBrightnessPair" {
   check "function_start" {}
 }
 
+entry "BlockSource.getLightColor" {
+  kind   = "function"
+  hooked = true
+  notes  = "dynamic-lighting (entity light). BrightnessPair BlockSource::getLightColor(BlockPos const&, Brightness minBlockLight) const, a non-virtual member; the name is not confirmed (no symbols), the behaviour is. rcx = BlockSource this, rdx = the 2-byte result buffer (sky first, block second), r8 = BlockPos const&, r9b = the minimum block light; the function returns the buffer in rax. The body is BlockSource.getBrightnessPair with the minimum added: it stores the default pair at BlockSource+0E8h (`movzx ebp,word ptr [rcx+0E8h]; mov [rdx],bp`), checks Y against the height range at +3Ah/+38h, finds the chunk through BlockSource slot 41 (`mov rax,[r14]; mov rax,[rax+148h]`), reads the sky and block nibbles of the sub chunk (68h-byte sub chunks at LevelChunk+1C8h), stores the pair, and at the end raises the block byte to the minimum (`movzx eax,bp; shr eax,8; movzx ecx,bl; cmp al,cl; cmovbe eax,ecx; mov [rsi+1],al`). It is 1C0h before BlockSource.getBrightnessPair in 26.62 and 26.63. 51 direct callers in 26.62 and 26.63. The renderers read entity and block-entity light through it, not through getBrightnessPair: the entity shader setup (26.63 0x57ca3d0, the caller of ActorShaderManager.setEntityConstants at 0x57cafe6) calls it for every block in the actor AABB and keeps the highest sky and block value, which becomes TILE_LIGHT_COLOR; the chest renderer (vtable 0xf2cb020, stored by the constructor that loads \"textures/entity/chest/normal\"; slot 2 = 0x6a6ad80) calls it three times; two block-entity shader setups (0x57cc2a0, 25 callers; 0x57cc450, 8 callers) call it once. Recipe 0 is the minimum tail of the body, then function_start_of; it keeps the four register bytes of the tail (ModRM C5, CB, C8, C1), which a later build can change. Recipe 1 is the first lookup call in the entity shader setup's AABB loop (`mov rcx,[rbp+..]; lea rdx,[rbp+..]; lea r8,[rbp+..]; movzx r9d,byte ptr [rbp+..]; call`), read as a branch target. They share no bytes and are in two functions. Every displacement and branch byte is a wildcard. Check: function_start. 1.26.63.01 (6aed1906-b127418e74d2f2f9): 0x32d0c90. 1.26.62.01 (6aea437e-7eff13daabb430da): 0x32d0f30. Not checked on 26.60 (6ad79ee4-17d51891a1119914): its exe was not available."
+
+  recipe {
+    step "pattern" { bytes = "0F B7 C5 C1 E8 ?? 0F B6 CB 38 C8 0F 46 C1 88 46 ??" }
+    step "function_start_of" {}
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "48 8B 8D ?? ?? ?? ?? 48 8D 95 ?? ?? ?? ?? 4C 8D 85 ?? ?? ?? ?? 44 0F B6 8D ?? ?? ?? ?? E8"
+      offset = 29
+    }
+    step "operand" {
+      index = 0
+      kind  = "branch_target"
+    }
+  }
+
+  check "function_start" {}
+}
+
 entry "BlockSource.addListener" {
   kind     = "vslot"
   notes    = "Slot of void BlockSource::addListener(BlockSourceListener&) in BlockSource.vtable: 28 (1Ch) in 26.51 (LeviLamina header order: IConstBlockSource has 25 slots, then IBlockSource fetchAABBs 25, fetchCollisionShapes 26, getWeakRef 27, addListener 28, removeListener 29). The body finds the listener in the vector at +98h/+0A0h (a find helper) and appends it when it is missing (`mov rcx,[rcx+98h]; mov rdx,[rsi+0A0h]; mov r8,rbx; call; mov rdi,[rsi+0A0h]; cmp rax,rdi; jne`). Recipe 0 is that body, then function_start_of, then slot_of in BlockSource.vtable. Recipe 1 is an inlined BlockSourceHandle constructor (BlockSourceListener.vtable recipe 1) that calls the slot on the source with the new handle; the displacement is turned into a slot. Several such constructors exist. The recipes are in two functions. Every displacement, immediate and branch byte is a wildcard. The range check is a window around the known slot."
