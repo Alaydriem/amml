@@ -38,11 +38,38 @@ impl Harness {
 
     // Writes `<mods>/@<namespace>/<name>/amml.hcl` and copies `dll` to `<mods>/@<namespace>/<name>/<dll_name>`.
     pub fn install_mod(&self, namespace: &str, name: &str, dll: &Path, dll_name: &str, api_version: u32) {
+        self.install_mod_with(namespace, name, dll, dll_name, api_version, "");
+    }
+
+    // Like `install_mod`, with `amml_version = "<amml_version>"` in the manifest. The value is written as given.
+    pub fn install_mod_needing(
+        &self,
+        namespace: &str,
+        name: &str,
+        dll: &Path,
+        dll_name: &str,
+        api_version: u32,
+        amml_version: &str,
+    ) {
+        let line = format!("amml_version = \"{amml_version}\"\n");
+        self.install_mod_with(namespace, name, dll, dll_name, api_version, &line);
+    }
+
+    // Like `install_mod`, with `extra` (whole HCL lines) appended to the manifest.
+    pub fn install_mod_with(
+        &self,
+        namespace: &str,
+        name: &str,
+        dll: &Path,
+        dll_name: &str,
+        api_version: u32,
+        extra: &str,
+    ) {
         let dir = self.mods().join(format!("@{namespace}")).join(name);
         fs::create_dir_all(&dir).unwrap();
         fs::copy(dll, dir.join(dll_name)).unwrap();
         let manifest = format!(
-            "namespace = \"{namespace}\"\nname = \"{name}\"\nentry = \"{dll_name}\"\napi_version = {api_version}\nentries = [\"Echo.found\", \"Echo.absent\"]\n"
+            "namespace = \"{namespace}\"\nname = \"{name}\"\nentry = \"{dll_name}\"\napi_version = {api_version}\nentries = [\"Echo.found\", \"Echo.absent\"]\n{extra}"
         );
         fs::write(dir.join("amml.hcl"), manifest).unwrap();
     }

@@ -3,7 +3,7 @@ use crate::{CoreProgress, LauncherError, PlacedItem, VerifiedFile};
 use amml_gdk::{ProcessInspector, TreeOps};
 use std::path::{Path, PathBuf};
 
-// Puts AMML into an instance: the loader, its recipes, its version and the patched game executable.
+// Puts AMML into an instance: the loader, its recipes, its solved data (when the release has any), its version and the patched game executable.
 // A failure leaves the instance as it was.
 pub struct AmmlInstaller<T: Patcher, P: ProcessInspector> {
     patcher: T,
@@ -55,15 +55,23 @@ impl<T: Patcher, P: ProcessInspector> AmmlInstaller<T, P> {
         if !patched.is_file() {
             return Err(LauncherError::PatchFailed { code: Some(0), text: "the patcher wrote no file".to_string() });
         }
-        let moves = [
+        let mut moves = vec![
             (staging.join("amml.dll"), instance.join("amml.dll")),
             (staging.join("amml").join("recipes"), instance.join("amml").join("recipes")),
             (staging.join("amml").join("amml-version.txt"), instance.join("amml").join("amml-version.txt")),
             (patched, instance.join(Self::EXE_NAME)),
         ];
+        let staged_data = staging.join("amml").join("data");
+        let instance_data = instance.join("amml").join("data");
         let mut placed: Vec<PlacedItem> = Vec::new();
         let mut created: Vec<PathBuf> = Vec::new();
-        let result = Self::place_all(instance, &moves, &mut placed, &mut created, progress);
+        // a release without solved data must not leave the old release's data behind
+        let drop_old_data = !staged_data.exists() && instance_data.exists();
+        if staged_data.exists() {
+            moves.push((staged_data, instance_data.clone()));
+        }
+        let result = Self::drop_data(drop_old_data, &instance_data, &mut placed)
+            .and_then(|()| Self::place_all(instance, &moves, &mut placed, &mut created, progress));
         match result {
             Ok(()) => {
                 for item in &placed {
@@ -78,6 +86,17 @@ impl<T: Patcher, P: ProcessInspector> AmmlInstaller<T, P> {
                 Err(error)
             }
         }
+    }
+
+    // moves the old solved data aside so a failed install can put it back
+    fn drop_data(wanted: bool, data: &Path, placed: &mut Vec<PlacedItem>) -> Result<(), LauncherError> {
+        if !wanted {
+            return Ok(());
+        }
+        let aside = Self::aside(data);
+        std::fs::rename(data, &aside)?;
+        placed.push(PlacedItem { target: data.to_path_buf(), replaced: Some(aside) });
+        Ok(())
     }
 
     fn place_all(

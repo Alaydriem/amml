@@ -75,7 +75,7 @@ impl HostResolver {
     fn resolve_with_guards(&self, wanted: &[EntryId]) -> EntryTable {
         let wanted = wanted.to_vec();
         let mut table = EntryTable::new(&wanted);
-        let mut memo = SourceMemo::default();
+        let mut memo = SourceMemo::new(&wanted);
         match &self.levilamina {
             Some(levilamina) => {
                 let (functions, others): (Vec<EntryId>, Vec<EntryId>) = wanted

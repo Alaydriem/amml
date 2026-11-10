@@ -8,7 +8,7 @@ use crate::{
 /// The host where AMML starts itself, with no LeviLamina: the exe entry-point detour runs `run`
 /// once, before the game's own start-up code.
 ///
-/// Entries come from the cache file, then from a derive run on the exe (`HostResolver::standalone`);
+/// Entries come from the cache file and the shipped data file, then from a derive run on the exe (`HostResolver::standalone`);
 /// there is no symbol lookup. The game heap check is deferred to the first allocation a mod makes,
 /// because the game's static initializers have not run yet, and mods must not call game code in load
 /// or enable.
@@ -94,16 +94,18 @@ impl StandaloneHost {
     }
 
     /// The table of `wanted` from the cache file under `paths.cache`, or from a derive run of
-    /// `paths.exe` with the recipes under `paths.recipes` when the cache does not hold it. When the
+    /// the shipped data file under `paths.data`, or from a derive run of `paths.exe` with the recipes under
+    /// `paths.recipes` for what neither holds. When the
     /// exe build or the recipes cannot be read, every entry is missing.
     pub fn resolve(paths: &HostPaths, wanted: &[EntryId]) -> EntryTable {
         let inputs = HostInputs::read(paths);
-        let Some((build, digest)) = inputs.cache_key() else {
+        let Some(build) = inputs.build() else {
             return EntryTable::new(wanted);
         };
         let set = inputs.set().clone();
-        let cache = CacheSource::new(paths.cache.clone(), *build, digest.clone(), set.clone());
-        let derive = DeriveSource::new(paths.exe.clone(), paths.recipes.clone(), paths.cache.clone());
+        let cache = CacheSource::new(paths.cache.clone(), paths.data.clone(), build, set.clone());
+        let derive =
+            DeriveSource::new(paths.exe.clone(), paths.recipes.clone(), paths.cache.clone(), paths.data.clone());
         HostResolver::standalone(cache, derive, set).resolve(wanted)
     }
 }

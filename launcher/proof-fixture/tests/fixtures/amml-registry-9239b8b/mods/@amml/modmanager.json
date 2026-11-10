@@ -1,0 +1,47 @@
+{
+  "schema": 2,
+  "id": "@amml/modmanager",
+  "namespace": "amml",
+  "name": "modmanager",
+  "repo": "alaydriem/amml-modmanager",
+  "core": true,
+  "default": true,
+  "listing": {
+    "title": "Alaydriem's Mod Manager",
+    "summary": "One panel for every AMML mod: keybinds, settings, key clashes, and turning mods on or off.",
+    "description": "AMML's mod manager lets you manage, toggle, and configure your mods without leaving the game.\n",
+    "authors": [
+      "Charles R. Portwood II"
+    ],
+    "license": "BSD-3-Clause",
+    "source": "https://github.com/alaydriem/amml-modmanager",
+    "homepage": "https://github.com/alaydriem/amml-modmanager#readme",
+    "tags": [
+      "manager",
+      "keybinds",
+      "settings",
+      "overlay",
+      "tools"
+    ],
+    "icon": "icons/@amml/modmanager.png"
+  },
+  "versions": [
+    {
+      "version": "26.62.0",
+      "api_version": 2,
+      "asset": "https://github.com/alaydriem/amml-modmanager/releases/download/26.62.0/modmanager-26.62.0-windows-x64.zip",
+      "sha256": "7acde8fb57abacd0d9f1e71eacee77714a6efb3d513c039d4186d75483924d2b",
+      "size": 4652014,
+      "published": "2026-11-05T23:08:18Z",
+      "min_amml": "26.60.6"
+    },
+    {
+      "version": "26.60.6",
+      "api_version": 2,
+      "asset": "https://github.com/alaydriem/amml-modmanager/releases/download/26.60.6/modmanager-26.60.6-windows-x64.zip",
+      "sha256": "1b30046c741be6c20b77f8d1bc3c98cfae89c6ccbc9e0ed6c81088fbc348336a",
+      "size": 4651128,
+      "published": "2026-11-04T23:46:10Z"
+    }
+  ]
+}

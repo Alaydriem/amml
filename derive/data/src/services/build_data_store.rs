@@ -1,18 +1,22 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use super::BlockReader;
 use crate::errors::DataError;
-use crate::structs::{BuildData, BuildId, EntryId, EntryKind, Resolved};
+use crate::structs::{BuildData, BuildId, EntryId, EntryKind, Fingerprint, Resolved};
 
 pub struct BuildDataStore;
 
 impl BuildDataStore {
-    // The only data format this build writes and reads.
-    const FORMAT: u32 = 1;
+    // The format this build writes.
+    const FORMAT: u32 = 2;
+    // The oldest format this build still reads.
+    const OLDEST_FORMAT: u32 = 1;
 
     // Writes the stable text format by hand so the on-disk bytes never depend on a formatter version.
+    // `resolved` blocks come first, then `failed` blocks, each run sorted by id.
     // The text goes to a temporary file in the same folder and is renamed over `path`, so a reader
     // or a crash never sees a partial file.
     pub fn write(path: &Path, data: &BuildData) -> Result<(), DataError> {
@@ -22,7 +26,7 @@ impl BuildDataStore {
         text.push_str(&format!("  timestamp = \"{:#010x}\"\n", data.build.timestamp));
         text.push_str(&format!("  text_hash = \"{:#018x}\"\n", data.build.text_hash));
         text.push_str("}\n");
-        for (id, resolved) in &data.entries {
+        for id in data.entries.keys().chain(data.failed.keys()) {
             if !EntryId::is_valid_text(&id.0) {
                 return Err(DataError::Invalid {
                     entry: id.clone(),
@@ -30,11 +34,25 @@ impl BuildDataStore {
                     path: Some(path.to_path_buf()),
                 });
             }
+        }
+        for (id, resolved) in &data.entries {
             text.push('\n');
             text.push_str(&format!("resolved \"{}\" {{\n", id.0));
-            text.push_str(&format!("  kind    = \"{}\"\n", resolved.kind.name()));
-            text.push_str(&format!("  value   = \"{:#x}\"\n", resolved.value));
-            text.push_str(&format!("  recipes = {}\n", resolved.recipes_agreeing));
+            text.push_str(&format!("  kind        = \"{}\"\n", resolved.kind.name()));
+            text.push_str(&format!("  value       = \"{:#x}\"\n", resolved.value));
+            text.push_str(&format!("  recipes     = {}\n", resolved.recipes_agreeing));
+            if let Some(fingerprint) = data.fingerprints.get(id) {
+                text.push_str(&format!("  fingerprint = \"{fingerprint}\"\n"));
+            }
+            text.push_str("}\n");
+        }
+        for (id, reason) in &data.failed {
+            text.push('\n');
+            text.push_str(&format!("failed \"{}\" {{\n", id.0));
+            if let Some(fingerprint) = data.fingerprints.get(id) {
+                text.push_str(&format!("  fingerprint = \"{fingerprint}\"\n"));
+            }
+            text.push_str(&format!("  reason      = {}\n", Self::quote(reason)));
             text.push_str("}\n");
         }
         let io = |source| DataError::Io { path: path.to_path_buf(), source };
@@ -48,6 +66,30 @@ impl BuildDataStore {
             return Err(io(source));
         }
         Ok(())
+    }
+
+    // An HCL string literal: backslash, quote and control characters are escaped. A `$` or `%`
+    // before `{` is doubled (`$${`, `%%{`) so HCL does not read a template start.
+    fn quote(text: &str) -> String {
+        let mut quoted = String::from("\"");
+        let mut characters = text.chars().peekable();
+        while let Some(character) = characters.next() {
+            match character {
+                '\\' => quoted.push_str("\\\\"),
+                '"' => quoted.push_str("\\\""),
+                '\n' => quoted.push_str("\\n"),
+                '\r' => quoted.push_str("\\r"),
+                '\t' => quoted.push_str("\\t"),
+                '$' | '%' if characters.peek() == Some(&'{') => {
+                    quoted.push(character);
+                    quoted.push(character);
+                }
+                other if other.is_control() => quoted.push_str(&format!("\\u{:04X}", other as u32)),
+                other => quoted.push(other),
+            }
+        }
+        quoted.push('"');
+        quoted
     }
 
     // `<name>.<process id>.tmp` beside `path`, so two processes never share a temporary file.
@@ -64,9 +106,11 @@ impl BuildDataStore {
             entry: None,
             message: error.to_string(),
         })?;
-        Self::check_format(path, &body)?;
+        let format = Self::check_format(path, &body)?;
         let mut build = None;
-        let mut entries = std::collections::BTreeMap::new();
+        let mut entries = BTreeMap::new();
+        let mut fingerprints = BTreeMap::new();
+        let mut failed = BTreeMap::new();
         for block in body.blocks() {
             match block.identifier() {
                 "build" => {
@@ -94,8 +138,13 @@ impl BuildDataStore {
                     if !EntryId::is_valid_text(id) {
                         return Err(reader.fail(format!("`{id}` is not a valid id")));
                     }
-                    reader.only(&["kind", "value", "recipes"])?;
-                    if entries.contains_key(&EntryId(id.to_string())) {
+                    if format >= 2 {
+                        reader.only(&["kind", "value", "recipes", "fingerprint"])?;
+                    } else {
+                        reader.only(&["kind", "value", "recipes"])?;
+                    }
+                    let key = EntryId(id.to_string());
+                    if entries.contains_key(&key) || failed.contains_key(&key) {
                         return Err(reader.fail(format!("duplicate resolved id `{id}`")));
                     }
                     let kind_name = reader.string("kind")?;
@@ -106,7 +155,31 @@ impl BuildDataStore {
                         value: Self::hex(&reader, "value")?,
                         recipes_agreeing: reader.u32("recipes")?,
                     };
-                    entries.insert(EntryId(id.to_string()), resolved);
+                    if let Some(fingerprint) = Self::fingerprint(&reader)? {
+                        fingerprints.insert(key.clone(), fingerprint);
+                    }
+                    entries.insert(key, resolved);
+                }
+                "failed" if format >= 2 => {
+                    let [label] = block.labels() else {
+                        let reader = BlockReader::new(path, None, "failed", block.body());
+                        return Err(reader.fail("failed block needs exactly one id label".to_string()));
+                    };
+                    let id = label.as_str();
+                    let reader = BlockReader::new(path, Some(id), "failed", block.body());
+                    if !EntryId::is_valid_text(id) {
+                        return Err(reader.fail(format!("`{id}` is not a valid id")));
+                    }
+                    reader.only(&["fingerprint", "reason"])?;
+                    let key = EntryId(id.to_string());
+                    if entries.contains_key(&key) || failed.contains_key(&key) {
+                        return Err(reader.fail(format!("duplicate id `{id}`")));
+                    }
+                    let reason = reader.string("reason")?;
+                    if let Some(fingerprint) = Self::fingerprint(&reader)? {
+                        fingerprints.insert(key.clone(), fingerprint);
+                    }
+                    failed.insert(key, reason);
                 }
                 other => {
                     let reader = BlockReader::new(path, None, "build data", block.body());
@@ -119,22 +192,33 @@ impl BuildDataStore {
             entry: None,
             message: "missing `build` block".to_string(),
         })?;
-        Ok(BuildData { build, entries })
+        Ok(BuildData { build, entries, fingerprints, failed })
     }
 
     // the file has to say which format it is, and this build has to know it
-    fn check_format(path: &Path, body: &hcl::Body) -> Result<(), DataError> {
+    fn check_format(path: &Path, body: &hcl::Body) -> Result<u32, DataError> {
         let reader = BlockReader::new(path, None, "build data", body);
         reader.only(&["format"])?;
         let format = reader
             .optional_u32("format")?
             .ok_or_else(|| reader.fail(format!("missing `format` attribute; expected `format = {}`", Self::FORMAT)))?;
-        if format != Self::FORMAT {
-            return Err(
-                reader.fail(format!("unsupported data format {format}; this version reads format {}", Self::FORMAT))
-            );
+        if !(Self::OLDEST_FORMAT..=Self::FORMAT).contains(&format) {
+            return Err(reader.fail(format!(
+                "unsupported data format {format}; this version reads format {} and format {}",
+                Self::OLDEST_FORMAT,
+                Self::FORMAT
+            )));
         }
-        Ok(())
+        Ok(format)
+    }
+
+    fn fingerprint(reader: &BlockReader<'_>) -> Result<Option<Fingerprint>, DataError> {
+        match reader.optional_string("fingerprint")? {
+            None => Ok(None),
+            Some(text) => Fingerprint::parse(&text)
+                .map(Some)
+                .ok_or_else(|| reader.fail("attribute `fingerprint` must be 16 hex digits".to_string())),
+        }
     }
 
     fn hex(reader: &BlockReader<'_>, name: &str) -> Result<u64, DataError> {

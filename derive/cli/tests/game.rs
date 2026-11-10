@@ -44,6 +44,7 @@ fn smoke_recipes_derive_on_the_real_exe_quickly_and_deterministically() {
         work.path().join("reports"),
         None,
         None,
+        false,
     );
     let report = DeriveCommand::run(&args).unwrap();
     println!("{}", report.summary_line());
@@ -99,6 +100,7 @@ fn get_mouse_grabbed_is_slot_147_from_all_three_recipes_including_slot_of() {
         work.path().join("reports"),
         None,
         None,
+        false,
     );
     let report = DeriveCommand::run(&args).unwrap();
     // every entry derives on 26.51: the layout differences are mirrors in amml-game, selected by entries that

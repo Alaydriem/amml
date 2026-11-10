@@ -2,7 +2,7 @@ entry "ClientInstance.update" {
   kind      = "function"
   hooked    = true
   msvc_name = "?$update@ClientInstance@@QEAA_N_N@Z"
-  notes     = "bool ClientInstance::update(bool isInitFinished), the IClientInstance::update override: slot 24 of the ClientInstance.vtable global in 26.51 and slot 23 in 26.60 (one IClientInstance virtual before slot 13 went away; update is 9 slots after requestLeaveGame and 10 after requestLeaveGameAsync in both builds). In 26.60 the function takes a third argument, a bool in r8 (kept in r14d, tested as r14b): update(bool, bool). The msvc_name is the 26.51 signature `(bool)`; the 26.60 name would be `?$update@ClientInstance@@QEAA_N_N_N@Z`. The exe has no RTTI for game classes and no string names this function; it was found through the ClientInstance vtable (string_xref on 'virtual ClientInstance::requestLeaveGameAsync' and 'virtual void __cdecl ClientInstance::requestLeaveGame(bool, bool)' gives the pair of adjacent slots). Recipe 0 anchors on the first virtual call (`mov ebx,edx; mov rsi,rcx; mov rax,[rcx]; mov rax,[rax+disp]; lea rdx,[rbp+..]; call [guard]; mov byte ptr [rbp+..],imm; xorps xmm0,xmm0`). Recipe 1 shares no bytes with recipe 0: `mov byte ptr [rsi+member],imm; cmp byte ptr [rsi+member],imm; jne rel32; mov rax,[rsi]; mov rax,[rax+disp]; mov rcx,rsi; call [guard]` (0x15D bytes in on 26.51, 0xFC on 26.60). Both end with `function_start_of`, so the distance from the anchor to the start does not matter. Every immediate, displacement and branch byte of the patterns is a wildcard (the lint is clean on 26.51 and 26.60), except two kept bytes in recipe 1: the high bytes 00 00 of the jne, because the same block in another function jumps backwards and these bytes keep the match on update. The checks are `function_start` and `in_vtable` of ClientInstance.vtable, slots 19 to 28: this ties the result to the vtable that holds the requestLeaveGame pair, with a window that covers both builds (24, 23) and about 4 slots either side. What changed in 26.60 (a real code change): the third argument and an xmm6 save make the prologue 10 bytes longer, the NonOwnerPointer asserts after the first call are gone, members moved (2C9h to 2E1h, 29Ch to 2BCh) and indirect calls are followed by a `nop`; the old fixed `vtable_slot 24` gave another function there."
+  notes     = "bool ClientInstance::update(bool isInitFinished), the IClientInstance::update override: slot 24 of the ClientInstance.vtable global in 26.51 and slot 23 in 26.60 (one IClientInstance virtual before slot 13 went away; update is 9 slots after requestLeaveGame and 10 after requestLeaveGameAsync in both builds). In 26.60 the function takes a third argument, a bool in r8 (kept in r14d, tested as r14b): update(bool, bool). The msvc_name is the 26.51 signature `(bool)`; the 26.60 name would be `?$update@ClientInstance@@QEAA_N_N_N@Z`. The exe has no RTTI for game classes and no string names this function; it was found through the ClientInstance vtable (string_xref on 'virtual ClientInstance::requestLeaveGameAsync' and 'virtual void __cdecl ClientInstance::requestLeaveGame(bool, bool)' gives the pair of adjacent slots). Recipe 0 anchors on the first virtual call (`mov ebx,edx; mov rsi,rcx; mov rax,[rcx]; mov rax,[rax+disp]; lea rdx,[rbp+..]; call [guard]; mov byte ptr [rbp+..],imm; xorps xmm0,xmm0`). Recipe 1 shares no bytes with recipe 0: `mov byte ptr [rsi+member],imm; cmp byte ptr [rsi+member],imm; jne rel32; mov rax,[rsi]; mov rax,[rax+disp]; mov rcx,rsi; call [guard]` (0x15D bytes in on 26.51, 0xFC on 26.60). Both end with `function_start_of`, so the distance from the anchor to the start does not matter. Every immediate, displacement and branch byte of the patterns is a wildcard (the lint is clean on 26.51 and 26.60), except two kept bytes in recipe 1: the high bytes 00 00 of the jne, because the same block in another function jumps backwards and these bytes keep the match on update. The checks are `function_start` and `in_vtable` of ClientInstance.vtable, slots 19 to 28: this ties the result to the vtable that holds the requestLeaveGame pair, with a window that covers both builds (24, 23) and about 4 slots either side. What changed in 26.60 (a real code change): the third argument and an xmm6 save make the prologue 10 bytes longer, the NonOwnerPointer asserts after the first call are gone, members moved (2C9h to 2E1h, 29Ch to 2BCh) and indirect calls are followed by a `nop`; the old fixed `vtable_slot 24` gave another function there. What changed in 6ae4eeee-4dd4fa7acacb4c41 (Preview 1.26.70.23) (an assert-enabled build; real code change): the IClientInstance vtable was reordered and shortened, and update is now slot 10 (4 slots after requestLeaveGame, whose virtual string names it on both builds); its body gained assert calls with source-location strings, its members moved (2E1h to 2F1h, 2BCh to 2CCh, 6F5h to 705h) and the virtual call in recipe 1 uses a disp8 (`mov rax,[rax+40h]`). Recipe 0 still matches once. Recipe 1 is now a pattern_any: alternative 0 is the old block with one more kept byte (byte 3, the 02h of the member displacement: on the Preview another function, with members at B62h/FC4h, has the same block with a forward jne, and this byte keeps alternative 0 off it; the member is 29Ch on 26.51 and 2BCh on 26.60 to 26.63), alternative 1 the Preview block with the disp8 call (the jne bytes wildcarded). The in_vtable window is now 6 to 28 (10 on the Preview, 23 on 26.60 to 26.63, 24 on 26.51, about 4 either side). Evidence for the Preview value: (1) the 26.63 block `mov rcx,[rsi+..]; lea rax,[rip+..]; mov [rbp+..],rax; mov [rbp+..],rsi; mov [rbp+..],rdi; mov rdx,rdi; call; nop; mov byte ptr [rsi+..],..` has exactly two sites on 26.63, both in update, and exactly two on the Preview, both in the candidate; (2) the start of the candidate is the 26.63 start (`mov r14d,r8d; mov ebx,edx; mov rsi,rcx`, the first virtual call with an out pointer, `cmp byte ptr [rsi+..],1`), and the old recipe 1 block (the member store, the member test, the jne and the virtual call on this) is in it with only the disp8 change."
 
   recipe {
     step "pattern" {
@@ -12,11 +12,15 @@ entry "ClientInstance.update" {
   }
 
   recipe {
-    step "pattern" {
-      bytes      = "C6 86 ?? ?? ?? ?? ?? 80 BE ?? ?? ?? ?? ?? 0F 85 ?? ?? 00 00 48 8B 06 48 8B 80 ?? ?? ?? ?? 48 89 F1 FF 15"
+    step "pattern_any" {
+      patterns   = [
+        "C6 86 ?? 02 ?? ?? ?? 80 BE ?? ?? ?? ?? ?? 0F 85 ?? ?? 00 00 48 8B 06 48 8B 80 ?? ?? ?? ?? 48 89 F1 FF 15",
+        "C6 86 ?? ?? ?? ?? ?? 80 BE ?? ?? ?? ?? ?? 0F 85 ?? ?? ?? ?? 48 8B 06 48 8B 40 ?? 48 89 F1 FF 15",
+      ]
       literal_ok = [
-        "18: jne rel32 jumps forward to code within 64 KiB (high bytes 0); the same block in another function jumps back, so these bytes keep the match on update",
-        "19: jne rel32 jumps forward to code within 64 KiB (high bytes 0); the same block in another function jumps back, so these bytes keep the match on update",
+        "0.3: mov byte ptr [rsi+member],imm: the 02h byte of the member displacement; on the Preview another function has the same block with members at B62h/FC4h and a forward jne, and this byte keeps the match on update",
+        "0.18: jne rel32 jumps forward to code within 64 KiB (high bytes 0); the same block in another function jumps back, so these bytes keep the match on update",
+        "0.19: jne rel32 jumps forward to code within 64 KiB (high bytes 0); the same block in another function jumps back, so these bytes keep the match on update",
       ]
     }
     step "function_start_of" {}
@@ -26,7 +30,7 @@ entry "ClientInstance.update" {
 
   check "in_vtable" {
     vtable   = "ClientInstance.vtable"
-    min_slot = 19
+    min_slot = 6
     max_slot = 28
   }
 }
@@ -73,22 +77,39 @@ entry "ClientInstance.getCameraRegistry" {
 
 entry "ClientInstance.getRegion" {
   kind     = "vslot"
-  notes    = "Slot of BlockSource* IClientInstance::getRegion() in the IClientInstance vtable: 30 in 26.51 (LeviLamina header order: the slot before getLocalPlayer, 31). The body locks the weak local-player pointer at this+248h (the same member as getLocalPlayer), finds the Actor through the entity registry, inlines Actor::getDimension (the weak-reference lock loop on Actor::mDimension at 1C8h/1D0h) and then calls getBlockSourceFromMainChunkSource through slot 12 of the dimension (`mov rax,[rsi]; mov rax,[rax+60h]; mov rcx,rsi; call [guard]`); it returns null when there is no player. Recipe 0 is the end of that body (the two unlock calls of the dimension weak reference, the virtual call on the dimension, `jmp short; xor eax,eax; add rsp; pop rdi; pop rsi; ret`), then function_start_of, then slot_of in ClientInstance.vtable. Recipe 1 is a call site in another class whose member at +8 is the client instance (`mov rbx,r9; mov rdi,r8; mov rsi,rdx; mov rcx,[rcx+8]; mov rax,[rcx]; mov rax,[rax+disp]; call [guard]; test rax,rax; je`): the result is used as a BlockSource (its slot 51, the long clip overload, is called with two Vec3 and a hit-result out pointer); the displacement is turned into a slot. The same class calls slot 194 of that member and reads two floats from the result, which is getViewportInfo in header order: the member is an IClientInstance. The two recipes anchor on different functions and share no bytes. Every register-free displacement, immediate and branch byte is a wildcard. The range check keeps the slot in the early part of the vtable, next to getLocalPlayer."
+  notes    = "Slot of BlockSource* IClientInstance::getRegion() in the IClientInstance vtable: 30 in 26.51 (LeviLamina header order: the slot before getLocalPlayer, 31). The body locks the weak local-player pointer at this+248h (the same member as getLocalPlayer), finds the Actor through the entity registry, inlines Actor::getDimension (the weak-reference lock loop on Actor::mDimension at 1C8h/1D0h) and then calls getBlockSourceFromMainChunkSource through slot 12 of the dimension (`mov rax,[rsi]; mov rax,[rax+60h]; mov rcx,rsi; call [guard]`); it returns null when there is no player. On 26.51 to 26.63 a former recipe 0 (removed for the Preview, see below) was the end of that body (the two unlock calls of the dimension weak reference, the virtual call on the dimension, `jmp short; xor eax,eax; add rsp; pop rdi; pop rsi; ret`), then function_start_of, then slot_of in ClientInstance.vtable. Recipe 1 is a call site in another class whose member at +8 is the client instance (`mov rbx,r9; mov rdi,r8; mov rsi,rdx; mov rcx,[rcx+8]; mov rax,[rcx]; mov rax,[rax+disp]; call [guard]; test rax,rax; je`): the result is used as a BlockSource (its slot 51, the long clip overload, is called with two Vec3 and a hit-result out pointer); the displacement is turned into a slot. The same class calls slot 194 of that member and reads two floats from the result, which is getViewportInfo in header order: the member is an IClientInstance. The recipes anchor on different functions and share no bytes. Every register-free displacement, immediate and branch byte is a wildcard. The range check keeps the slot in the early part of the vtable, next to getLocalPlayer. What changed in 6ae4eeee-4dd4fa7acacb4c41 (Preview 1.26.70.23) (an assert-enabled build; real code change): the IClientInstance vtable was reordered and shortened, and getRegion is now slot 12. Its body no longer inlines Actor::getDimension: it locks a weak entity pointer, turns it into the Actor through a helper call, calls getDimension and then the dimension virtual at 68h. Every unique pattern of the new body runs past a call, so the former body recipe 0 was removed (recipes end at a call). The recipes now: recipe 0 is the neighbour route: the getLocalPlayer call site in the function that calls getLocalPlayer twice, then getOptions (const), then a virtual on its result, then tail-jumps with the player (slot 195 on 26.63; on the Preview the same function is reached through the seventh base at this+A0h and loads the ClientInstance vtable from [rcx-A0h]). Its first step finds that function by its end, which has no call in it: `mov rcx,rdi; mov edx,eax; add rsp,..; pop rdi; pop rsi; jmp rel32; add rsp,..; pop rdi; pop rsi; ret` (a pattern_any: alternative 0 for 26.60 to the Preview, alternative 1 for 26.51, which has a `nop` after the jmp). The second step scans that function for the second getLocalPlayer call, which starts right after the first call and ends at its own call (`test rax,rax; je; mov rax,[rsi]; mov rax,[rax+disp]; mov rcx,rsi; call [guard]`, alternative 0 disp32, alternative 1 disp8), and its displacement is turned into a slot, then `add -1`. It relies on getRegion being the slot right before getLocalPlayer, which holds on every known build (30/31 on 26.51, 29/30 on 26.60 to 26.63, 12/13 on the Preview). Recipe 1 is the call site in another class described above, now ending at its call (`...; mov rax,[rcx]; mov rax,[rax+disp]; call [guard]`), as a pattern_any: alternative 0 disp32, alternative 1 disp8 (`mov rax,[rax+60h]`). The two recipes are in two functions and share no bytes. Every displacement, immediate and branch byte is a wildcard. The range is now 8 to 45 (12 on the Preview). Evidence for the Preview value: (1) the caller of recipe 1, found on the Preview by a pattern drafted from its 26.63 body after the call (the two Vec3 copies and the BlockSource virtual call on the result; it matches once), reads displacement 60h on its IClientInstance member: slot 12; (2) slot 12 has the old getRegion behaviour (lock the weak entity, resolve the Actor, getDimension, the dimension virtual at 68h as on 26.63, null otherwise), and it is next to slot 13 (getLocalPlayer), which locks the same member, as getRegion and getLocalPlayer did on 26.63 (slots 29 and 30)."
 
   recipe {
-    step "pattern" {
-      bytes = "F0 FF 4F ?? 75 ?? 48 8B 07 48 8B 40 ?? 48 89 F9 FF 15 ?? ?? ?? ?? 48 8B 06 48 8B 40 ?? 48 89 F1 FF 15 ?? ?? ?? ?? EB ?? 31 C0 48 83 C4 ?? 5F 5E C3"
+    step "pattern_any" {
+      patterns = [
+        "48 89 F9 89 C2 48 83 C4 ?? 5F 5E E9 ?? ?? ?? ?? 48 83 C4 ?? 5F 5E C3",
+        "48 89 F9 89 C2 48 83 C4 ?? 5F 5E E9 ?? ?? ?? ?? 90 48 83 C4 ?? 5F 5E C3",
+      ]
     }
-    step "function_start_of" {}
-    step "slot_of" {
-      vtable = "ClientInstance.vtable"
+    step "pattern_any" {
+      patterns = [
+        "48 85 C0 74 ?? 48 8B 06 48 8B 80 ?? ?? ?? ?? 48 89 F1 FF 15",
+        "48 85 C0 74 ?? 48 8B 06 48 8B 40 ?? 48 89 F1 FF 15",
+      ]
+      offset   = 8
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+    step "displacement_to_slot" {}
+    step "add" {
+      value = -1
     }
   }
 
   recipe {
-    step "pattern" {
-      bytes  = "4C 89 CB 4C 89 C7 48 89 D6 48 8B 49 ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15 ?? ?? ?? ?? 48 85 C0 0F 84 ?? ?? ?? ??"
-      offset = 16
+    step "pattern_any" {
+      patterns = [
+        "4C 89 CB 4C 89 C7 48 89 D6 48 8B 49 ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15",
+        "4C 89 CB 4C 89 C7 48 89 D6 48 8B 49 ?? 48 8B 01 48 8B 40 ?? FF 15",
+      ]
+      offset   = 16
     }
     step "operand" {
       index = 1
@@ -98,7 +119,7 @@ entry "ClientInstance.getRegion" {
   }
 
   check "range" {
-    min = 20
+    min = 8
     max = 45
   }
 }
@@ -194,18 +215,11 @@ entry "ClientInstance.onPlayerLoaded" {
   kind      = "function"
   hooked    = true
   msvc_name = "?$onPlayerLoaded@ClientInstance@@QEAAXAEAVPlayer@@@Z"
-  notes     = "void ClientInstance::onPlayerLoaded(Player& player), the IClientInstance::onPlayerLoaded override: slot 327 of the ClientInstance.vtable global in 26.51 and 323 in 26.60. LeviLamina raises ClientJoinLevelEvent from a hook on this function. It is a 33-byte forwarder, `mov r8,rdx; mov rdx,rcx; mov rcx,[rcx+member]; mov rax,[rcx]; mov rax,[rax+470h]; mov r9,[guard]; jmp r9`, that is minecraftGame->onPlayerLoaded(*this, player) (member 1A8h in 26.51, 1C8h in 26.60). It is a leaf with no stack frame, so it has no .pdata entry: `function_start` and `function_start_of` cannot be used. Recipe 0 is the whole body with the member, the vtable offset and the guard wildcarded; the lint decodes it from its first byte, because the recipe's value is the match start. Recipe 1 shares no bytes with recipe 0: it starts in the .pdata function just before the neighbours and runs through them, the last bytes of a funclet (`pop rsi; pop rbp; ret`), the fadeOutMusic forwarder, five int3, the 8-byte setter `mov byte ptr [rcx+member],imm; ret` (onFullVanillaPackOnStack) and eight int3, the 8-byte getter `movzx eax,byte ptr [rcx+member]; ret` (isFullVanillaPackOnStack) and eight int3; it gives the address 67 bytes after its start, the first byte after that padding. It relies on this link order and padding, which is the same in both builds. Every immediate, displacement and branch byte of the patterns is a wildcard (the lint is clean on 26.51 and 26.60). Both are unique in both exes and agree. The checks are `section .text` and `in_vtable`: the result must be in slots 319 to 331 of ClientInstance.vtable (both builds plus about 4 slots either side). What changed in 26.60: the slot moved from 327 to 323 and the members moved (1A8h to 1C8h, 1B8h to 1D8h); the code shape did not change."
+  notes     = "void ClientInstance::onPlayerLoaded(Player& player), the IClientInstance::onPlayerLoaded override: slot 327 of the ClientInstance.vtable global in 26.51 and 323 in 26.60. LeviLamina raises ClientJoinLevelEvent from a hook on this function. It is a 33-byte forwarder, `mov r8,rdx; mov rdx,rcx; mov rcx,[rcx+member]; mov rax,[rcx]; mov rax,[rax+470h]; mov r9,[guard]; jmp r9`, that is minecraftGame->onPlayerLoaded(*this, player) (member 1A8h in 26.51, 1C8h in 26.60). It is a leaf with no stack frame, so it has no .pdata entry: `function_start` and `function_start_of` cannot be used. Recipe 0 is the whole body with the member, the vtable offset and the guard wildcarded; the lint decodes it from its first byte, because the recipe's value is the match start. On 26.51 to 26.63 a recipe 1 (removed for the Preview, see below) shared no bytes with recipe 0: it starts in the .pdata function just before the neighbours and runs through them, the last bytes of a funclet (`pop rsi; pop rbp; ret`), the fadeOutMusic forwarder, five int3, the 8-byte setter `mov byte ptr [rcx+member],imm; ret` (onFullVanillaPackOnStack) and eight int3, the 8-byte getter `movzx eax,byte ptr [rcx+member]; ret` (isFullVanillaPackOnStack) and eight int3; it gives the address 67 bytes after its start, the first byte after that padding. It relies on this link order and padding, which is the same in both builds. Every immediate, displacement and branch byte of the patterns is a wildcard (the lint is clean on 26.51 and 26.60). Both were unique in both exes and agreed. The checks are `section .text` and `in_vtable`: the result must be in slots 319 to 331 of ClientInstance.vtable (both builds plus about 4 slots either side). What changed in 26.60: the slot moved from 327 to 323 and the members moved (1A8h to 1C8h, 1B8h to 1D8h); the code shape did not change. What changed in 6ae4eeee-4dd4fa7acacb4c41 (Preview 1.26.70.23) (an assert-enabled build): the IClientInstance vtable was reordered and shortened, and onPlayerLoaded is now slot 296; its member is 1D0h. Recipe 0 still matches once. The former recipe 1 (the link-order run that started in the funclet before the fadeOutMusic forwarder) was removed: on the Preview the funclet ends 15 int3 earlier, so the run must start in the padding, where the lint cannot decode it, and the only way to give both shapes the same offset would run the old alternative past a call. The entry now has one recipe; its in_vtable check is strong, so the deriver needs no second recipe. The in_vtable window is now 292 to 331 (296 on the Preview, 323 on 26.60 to 26.63, 327 on 26.51, about 4 either side). Evidence for the Preview value: (1) the whole 26.63 body (recipe 0) matches once, in slot 296; (2) the link-order neighbours of 26.63 (the fadeOutMusic forwarder through vtable offset 468h, the 8-byte setter, the 8-byte getter and their int3 padding) are in the same order right before it, and slots 295 and 296 line up with 26.63 slots 322 and 323. The window was widened on that evidence."
 
   recipe {
     step "pattern" {
       bytes = "49 89 D0 48 89 CA 48 8B 89 ?? ?? ?? ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 4C 8B 0D ?? ?? ?? ?? 49 FF E1"
-    }
-  }
-
-  recipe {
-    step "pattern" {
-      bytes  = "5E 5D C3 48 8B 89 ?? ?? ?? ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8B 15 ?? ?? ?? ?? 48 FF E2 CC CC CC CC CC C6 81 ?? ?? ?? ?? ?? C3 CC CC CC CC CC CC CC CC 0F B6 81 ?? ?? ?? ?? C3 CC CC CC CC CC CC CC CC"
-      offset = 67
     }
   }
 
@@ -215,19 +229,28 @@ entry "ClientInstance.onPlayerLoaded" {
 
   check "in_vtable" {
     vtable   = "ClientInstance.vtable"
-    min_slot = 319
+    min_slot = 292
     max_slot = 331
   }
 }
 
 entry "ClientInstance.getLocalPlayer" {
   kind     = "vslot"
-  notes    = "Slot of LocalPlayer* IClientInstance::getLocalPlayer() const in the IClientInstance vtable: 31 in 26.51 (the same as LeviLamina's header order; header order, not a reference) and 30 in 26.60 (IClientInstance lost one slot before 13). The function locks the weak player pointer at this+248h and returns the player or null; the slot before it (getRegion) reads the same member. Recipe 0 is a call site in another ClientInstance virtual (slot 197 in 26.51): `push rdi; sub rsp,..; mov rsi,rcx; mov rax,[rcx]; mov rax,[rax+disp]; call [guard]; test rax,rax`, a call on `this`; the displacement is turned into a slot. Recipe 1 is the body (stack cookie, `lea rdx,[rcx+member]`, the weak-pointer lock call, `cmp byte ptr [rsp+..],imm`, the second call) and `slot_of` in the ClientInstance.vtable global. Every immediate, displacement and branch byte of the patterns is a wildcard (the lint is clean on 26.51 and 26.60). Both are unique in both exes and agree. The range check keeps the slot in the early part of the vtable. The entry did not break in the 26.60 cold derive."
+  notes    = "Slot of LocalPlayer* IClientInstance::getLocalPlayer() const in the IClientInstance vtable: 31 in 26.51 (the same as LeviLamina's header order; header order, not a reference) and 30 in 26.60 (IClientInstance lost one slot before 13). The function locks the weak player pointer at this+248h and returns the player or null; the slot before it (getRegion) reads the same member. On 26.51 to 26.63 a former recipe 0 was a call site in another ClientInstance virtual (slot 197 in 26.51): `push rdi; sub rsp,..; mov rsi,rcx; mov rax,[rcx]; mov rax,[rax+disp]; call [guard]; test rax,rax`, a call on `this`; the displacement is turned into a slot. The former recipe 1 (removed for the Preview, see below) was the body (stack cookie, `lea rdx,[rcx+member]`, the weak-pointer lock call, `cmp byte ptr [rsp+..],imm`, the second call) and `slot_of` in the ClientInstance.vtable global. Every immediate, displacement and branch byte of the patterns is a wildcard (the lint is clean on 26.51 and 26.60). Both were unique in both exes and agreed. The range check keeps the slot in the early part of the vtable. The entry did not break in the 26.60 cold derive. What changed in 6ae4eeee-4dd4fa7acacb4c41 (Preview 1.26.70.23) (an assert-enabled build; real code change): the IClientInstance vtable was reordered and shortened, and getLocalPlayer is now slot 13. Its body changed: it locks a weak entity pointer (the same member as getRegion, slot 12), tests that the entity has one component (type hash ACB47B38h) and only then returns the Actor. Slot 22 on the Preview has the old getLocalPlayer body byte for byte (only its member differs), so the former body recipe matched slot 22 there and gave a wrong value; it was removed. The recipes now (each pattern ends at a call or has none): recipe 0 is the call site in the function that calls getLocalPlayer twice, then getOptions (const), then a virtual on its result, then tail-jumps with the player (slot 195 on 26.63; on the Preview the same function is reached through the seventh base at this+A0h and loads the ClientInstance vtable from [rcx-A0h]). Its first step finds that function by its end, which has no call in it: `mov rcx,rdi; mov edx,eax; add rsp,..; pop rdi; pop rsi; jmp rel32; add rsp,..; pop rdi; pop rsi; ret` (a pattern_any: alternative 0 for 26.60 to the Preview, alternative 1 for 26.51, which has a `nop` after the jmp). The second step scans that function for the second getLocalPlayer call, which starts right after the first call and ends at its own call (`test rax,rax; je; mov rax,[rsi]; mov rax,[rax+disp]; mov rcx,rsi; call [guard]`, alternative 0 disp32, alternative 1 disp8), and its displacement is turned into a slot. Recipe 1 is the first call in a large function that calls getLocalPlayer, isShowingMenu and getOptions (const) on rsi in a row. Its first step finds that function by its prologue body, which has no call (`mov r14,r9; mov rsi,r8; mov rbx,rdx; mov rdi,rcx; mov rax,[rcx+..]; test rax,rax; je; cmp qword ptr [rax+..],imm; jne rel32`, offset 26 at the jne); `operand` reads the jne target, which is the start of the getLocalPlayer call (`mov rax,[rsi]; mov rax,[rax+disp]; mov rcx,rsi; call [guard]`), `add 3` steps over the 3-byte `mov rax,[rsi]`, and the displacement of the next instruction is turned into a slot. The two recipes anchor in two functions. Every displacement, immediate and branch byte is a wildcard. The range is now 9 to 45 (13 on the Preview). Evidence for the Preview value: (1) the 26.63 function of recipe 0 (two getLocalPlayer calls, getOptions at 173, a virtual on its result, a tail jump with the player) is found on the Preview with the same calls, and it calls slot 13 twice and getOptions at 149 (the Preview getOptions pair is 148/149); (2) the large function of recipe 1, drafted from 26.63, calls slot 13, then slot 125 (isShowingMenu on the Preview) and slot 149, in the same order as 30, 148 and 173 on 26.63; and slot 13 sits next to getRegion (slot 12) and reads the same member, as on 26.63."
 
   recipe {
-    step "pattern" {
-      bytes  = "57 48 83 EC ?? 48 89 CE 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15 ?? ?? ?? ?? 48 85 C0"
-      offset = 11
+    step "pattern_any" {
+      patterns = [
+        "48 89 F9 89 C2 48 83 C4 ?? 5F 5E E9 ?? ?? ?? ?? 48 83 C4 ?? 5F 5E C3",
+        "48 89 F9 89 C2 48 83 C4 ?? 5F 5E E9 ?? ?? ?? ?? 90 48 83 C4 ?? 5F 5E C3",
+      ]
+    }
+    step "pattern_any" {
+      patterns = [
+        "48 85 C0 74 ?? 48 8B 06 48 8B 80 ?? ?? ?? ?? 48 89 F1 FF 15",
+        "48 85 C0 74 ?? 48 8B 06 48 8B 40 ?? 48 89 F1 FF 15",
+      ]
+      offset   = 8
     }
     step "operand" {
       index = 1
@@ -238,27 +261,41 @@ entry "ClientInstance.getLocalPlayer" {
 
   recipe {
     step "pattern" {
-      bytes = "48 83 EC ?? 48 8B 05 ?? ?? ?? ?? 48 31 E0 48 89 44 24 ?? 48 8D 91 ?? ?? ?? ?? 48 8D 4C 24 ?? E8 ?? ?? ?? ?? 80 7C 24 ?? ?? 75 ?? 48 8D 4C 24 ?? B2 ?? E8"
+      bytes  = "4D 89 CE 4C 89 C6 48 89 D3 48 89 CF 48 8B 41 ?? 48 85 C0 74 ?? 48 83 78 ?? ?? 0F 85 ?? ?? ?? ??"
+      offset = 26
     }
-    step "slot_of" {
-      vtable = "ClientInstance.vtable"
+    step "operand" {
+      index = 0
+      kind  = "branch_target"
     }
+    step "add" {
+      value = 3
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+    step "displacement_to_slot" {}
   }
 
   check "range" {
-    min = 20
+    min = 9
     max = 45
   }
 }
 
 entry "ClientInstance.getTopScreenName" {
   kind     = "vslot"
-  notes    = "Slot of std::string IClientInstance::getTopScreenName() const in the IClientInstance vtable: 136 in 26.51 (the same as the header order; header order, not a reference) and 134 in 26.60. The string comes back through a hidden return pointer in rdx; the function keeps rdx (`mov rsi,rdx`) and reads the scene stack through another virtual. Recipe 0 is the call site in the lambda of ClientInstance::_handlePossibleControllerDisconnect(bool) (its source-location string names it; '(anonymous class)' in 26.51, '(lambda)' in 26.60): the lambda locks a weak ClientInstance pointer, tests a flag, calls `client->getTopScreenName()` into a stack string and compares the result with \"progress_screen\". The pattern is the `je` after the flag test and that call (`je rel32; mov rax,[rbx]; mov rax,[rax+disp]; lea rdi,[rbp+..]; mov rcx,rbx; mov rdx,rdi; call [guard]`); the displacement is turned into a slot. It is the only call through this displacement that passes a return slot to a ClientInstance. Recipe 1 is the body (prologue with xmm6 save, `mov rsi,rdx; mov rdi,rcx`, the first virtual call on this with an out pointer) and `slot_of` in the ClientInstance.vtable global. Every immediate, displacement and branch byte of the patterns is a wildcard (the lint is clean on 26.51 and 26.60). Both are unique in both exes and agree. What changed in 26.60: the slot moved, and the flag test changed form (`test byte ptr [rax+member],1` became `movzx` + `test al,1`); recipe 0 now starts after it."
+  notes    = "Slot of std::string IClientInstance::getTopScreenName() const in the IClientInstance vtable: 136 in 26.51 (the same as the header order; header order, not a reference) and 134 in 26.60. The string comes back through a hidden return pointer in rdx; the function keeps rdx (`mov rsi,rdx`) and reads the scene stack through another virtual. Recipe 0 is the call site in the lambda of ClientInstance::_handlePossibleControllerDisconnect(bool) (its source-location string names it; '(anonymous class)' in 26.51, '(lambda)' in 26.60): the lambda locks a weak ClientInstance pointer, tests a flag, calls `client->getTopScreenName()` into a stack string and compares the result with \"progress_screen\". The pattern is the `je` after the flag test and that call (`je rel32; mov rax,[rbx]; mov rax,[rax+disp]; lea rdi,[rbp+..]; mov rcx,rbx; mov rdx,rdi; call [guard]`); the displacement is turned into a slot. It is the only call through this displacement that passes a return slot to a ClientInstance. Recipe 1 is the body (prologue with xmm6 save, `mov rsi,rdx; mov rdi,rcx`, the first virtual call on this with an out pointer) and `slot_of` in the ClientInstance.vtable global. Every immediate, displacement and branch byte of the patterns is a wildcard (the lint is clean on 26.51 and 26.60). Both are unique in both exes and agree. What changed in 26.60: the slot moved, and the flag test changed form (`test byte ptr [rax+member],1` became `movzx` + `test al,1`); recipe 0 now starts after it. What changed in 6ae4eeee-4dd4fa7acacb4c41 (Preview 1.26.70.23) (an assert-enabled build; real code change): the IClientInstance vtable was reordered and shortened, and getTopScreenName is now slot 113. The lambda keeps the client in rcx (`mov rcx,[rbp+..]; test al,1; je; mov rax,[rcx]; mov rax,[rax+disp]; mov rdi,rbp; mov rdx,rdi; call [guard]`), and the old recipe 0 pattern matched another function on the Preview (after `test rbx,rbx`, a call at slot 277 that returns a string from another object). Recipe 0 is now a pattern_any, all alternatives with the vtable load at byte 11: alternative 0 (26.60 to 26.63) starts at the flag test `test al,imm`; alternative 1 (26.51) starts two bytes before the je, at the ModRM and displacement of `mov rbx,[rbp+..]` (5Dh, which the other function does not have: it has `test rbx,rbx` there); alternative 2 is the Preview form. Recipe 1 is a pattern_any: alternative 0 the old body, now ending at the first call, alternative 1 the Preview body without the xmm6 save. The range is now 109 to 145 (113 on the Preview). Evidence for the Preview value: (1) the lambda, found on the Preview by a pattern drafted from its 26.63 body after the call (the compare of the result with a 15-character string, matches once), calls displacement 388h: slot 113; (2) the 26.63 body (the two virtual calls on this with out pointers at [rbp-28h] and [rbp-10h]) is slot 113 on the Preview, and its vtable neighbours line up with 26.63 slots 133 to 137 (a forwarder after it, onClientCreatedLevel two slots after, which names itself on the Preview)."
 
   recipe {
-    step "pattern" {
-      bytes  = "0F 84 ?? ?? ?? ?? 48 8B 03 48 8B 80 ?? ?? ?? ?? 48 8D 7D ?? 48 89 D9 48 89 FA FF 15"
-      offset = 9
+    step "pattern_any" {
+      patterns = [
+        "A8 ?? 0F 84 ?? ?? ?? ?? 48 8B 03 48 8B 80 ?? ?? ?? ?? 48 8D 7D ?? 48 89 D9 48 89 FA FF 15",
+        "5D ?? 0F 84 ?? ?? ?? ?? 48 8B 03 48 8B 80 ?? ?? ?? ?? 48 8D 7D ?? 48 89 D9 48 89 FA FF 15",
+        "A8 ?? 0F 84 ?? ?? ?? ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 48 89 EF 48 89 FA FF 15",
+      ]
+      offset   = 11
     }
     step "operand" {
       index = 1
@@ -268,8 +305,11 @@ entry "ClientInstance.getTopScreenName" {
   }
 
   recipe {
-    step "pattern" {
-      bytes = "55 56 57 48 81 EC ?? ?? ?? ?? 48 8D AC 24 ?? ?? ?? ?? 0F 29 75 ?? 48 C7 45 ?? ?? ?? ?? ?? 48 89 D6 48 89 CF 48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8D 55 ?? FF 15 ?? ?? ?? ?? 48 8B 07"
+    step "pattern_any" {
+      patterns = [
+        "55 56 57 48 81 EC ?? ?? ?? ?? 48 8D AC 24 ?? ?? ?? ?? 0F 29 75 ?? 48 C7 45 ?? ?? ?? ?? ?? 48 89 D6 48 89 CF 48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8D 55 ?? FF 15",
+        "55 56 57 48 81 EC ?? ?? ?? ?? 48 8D AC 24 ?? ?? ?? ?? 48 C7 45 ?? ?? ?? ?? ?? 48 89 D6 48 89 CF 48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8D 55 ?? FF 15",
+      ]
     }
     step "slot_of" {
       vtable = "ClientInstance.vtable"
@@ -277,14 +317,14 @@ entry "ClientInstance.getTopScreenName" {
   }
 
   check "range" {
-    min = 125
+    min = 109
     max = 145
   }
 }
 
 entry "ClientInstance.isShowingMenu" {
   kind     = "vslot"
-  notes    = "Slot of bool IClientInstance::isShowingMenu() const in the IClientInstance vtable: 150 in 26.51 (the same as the header order; header order, not a reference) and 148 in 26.60. The slot after it (isShowingPauseScreen) tests the top screen name against \"pause_screen\", and isInWorldAndNotShowingAnyMenuScreens (158 in 26.51, 156 in 26.60) returns `!this->isShowingMenu()` when a world is loaded. Recipe 0 is that call: `test al,al; je; xor esi,esi; jmp; mov rax,[rsi]; mov rax,[rax+disp]; mov rcx,rsi; call [guard]`; the displacement is turned into a slot. Recipe 1 is the body (prologue, `mov rdi,rcx; mov byte ptr [rbp+..],imm`, the scene-stack call with the out pointer `lea rsi,[rbp-20h]`) and `slot_of` in the ClientInstance.vtable global. One byte is kept: the out-pointer slot 20h, because 26.60 has a twin of this function outside the ClientInstance vtable with its locals at [rbp-38h]; without the byte the pattern matches both. Recipe 2 is a call site in a large function that calls three IClientInstance virtuals on rsi in a row: getLocalPlayer (`...; call [guard]; mov r13,rax`), then isShowingMenu (`test al,al; jne`), then getOptions; the middle displacement is turned into a slot. Every immediate, displacement and branch byte of the patterns is a wildcard (the lint is clean on 26.51 and 26.60) apart from the kept byte. All three are unique in both exes and agree. What changed in 26.60: the slot moved, a `nop` follows the call in recipe 0's site, and the twin appeared."
+  notes    = "Slot of bool IClientInstance::isShowingMenu() const in the IClientInstance vtable: 150 in 26.51 (the same as the header order; header order, not a reference) and 148 in 26.60. The slot after it (isShowingPauseScreen) tests the top screen name against \"pause_screen\", and isInWorldAndNotShowingAnyMenuScreens (158 in 26.51, 156 in 26.60) returns `!this->isShowingMenu()` when a world is loaded. Recipe 0 is that call: `test al,al; je; xor esi,esi; jmp; mov rax,[rsi]; mov rax,[rax+disp]; mov rcx,rsi; call [guard]`; the displacement is turned into a slot. Recipe 1 is the body (prologue, `mov rdi,rcx; mov byte ptr [rbp+..],imm`, the scene-stack call with the out pointer `lea rsi,[rbp-20h]`) and `slot_of` in the ClientInstance.vtable global. One byte is kept: the out-pointer slot 20h, because 26.60 has a twin of this function outside the ClientInstance vtable with its locals at [rbp-38h]; without the byte the pattern matches both. Recipe 2 is a call site in a large function that calls three IClientInstance virtuals on rsi in a row: getLocalPlayer (`...; call [guard]; mov r13,rax`), then isShowingMenu (`test al,al; jne`), then getOptions; the middle displacement is turned into a slot. Every immediate, displacement and branch byte of the patterns is a wildcard (the lint is clean on 26.51 and 26.60) apart from the kept byte. All three are unique in both exes and agree. What changed in 26.60: the slot moved, a `nop` follows the call in recipe 0's site, and the twin appeared. What changed in 6ae4eeee-4dd4fa7acacb4c41 (Preview 1.26.70.23) (an assert-enabled build; real code change): the IClientInstance vtable was reordered and shortened, and isShowingMenu is now slot 125. Recipe 0 still matches once. The body now pushes rbp, rsi, rbx and keeps this in rsi, and its out pointer is [rbp+10h]; a twin outside the ClientInstance vtable (two direct callers) has the same code with [rbp-40h]. Recipe 1 is now a pattern_any: alternative 0 the old body, alternative 1 the Preview body, with byte 46 kept (the 10h out-pointer slot) to leave out that twin. Recipe 2 now ends at its call: its first step finds the large function by its prologue body, which has no call (`mov r14,r9; mov rsi,r8; mov rbx,rdx; mov rdi,rcx; mov rax,[rcx+..]; test rax,rax; je; cmp qword ptr [rax+..],imm; jne rel32`, unique on every known build); the second step scans that function for `mov r13,rax; mov rax,[rsi]; mov rax,[rax+disp]; mov rcx,rsi; call [guard]` (it starts right after the getLocalPlayer call and ends at the isShowingMenu call; one match in the function on every known build), and the displacement at offset 6 is turned into a slot. The same pattern serves every build, so it needs no alternatives. The range is now 121 to 165 (125 on the Preview). Evidence for the Preview value: (1) the large function of recipe 2, drafted from 26.63 (getLocalPlayer, then isShowingMenu, then getOptions on rsi), is found once on the Preview and reads displacement 3E8h for the middle call: slot 125; (2) the 26.63 body (the scene-stack call with an out pointer, then the assert) is the Preview slot 125, and the slots around it line up with 26.63 (148 maps to 125; 149 to 154, the five stack-cookie getters, map to 126 to 131)."
 
   recipe {
     step "pattern" {
@@ -299,10 +339,14 @@ entry "ClientInstance.isShowingMenu" {
   }
 
   recipe {
-    step "pattern" {
-      bytes      = "55 56 57 53 48 83 EC ?? 48 8D 6C 24 ?? 48 C7 45 ?? ?? ?? ?? ?? 48 89 CF C6 45 ?? ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8D 75 E0 48 89 F2 FF 15"
+    step "pattern_any" {
+      patterns   = [
+        "55 56 57 53 48 83 EC ?? 48 8D 6C 24 ?? 48 C7 45 ?? ?? ?? ?? ?? 48 89 CF C6 45 ?? ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8D 75 E0 48 89 F2 FF 15",
+        "55 56 53 48 81 EC ?? ?? ?? ?? 48 8D AC 24 ?? ?? ?? ?? 48 C7 45 ?? ?? ?? ?? ?? 48 89 CE C6 45 ?? ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8D 55 10 FF 15",
+      ]
       literal_ok = [
-        "41: lea rsi,[rbp-20h]: the out-pointer slot; a twin of this function outside the ClientInstance vtable (26.60) uses [rbp-38h], so this byte keeps the match on isShowingMenu",
+        "0.41: lea rsi,[rbp-20h]: the out-pointer slot; a twin of this function outside the ClientInstance vtable (26.60) uses [rbp-38h], so this byte keeps the match on isShowingMenu",
+        "1.46: lea rdx,[rbp+10h]: the out-pointer slot; a twin of this function outside the ClientInstance vtable (Preview 1.26.70.23) uses [rbp-40h], so this byte keeps the match on isShowingMenu",
       ]
     }
     step "slot_of" {
@@ -312,8 +356,11 @@ entry "ClientInstance.isShowingMenu" {
 
   recipe {
     step "pattern" {
-      bytes  = "48 8B 06 48 8B 80 ?? ?? ?? ?? 48 89 F1 FF 15 ?? ?? ?? ?? 49 89 C5 48 8B 06 48 8B 80 ?? ?? ?? ?? 48 89 F1 FF 15 ?? ?? ?? ?? 84 C0 75 ?? 48 8B 06 48 8B 80"
-      offset = 25
+      bytes = "4D 89 CE 4C 89 C6 48 89 D3 48 89 CF 48 8B 41 ?? 48 85 C0 74 ?? 48 83 78 ?? ?? 0F 85 ?? ?? ?? ??"
+    }
+    step "pattern" {
+      bytes  = "49 89 C5 48 8B 06 48 8B 80 ?? ?? ?? ?? 48 89 F1 FF 15"
+      offset = 6
     }
     step "operand" {
       index = 1
@@ -323,14 +370,14 @@ entry "ClientInstance.isShowingMenu" {
   }
 
   check "range" {
-    min = 140
+    min = 121
     max = 165
   }
 }
 
 entry "ClientInstance.isWorldActive" {
   kind     = "vslot"
-  notes    = "Slot of bool IClientInstance::isWorldActive() const in the IClientInstance vtable: 159 in 26.51 (the same as the header order; header order, not a reference) and 157 in 26.60. The function is `return this->getLevel() != nullptr` (the const getLevel overload; MSVC puts overloads in the vtable in reverse declaration order), and the next slot (isInRealm) forwards to the MinecraftGame. Recipe 0 is a call on `this` at the start of another ClientInstance virtual (slot 128 in 26.51): `mov qword ptr [rbp+..],-2; mov rdi,rdx; mov rbx,rcx; mov rax,[rcx]; mov rax,[rax+disp]; call [guard]; test al,al`; the displacement is turned into a slot. Recipe 1 is the whole 31-byte body and the start of the forwarder after it (`int3`, `mov rcx,[rcx+..]; mov rax,[rcx]; mov rax,[rax+..]; mov rdx,[guard]; jmp rdx`); the body alone has three matches. `slot_of` reads the ClientInstance.vtable global. Every immediate, displacement and branch byte of the patterns is a wildcard (the lint is clean on 26.51 and 26.60). Both are unique in both exes and agree. The entry did not break in the 26.60 cold derive."
+  notes    = "Slot of bool IClientInstance::isWorldActive() const in the IClientInstance vtable: 159 in 26.51 (the same as the header order; header order, not a reference) and 157 in 26.60. The function is `return this->getLevel() != nullptr` (the const getLevel overload; MSVC puts overloads in the vtable in reverse declaration order), and the next slot (isInRealm) forwards to the MinecraftGame. Recipe 0 is a call on `this` at the start of another ClientInstance virtual (slot 128 in 26.51): `mov qword ptr [rbp+..],-2; mov rdi,rdx; mov rbx,rcx; mov rax,[rcx]; mov rax,[rax+disp]; call [guard]; test al,al`; the displacement is turned into a slot. Recipe 1 is the whole 31-byte body and the start of the forwarder after it (`int3`, `mov rcx,[rcx+..]; mov rax,[rcx]; mov rax,[rax+..]; mov rdx,[guard]; jmp rdx`); the body alone has three matches. `slot_of` reads the ClientInstance.vtable global. Every immediate, displacement and branch byte of the patterns is a wildcard (the lint is clean on 26.51 and 26.60). Both are unique in both exes and agree. The entry did not break in the 26.60 cold derive. What changed in 6ae4eeee-4dd4fa7acacb4c41 (Preview 1.26.70.23) (an assert-enabled build): the IClientInstance vtable was reordered and shortened, and isWorldActive is now slot 134. Both recipes still match once and agree; only the range moved, to 130 to 170 (134 on the Preview). Evidence for the Preview value: (1) the call site of recipe 0, drafted from the 26.63 caller, and (2) the body of recipe 1 with the isInRealm forwarder after it, drafted from 26.63, both give 134; the slots around it line up with 26.63 (157 and 158 map to 134 and 135, and 161 to 163 to 137 to 139, the same leaf and forwarder pattern). The range was widened on that evidence."
 
   recipe {
     step "pattern" {
@@ -354,14 +401,14 @@ entry "ClientInstance.isWorldActive" {
   }
 
   check "range" {
-    min = 150
+    min = 130
     max = 170
   }
 }
 
 entry "ClientInstance.getOptions" {
   kind     = "vslot"
-  notes    = "Slot of IOptionRegistry& IClientInstance::getOptions() in the IClientInstance vtable: 174 in 26.51 and 172 in 26.60. The header declares the non-const getOptions at 174 and the const one at 175 (header order, not a reference). Both slots hold the same function, `mov rax,[rcx+member]; ret` (0E10h in 26.51, 0E00h in 26.60), so a call through either returns the same object; `slot_of` gives the first slot that holds it, and recipe 0's call site uses that one. Recipe 0 is a call on `this` in a ClientInstance virtual (slot 411 in 26.51): `sub rsp,..; cmp byte ptr [rcx+member],imm; jne; mov rax,[rcx]; mov rax,[rax+disp]; mov rsi,rcx; call [guard]`; the displacement is turned into a slot. Recipe 1 is the 8-byte body `mov rax,[rcx+member]; ret`, its eight int3 and the prologue of the next function (`push rsi; push rdi; sub rsp,..; mov rax,[rip+..]`), and `slot_of` in the ClientInstance.vtable global. The body is a leaf without .pdata; the lint decodes it from its first byte because `slot_of` finds that byte in the vtable. It relies on the next function following the body, as in both builds. Every immediate, displacement and branch byte of the patterns is a wildcard (the lint is clean on 26.51 and 26.60). Both are unique in both exes and agree. The entry did not break in the 26.60 cold derive."
+  notes    = "Slot of IOptionRegistry& IClientInstance::getOptions() in the IClientInstance vtable: 174 in 26.51 and 172 in 26.60. The header declares the non-const getOptions at 174 and the const one at 175 (header order, not a reference). Both slots hold the same function, `mov rax,[rcx+member]; ret` (0E10h in 26.51, 0E00h in 26.60), so a call through either returns the same object; `slot_of` gives the first slot that holds it, and recipe 0's call site uses that one. Recipe 0 is a call on `this` in a ClientInstance virtual (slot 411 in 26.51): `sub rsp,..; cmp byte ptr [rcx+member],imm; jne; mov rax,[rcx]; mov rax,[rax+disp]; mov rsi,rcx; call [guard]`; the displacement is turned into a slot. Recipe 1 is the 8-byte body `mov rax,[rcx+member]; ret`, its eight int3 and the prologue of the next function (`push rsi; push rdi; sub rsp,..; mov rax,[rip+..]`), and `slot_of` in the ClientInstance.vtable global. The body is a leaf without .pdata; the lint decodes it from its first byte because `slot_of` finds that byte in the vtable. It relies on the next function following the body, as in both builds. Every immediate, displacement and branch byte of the patterns is a wildcard (the lint is clean on 26.51 and 26.60). Both are unique in both exes and agree. The entry did not break in the 26.60 cold derive. What changed in 6ae4eeee-4dd4fa7acacb4c41 (Preview 1.26.70.23) (an assert-enabled build): the IClientInstance vtable was reordered and shortened, and getOptions is now slot 148 (the const overload 149 holds the same body). Both recipes still match once and agree; only the range moved, to 144 to 185 (148 on the Preview). Evidence for the Preview value: (1) the call site of recipe 0 and (2) the body of recipe 1, both drafted from 26.63, give 148; the slots around it line up with 26.63 (166 to 177 map to 142 to 153, with the same pairs of equal slots at 166/167 and 172/173, and getSettingsRegistry, which names itself on the Preview, at 154); and two callers of getOptions (const) on 26.63 call 149 on the Preview. The range was widened on that evidence."
 
   recipe {
     step "pattern" {
@@ -385,7 +432,7 @@ entry "ClientInstance.getOptions" {
   }
 
   check "range" {
-    min = 165
+    min = 144
     max = 185
   }
 }
@@ -516,11 +563,14 @@ entry "ClientInstance.getPacketSender" {
 
 entry "ClientInstance.vtable" {
   kind     = "global"
-  notes    = "The vtable that holds the IClientInstance virtuals (slot 0 is the destructor; requestLeaveGameAsync and requestLeaveGame are 14 and 15 in 26.51, 13 and 14 in 26.60; update is 24 and 23). The ClientInstance constructor stores five vtable pointers (`lea rax,[rip+..]; mov [r13+0/18h/20h/88h/90h],rax`); the `lea` of the store to this+0 is this vtable. The pattern is that run with the displacements wildcarded; the operand is the RIP target of the first `lea`. Every immediate, displacement and branch byte of the patterns is a wildcard (the lint is clean on 26.51 and 26.60). It is unique in both exes. The section check keeps the address inside .rdata. It exists so `slot_of` and `in_vtable` have a vtable to read. Values: 0xe9731b0 in 26.51, 0xf2b9330 in 26.60."
+  notes    = "The vtable that holds the IClientInstance virtuals (slot 0 is the destructor; requestLeaveGameAsync and requestLeaveGame are 14 and 15 in 26.51, 13 and 14 in 26.60; update is 24 and 23). The ClientInstance constructor stores five vtable pointers (`lea rax,[rip+..]; mov [r13+0/18h/20h/88h/90h],rax`); the `lea` of the store to this+0 is this vtable. The recipe is one pattern_any: alternative 0 is that run with r13 as the object register (26.51 to 26.63), alternative 1 the same run with r12 (`lea rax,[rip+..]; mov [r12],rax; ... mov [r12+90h],rax`, each store with a SIB byte); the displacements are wildcarded and the operand is the RIP target of the first `lea`. Each alternative matches once on its own builds and never on the others. Every immediate, displacement and branch byte of the patterns is a wildcard (the lint is clean on 26.51 and 26.60). It is unique in both exes. The section check keeps the address inside .rdata. It exists so `slot_of` and `in_vtable` have a vtable to read. Values: 0xe9731b0 in 26.51, 0xf2b9330 in 26.60. What changed in 6ae4eeee-4dd4fa7acacb4c41 (Preview 1.26.70.23): the constructor keeps the object in r12 instead of r13, so every store gained a SIB byte and the old pattern found nothing; the run now stores seven vtables (this+0, 18h, 20h, 88h, 90h, 98h, A0h). Alternative 1 was added for that shape (would have survived with a better recipe). Evidence for the Preview value: (1) the constructor drafted from the 26.63 one (prologue, the 18h-byte allocation with the 100000001h ref counts, the first run of three stores, `mov edx,2; call`, then the long run) is found again with only the register changed, and the first `lea` of its long run names this table; (2) the destructor, the only other code that loads the table, has the same shape as on 26.63 (`mov edi,edx; mov rsi,rcx; lea rax,[rip+..]; mov [rcx],rax; ... mov [rcx+88h],rax`), and both builds have exactly these two references. The slot contents line up with 26.63 (requestLeaveGame names itself in both tables, and the neighbours of every slot below line up)."
 
   recipe {
-    step "pattern" {
-      bytes  = "48 8D 05 ?? ?? ?? ?? 49 89 45 ?? 48 8D 05 ?? ?? ?? ?? 49 89 45 ?? 48 8D 05 ?? ?? ?? ?? 49 89 45 ?? 48 8D 05 ?? ?? ?? ?? 49 89 85 ?? ?? ?? ?? 48 8D 05 ?? ?? ?? ?? 49 89 85 ?? ?? ?? ??"
+    step "pattern_any" {
+      patterns = [
+        "48 8D 05 ?? ?? ?? ?? 49 89 45 ?? 48 8D 05 ?? ?? ?? ?? 49 89 45 ?? 48 8D 05 ?? ?? ?? ?? 49 89 45 ?? 48 8D 05 ?? ?? ?? ?? 49 89 85 ?? ?? ?? ?? 48 8D 05 ?? ?? ?? ?? 49 89 85 ?? ?? ?? ??",
+        "48 8D 05 ?? ?? ?? ?? 49 89 04 24 48 8D 05 ?? ?? ?? ?? 49 89 44 24 ?? 48 8D 05 ?? ?? ?? ?? 49 89 44 24 ?? 48 8D 05 ?? ?? ?? ?? 49 89 84 24 ?? ?? ?? ?? 48 8D 05 ?? ?? ?? ?? 49 89 84 24 ?? ?? ?? ??",
+      ]
       offset = 0
     }
     step "operand" {
@@ -579,11 +629,14 @@ entry "ClientInstance.getMouseGrabbed" {
 
 entry "ClientInstance.GameCallbacks.vtable" {
   kind     = "global"
-  notes    = "The GameCallbacks vtable of ClientInstance, at this+88h (destructor, onLevelCorrupt, onGameModeChanged, onBeforeSimTick, onTick, onInternetUpdate, onGameSessionReset, onLevelExit (7), onRequestResourceReload, updateScreens). It is the fourth vtable that the ClientInstance constructor stores (the run that also stores ClientInstance.vtable at this+0; five stores in 26.51, six in 26.60). The pattern starts before the run: `mov dword ptr [reg+..],imm; mov edx,imm; call; movups [reg+..],xmm`, then the first five `lea rax,[rip+..]; mov [reg+..],rax` stores, with every REX, ModRM, displacement and immediate byte wildcarded, so the registers are free; it is unique in both exes. Offset 59 gives the `lea` of the fourth store, whose RIP target is the operand. The section check keeps the address inside .rdata. It exists for the `in_vtable` check of ClientExitLevel.hook; it was added in Plan 5b. Values: 0xe973f20 in 26.51, 0xf2ba080 in 26.60."
+  notes    = "The GameCallbacks vtable of ClientInstance, at this+88h (destructor, onLevelCorrupt, onGameModeChanged, onBeforeSimTick, onTick, onInternetUpdate, onGameSessionReset, onLevelExit (7), onRequestResourceReload, updateScreens). It is the fourth vtable that the ClientInstance constructor stores (the run that also stores ClientInstance.vtable at this+0; five stores in 26.51, six in 26.60). The pattern starts before the run: `mov dword ptr [reg+..],imm; mov edx,imm; call; movups [reg+..],xmm`, then the first five `lea rax,[rip+..]; mov [reg+..],rax` stores, with every REX, ModRM, displacement and immediate byte wildcarded, so the registers are free; it is unique in both exes. Offset 59 gives the `lea` of the fourth store, whose RIP target is the operand. The section check keeps the address inside .rdata. It exists for the `in_vtable` check of ClientExitLevel.hook; it was added in Plan 5b. Values: 0xe973f20 in 26.51, 0xf2ba080 in 26.60, 0xf2bb060 in 26.63, 0x12fbbaa0 in 6ae4eeee-4dd4fa7acacb4c41 (Preview 1.26.70.23). What changed in 6ae4eeee-4dd4fa7acacb4c41: the constructor holds `this` in r12 instead of r13, so every store through it has a SIB byte (`mov [r12],rax` 4 bytes, `mov [r12+18h],rax` 5 bytes, `mov [r12+88h],rax` 8 bytes, against 4, 4 and 7 on 26.63), and the run has a seventh store (+0A0h); the fixed-length pattern found no match. The recipe is now one `pattern_any`: alternative 0 is the old pattern (26.51 to 26.63); alternative 1 is the same sequence for the SIB encoding (`mov edx,imm; call; movups [r12+..],xmm6`, then the `lea rax,[rip+..]; mov [r12+..],rax` stores), and it starts inside the instruction before `mov edx,imm` (the wildcarded tail of `mov dword ptr [r12+38h],0`) so that the `lea` of the fourth store is at offset 59 in both alternatives. Alternative 0 matches once on 26.51, 26.60, 26.62 and 26.63 and not on the Preview; alternative 1 matches once on the Preview and on no other build. Evidence on the Preview, both from 26.63: (1) the 26.63 constructor run (base vtable at this+0, +18h, +20h after the `mov edx,2; call`, then the ClientInstance stores, the fourth at this+88h) is found once on the Preview, with the fourth store at this+88h; (2) the table it stores has the 26.63 shape: slots 0 and 10 hold the same kind of non-start thunks, slots 8 and 11 the shared empty stub, and slot 7 holds the onLevelExit body that both recipes of ClientExitLevel.hook (drafted from 26.63) find on the Preview; the ClientInstance destructor loads the same table, as on 26.63. Would have survived with a better recipe."
 
   recipe {
-    step "pattern" {
-      bytes  = "?? C7 ?? ?? ?? ?? ?? ?? BA ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? 0F 11 ?? ?? ?? ?? ?? ?? 8D ?? ?? ?? ?? ?? ?? 89 ?? ?? ?? 8D ?? ?? ?? ?? ?? ?? 89 ?? ?? ?? 8D ?? ?? ?? ?? ?? ?? 89 ?? ?? ?? 8D ?? ?? ?? ?? ?? ?? 89 ?? ?? ?? ?? ?? ?? 8D ?? ?? ?? ?? ?? ?? 89 ?? ?? ?? ?? ??"
+    step "pattern_any" {
+      patterns = [
+        "?? C7 ?? ?? ?? ?? ?? ?? BA ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? 0F 11 ?? ?? ?? ?? ?? ?? 8D ?? ?? ?? ?? ?? ?? 89 ?? ?? ?? 8D ?? ?? ?? ?? ?? ?? 89 ?? ?? ?? 8D ?? ?? ?? ?? ?? ?? 89 ?? ?? ?? 8D ?? ?? ?? ?? ?? ?? 89 ?? ?? ?? ?? ?? ?? 8D ?? ?? ?? ?? ?? ?? 89 ?? ?? ?? ?? ??",
+        "?? ?? ?? ?? ?? BA ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? 0F 11 ?? ?? ?? ?? ?? ?? 48 8D 05 ?? ?? ?? ?? ?? 89 ?? ?? 48 8D 05 ?? ?? ?? ?? ?? 89 ?? ?? ?? 48 8D 05 ?? ?? ?? ?? ?? 89 ?? ?? ?? 48 8D 05 ?? ?? ?? ?? ?? 89 ?? ?? ?? ?? ?? ?? 48 8D 05 ?? ?? ?? ?? ?? 89 ?? ?? ?? ?? ?? ??",
+      ]
       offset = 59
     }
     step "operand" {
@@ -594,6 +647,55 @@ entry "ClientInstance.GameCallbacks.vtable" {
 
   check "section" {
     name = ".rdata"
+  }
+}
+
+entry "ClientInstance.onTick" {
+  kind      = "function"
+  hooked    = true
+  msvc_name = "?$onTick@ClientInstance@@QEAAXHH@Z"
+  notes     = "void ClientInstance::onTick(int nTick, int maxTick), the GameCallbacks::onTick override: slot 4 of the ClientInstance.GameCallbacks.vtable global (destructor, onLevelCorrupt, onGameModeChanged, onBeforeSimTick, onTick; slot 7 is onLevelExit, ClientExitLevel.hook). `this` in rcx is the GameCallbacks subobject (ClientInstance + ClientInstance.gameCallbacksOffset, 88h), as for ClientExitLevel.hook; edx = nTick, r8d = maxTick. It runs on the main thread once per client tick (Minecraft::mRealTimer, 20 per second, more than once in a frame when the game catches up), in menus too. The first call is getLocalPlayer on this-88h; the in-world work is skipped when it is null. No direct caller: it is only reached through the vtable. Recipe 0 is the prologue up to that call and its null test. Recipe 1 shares no bytes with it: the end (`mov rcx,[rsi+member]; call; movaps xmm6,[rbp-..]; add rsp; pop rbx/rdi/rsi/r14/r15/rbp; ret`) followed by the first bytes of the cold path (`mov dword ptr [0],0DEADC0DEh`), then function_start_of. Every displacement, immediate and branch byte is a wildcard. The check in_vtable keeps the value to slots 2 to 6 of the GameCallbacks vtable (a window around slot 4; the neighbours onBeforeSimTick and onInternetUpdate are other functions). Values: 0x65a0c90 on 6aea437e-7eff13daabb430da (26.62), 0x65a09f0 on 6aed1906-b127418e74d2f2f9 (26.63)."
+
+  recipe {
+    step "pattern" {
+      bytes = "55 41 57 41 56 56 57 53 48 83 EC ?? 48 8D 6C 24 ?? 0F 29 75 ?? 48 C7 45 ?? ?? ?? ?? ?? 48 89 CE 44 89 45 ?? 89 55 ?? 48 8D B9 ?? ?? ?? ?? 48 8B 81 ?? ?? ?? ?? 48 8B 80 ?? ?? ?? ?? 48 89 F9 FF 15 ?? ?? ?? ?? 48 85 C0 0F 84 ?? ?? ?? ??"
+    }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes = "48 8B 8E ?? ?? ?? ?? E8 ?? ?? ?? ?? 0F 28 75 ?? 48 83 C4 ?? 5B 5F 5E 41 5E 41 5F 5D C3 C7 04 25"
+    }
+    step "function_start_of" {}
+  }
+
+  check "function_start" {}
+
+  check "in_vtable" {
+    vtable   = "ClientInstance.GameCallbacks.vtable"
+    min_slot = 2
+    max_slot = 6
+  }
+}
+
+entry "ClientInstance.gameCallbacksOffset" {
+  kind  = "field"
+  notes = "Offset of the GameCallbacks subobject in ClientInstance: 88h in 26.62 and 26.63. It is the displacement of the store that puts the ClientInstance.GameCallbacks.vtable pointer into the object: the `this` that a GameCallbacks override such as ClientInstance.onTick or ClientExitLevel.hook receives in rcx is ClientInstance + this value, and the ClientInstance is rcx minus it. Recipe 0 is the constructor run of ClientInstance.GameCallbacks.vtable (see that entry): the fourth `lea rax,[rip+..]; mov [reg+disp32],rax` store, read as the displacement of operand 0 of the `mov` (offset 66 from the pattern start, 7 bytes after the `lea` that the vtable entry reads). Every REX, ModRM, displacement and immediate byte of the pattern is a wildcard. A second recipe is not possible: the other uses of the offset are `lea reg,[rcx-88h]` in the overrides, a negative displacement that no step negates. Value 0x88 on 6aea437e-7eff13daabb430da (26.62) and 6aed1906-b127418e74d2f2f9 (26.63)."
+
+  recipe {
+    step "pattern" {
+      bytes  = "?? C7 ?? ?? ?? ?? ?? ?? BA ?? ?? ?? ?? E8 ?? ?? ?? ?? ?? 0F 11 ?? ?? ?? ?? ?? ?? 8D ?? ?? ?? ?? ?? ?? 89 ?? ?? ?? 8D ?? ?? ?? ?? ?? ?? 89 ?? ?? ?? 8D ?? ?? ?? ?? ?? ?? 89 ?? ?? ?? 8D ?? ?? ?? ?? ?? ?? 89 ?? ?? ?? ?? ?? ?? 8D ?? ?? ?? ?? ?? ?? 89 ?? ?? ?? ?? ??"
+      offset = 66
+    }
+    step "operand" {
+      index = 0
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 8
+    max = 512
   }
 }
 
@@ -900,5 +1002,39 @@ entry "ClientInstance.mRealTimer" {
   check "entry_is" {
     entry = "LevelChunk.mSubChunks"
     value = 456
+  }
+}
+
+entry "ClientInstance.getCurrentUIRouter" {
+  kind     = "vslot"
+  notes    = "Slot of OreUI::Router& IClientInstance::getCurrentUIRouter() in the ClientInstance.vtable global: 239 (displacement 778h) on 26.60, 26.62 and 26.63. The header (LeviLamina IClientInstance.h) declares the non-const and the const overload one after the other; the exe folds both into one function, so slots 238 and 239 hold the same body (26.63 0x65b4fa0, 26.62 0x65b5240, 26.60 0x65b4640); the game calls 239. rcx = the ClientInstance; the Router pointer is returned in rax (a reference; the game does not test it for null at the call sites read). The body returns the member router at +5F0h when the client shows no world or an overlay flag is set, else tail-calls MinecraftGame slot 123 (3D8h) on the IMinecraftGame at +1C8h; the mod must call the slot, not read the member, to get the router the game uses in every state. Evidence that the result is the OreUI::Router: in both call sites below the returned rax goes as rcx straight into OreUIRouter.pushRoute (0x4d428c0 on 26.63: `mov rcx,rax; xor r8d,r8d; call 0xf3c360`, the route `/play`) or, through rdi, into OreUIRouter.replaceRoute (0x28c0e90: the Play tab helper). Recipe 0 is the call site in the Play tab helper (0x28c0e90 on 26.63, 0x28c1130 on 26.62, 0x28c11d0 on 26.60): `mov rcx,[rax+member]; mov rax,[rcx]; mov rax,[rax+disp]; call [guard]; mov rdi,rax; lea r9,[rip+..]; lea rbx,[rbp+..]; mov rcx,rbx; mov edx,esi; xor r8d,r8d; call` (the call builds the `/play/<tab>` route). Recipe 1 is the call site in the function that pushes `/play` (0x4d428c0 on 26.63, 0x4d42b60 on 26.62, 0x4d42990 on 26.60): `mov rcx,[rsi+member]; mov rax,[rcx]; mov rax,[rax+disp]; call [guard]`, the inline std::string set-up (size, capacity, four zero stores, the 4-byte and 1-byte rip loads of `/play`), `lea rdx,[rbp+..]; mov rcx,rax; xor r8d,r8d; call` (the call is OreUIRouter.pushRoute). Both read the displacement of the vtable load at offset 7 and turn it into a slot. They are in two functions and share no anchor bytes past the common vtable load. Every displacement, immediate and branch byte is a wildcard. Both are unique on 26.60, 26.62 and 26.63 and agree. The range check is a window around the slot. On 26.51 recipe 0 has no match and recipe 1 alone gives slot 242 (790h, also a folded pair 241/242); a range check alone needs two recipes, so the entry refuses on 26.51 (out of scope). Values: 239 on 6ad79ee4-17d51891a1119914 (26.60), 6aea437e-7eff13daabb430da (26.62) and 6aed1906-b127418e74d2f2f9 (26.63)."
+
+  recipe {
+    step "pattern" {
+      bytes  = "48 8B 48 ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15 ?? ?? ?? ?? 48 89 C7 4C 8D 0D ?? ?? ?? ?? 48 8D 5D ?? 48 89 D9 89 F2 45 31 C0 E8"
+      offset = 7
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+    step "displacement_to_slot" {}
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "48 8B 4E ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15 ?? ?? ?? ?? 48 C7 45 ?? ?? ?? ?? ?? 48 C7 45 ?? ?? ?? ?? ?? 48 C7 45 ?? ?? ?? ?? ?? C7 45 ?? ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? 89 4D ?? 0F B6 0D ?? ?? ?? ?? 88 4D ?? 48 8D 55 ?? 48 89 C1 45 31 C0 E8"
+      offset = 7
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+    step "displacement_to_slot" {}
+  }
+
+  check "range" {
+    min = 232
+    max = 248
   }
 }

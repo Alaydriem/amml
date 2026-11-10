@@ -7,9 +7,9 @@ pub mod structs;
 #[cfg(feature = "test-support")]
 pub mod testing;
 
-/// The version of what the deriver does with a recipe's steps. The runtime mixes it into the cache
-/// name, so a change here makes every cache file stale. Bump it whenever step semantics change.
-pub const DERIVER_VERSION: u32 = 12;
+/// The version of what the deriver does with a recipe's steps. It is part of every entry
+/// fingerprint, so a change here makes every stored result stale. Bump it whenever step semantics change.
+pub const DERIVER_VERSION: u32 = 13;
 
 pub use errors::{CliError, DeriveError, StepError};
 pub use services::{

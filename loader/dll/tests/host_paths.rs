@@ -10,6 +10,7 @@ fn the_levilamina_layout_hangs_off_the_folder_of_the_exe() {
     assert_eq!(paths.loader, Path::new("C:/game/mods/amml-loader"));
     assert_eq!(paths.recipes, Path::new("C:/game/mods/amml-loader/recipes"));
     assert_eq!(paths.cache, Path::new("C:/game/mods/amml-loader/cache"));
+    assert_eq!(paths.data, Path::new("C:/game/mods/amml-loader/data"));
     assert_eq!(paths.settings, Path::new("C:/game/mods/amml-loader/amml.hcl"));
     assert_eq!(paths.logs, Path::new("C:/game/logs/amml"));
     assert_eq!(paths.mods, Path::new("C:/game/mods/amml"));
@@ -31,6 +32,7 @@ fn the_standalone_layout_keeps_the_loader_files_in_one_amml_folder_beside_the_ex
     assert_eq!(paths.loader, Path::new("C:/game/amml"));
     assert_eq!(paths.recipes, Path::new("C:/game/amml/recipes"));
     assert_eq!(paths.cache, Path::new("C:/game/amml/cache"));
+    assert_eq!(paths.data, Path::new("C:/game/amml/data"));
     assert_eq!(paths.settings, Path::new("C:/game/amml/amml.hcl"));
     assert_eq!(paths.logs, Path::new("C:/game/amml/logs"));
     assert_eq!(paths.mods, Path::new("C:/game/mods/amml"));

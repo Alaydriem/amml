@@ -71,3 +71,60 @@ entry "CompoundTag.nodeVariantIndex" {
     value = 456
   }
 }
+
+entry "CompoundTag.vtable" {
+  kind  = "global"
+  notes = "The vtable of CompoundTag (no RTTI), a helper for the in_vtable check of CompoundTag.write. Its slots follow the Tag interface (LeviLamina header): 0 the deleting destructor, 1 deleteChildren, 2 write, 3 load, 4 toString, 5 getId (returns 0Ah), then equals, print, copy, hash. Recipe 0 is the vptr store in CompoundTag.dtor (`lea rax,[rip+..]; mov [rcx],rax`), read as the RIP target of the lea. Recipe 1 is the vptr store in NbtIo.read, where the function builds the empty CompoundTag it returns (`lea rax,[rip+..]; mov [rdi],rax; xorps xmm0,xmm0`), read the same way. The two recipes are in two functions. The RIP offsets are wildcards. Check section .rdata. Values: 0xE821430 on 6aa482fd-2658118eba0dbac5 (26.51), 0xF152DB0 on 6ad79ee4-17d51891a1119914 (26.60), 0xF153DA0 on 6aea437e-7eff13daabb430da (26.62), 0xF153D80 on 6aed1906-b127418e74d2f2f9 (26.63). Added on 26.63; both stores are the same code on all four builds."
+
+  recipe {
+    step "ref" { entry = "CompoundTag.dtor" }
+    step "pattern" { bytes = "48 8D 05 ?? ?? ?? ?? 48 89 01" }
+    step "operand" {
+      index = 1
+      kind  = "rip_target"
+    }
+  }
+
+  recipe {
+    step "ref" { entry = "NbtIo.read" }
+    step "pattern" { bytes = "48 8D 05 ?? ?? ?? ?? 48 89 07 0F 57 C0" }
+    step "operand" {
+      index = 1
+      kind  = "rip_target"
+    }
+  }
+
+  check "section" {
+    name = ".rdata"
+  }
+}
+
+entry "CompoundTag.write" {
+  kind      = "function"
+  msvc_name = "?write@CompoundTag@@UEBAXAEAVIDataOutput@@@Z"
+  notes     = "void CompoundTag::write(IDataOutput&) const: rcx the tag, rdx the output; slot 2 of CompoundTag.vtable (the Tag::write slot). The virtual is an 8-byte thunk without .pdata and without a direct caller: `xor r8d,r8d; jmp` into the next function, the overload CompoundTag::write(IDataOutput&, int depth) const (r8 the depth; the LeviLamina header has both). That writer walks the map (`mov r15,[rcx+8]; mov r12,[r15]`), throws bad_variant_access on a node whose index byte +68h is -1, and for each node writes the tag id (getId, Tag slot 5, then IDataOutput slot 5, writeByte), writes the key (IDataOutput slot 1, writeString), then writes the value: a ListTag (id 9) through the list writer with depth+1, a CompoundTag (id 0Ah) through a direct recursive call with depth+1, any other tag through Tag slot 2 (`call [rax+10h]` with rcx the tag, rdx the output). It ends with writeByte(0), the End tag. The value is the thunk, so a mod calls it with two arguments and needs no depth. It was found from CompoundTag.dtor: its vptr store gives the vtable; slot 2 is the thunk right after the destructor. Recipe 0 is the thunk at its first byte, its int3 padding and the head of the writer (`xor r8d,r8d; jmp; int3 x8; push r15; push r14; push r12; push rsi; push rdi; push rbx; sub rsp,..; mov rsi,rdx; mov rax,[rip+..]; xor rax,rsp; mov [rsp+..],rax; mov r15,[rcx+..]; mov r12,[r15]; cmp r12,r15; je; mov edi,r8d; inc edi`); the jmp offset and every other displacement and immediate are wildcards. Alone the thunk shape matches 52 to 58 times per build; the writer head makes it unique. Recipe 1 is the tail of CompoundTag::~CompoundTag and the padding after it (`mov rcx,[rsi+8]; mov edx,70h; add rsp,..; pop rsi; jmp; int3 x7`), offset 26, the byte after the padding. It keeps the 70h node size (other map destructors free other sizes) and the map member +8 (a second destructor with the same tail and a 70h node reads +10h; it is followed by 8 int3, so without this byte it matched twice). Both recipes depend on link order (the destructor, then the thunk, then the writer); on a new build they fail, they do not give a wrong value. They share no pattern bytes. Check in_vtable CompoundTag.vtable slots 0..6 (slot 2 on every build; Tag has 11 virtuals in the LeviLamina header). msvc_name from the LeviLamina header signature. Values: 0x2546470 on 6aa482fd-2658118eba0dbac5 (26.51), 0x2963580 on 6ad79ee4-17d51891a1119914 (26.60), 0x29634E0 on 6aea437e-7eff13daabb430da (26.62), 0x2963240 on 6aed1906-b127418e74d2f2f9 (26.63). Added on 26.63; the thunk, padding and writer head are byte-identical on all four builds."
+
+  recipe {
+    step "pattern" { bytes = "45 31 C0 E9 ?? ?? ?? ?? CC CC CC CC CC CC CC CC 41 57 41 56 41 54 56 57 53 48 83 EC ?? 48 89 D6 48 8B 05 ?? ?? ?? ?? 48 31 E0 48 89 44 24 ?? 4C 8B 79 ?? 4D 8B 27 4D 39 FC 0F 84 ?? ?? ?? ?? 44 89 C7 FF C7" }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes      = "48 8B 4E 08 BA 70 00 00 00 48 83 C4 ?? 5E E9 ?? ?? ?? ?? CC CC CC CC CC CC CC"
+      literal_ok = [
+        "3: the map member at +8: another destructor with the same tail frees a 70h node from +10h",
+        "5: head node size 70h of map<string, CompoundTagVariant>: other map destructors free other node sizes",
+        "6: upper bytes of the node size",
+        "7: upper bytes of the node size",
+        "8: upper bytes of the node size",
+      ]
+      offset     = 26
+    }
+  }
+
+  check "in_vtable" {
+    vtable   = "CompoundTag.vtable"
+    min_slot = 0
+    max_slot = 6
+  }
+}

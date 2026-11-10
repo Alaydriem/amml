@@ -148,3 +148,38 @@ fn a_run_that_is_not_deterministic_exits_with_its_own_code() {
     assert_eq!(ReportWriter::new(&out, &set, Cases::secs(1), true, None).exit_code(), 0);
     assert_eq!(ReportWriter::new(&out, &set, Cases::secs(1), false, None).exit_code(), 3);
 }
+
+#[test]
+fn the_summary_line_counts_reused_and_derived() {
+    let set = RecipeSet::new(vec![
+        Cases::entry("A", vec![Cases::pattern()], ""),
+        Cases::entry("B", vec![Cases::pattern()], ""),
+        Cases::entry("C", vec![Cases::pattern()], ""),
+        Cases::entry("D", vec![Cases::pattern()], ""),
+    ])
+    .unwrap();
+    let mut data = Cases::data(&[("A", 1), ("B", 2), ("C", 3), ("D", 4)]);
+    data.fingerprints.clear();
+    let mut out = DeriveOutcome::new(data, Vec::new(), Vec::new());
+    out.reused = vec![Cases::id("A"), Cases::id("B"), Cases::id("C")];
+    let report = ReportWriter::new(&out, &set, Cases::secs(1), true, None);
+    assert_eq!(report.reused, 3);
+    assert!(report.summary_line().ends_with("; reused 3, derived 1"), "{}", report.summary_line());
+}
+
+#[test]
+fn the_report_lists_the_reused_entries_sorted() {
+    let set = RecipeSet::new(vec![
+        Cases::entry("A", vec![Cases::pattern()], ""),
+        Cases::entry("B", vec![Cases::pattern()], ""),
+        Cases::entry("C", vec![Cases::pattern()], ""),
+    ])
+    .unwrap();
+    let mut out = DeriveOutcome::new(Cases::data(&[("A", 1), ("B", 2), ("C", 3)]), Vec::new(), Vec::new());
+    out.reused = vec![Cases::id("C"), Cases::id("A")];
+    let text = ReportWriter::render(&ReportWriter::new(&out, &set, Cases::secs(1), true, None));
+    assert!(text.contains("\n## Reused\n\n- A\n- C\n"), "{text}");
+
+    let none = DeriveOutcome::new(Cases::data(&[("A", 1)]), Vec::new(), Vec::new());
+    assert!(!ReportWriter::render(&ReportWriter::new(&none, &set, Cases::secs(1), true, None)).contains("## Reused"));
+}

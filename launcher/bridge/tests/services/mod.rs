@@ -11,6 +11,7 @@ mod launcher_session;
 mod manager_slot;
 mod name_check;
 mod open_policy;
+mod proof_cards;
 mod registry_refresher;
 mod setup_state;
 mod system_checks;

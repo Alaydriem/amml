@@ -1,11 +1,9 @@
 use std::sync::atomic::Ordering;
 
-use amml_data::{BuildId, EntryKind, RecipeLoader};
+use amml_data::{BuildId, EntryKind};
 use amml_runtime::{CacheSource, DeriveSource, HostResolver, LayoutRefusal, LeviLaminaSource, SourceNote};
 
 use crate::support::{BASE, Fixtures};
-
-const DIGEST: &str = "d1";
 
 fn lookup(name: &str) -> Option<u64> {
     match name {
@@ -45,15 +43,20 @@ fn setup() -> Setup {
     Fixtures::write_cache(
         dir.path(),
         build,
-        DIGEST,
         build,
+        &set,
         vec![
             ("A", Fixtures::resolved(EntryKind::Function, 0x100)),
             ("G", Fixtures::resolved(EntryKind::Global, 0x101)),
         ],
     );
-    let cache = CacheSource::new(dir.path().to_path_buf(), build, DIGEST.to_string(), set.clone());
-    let derive = DeriveSource::new(dir.path().join("none.exe"), dir.path().join("none"), dir.path().join("out"));
+    let cache = CacheSource::new(dir.path().to_path_buf(), dir.path().join("data"), build, set.clone());
+    let derive = DeriveSource::new(
+        dir.path().join("none.exe"),
+        dir.path().join("none"),
+        dir.path().join("out"),
+        dir.path().join("data"),
+    );
     Setup { _dir: dir, cache, derive, set }
 }
 
@@ -129,24 +132,62 @@ fn a_partial_derive_writes_a_file_and_later_resolves_do_not_derive_again() {
 }
 
 #[test]
-fn a_changed_recipe_file_makes_the_old_cache_unreadable_and_derives_again() {
+fn a_comment_in_the_recipes_does_not_derive_again() {
     let dir = tempfile::tempdir().unwrap();
     let probe = Fixtures::probe_dir(dir.path());
     let wanted = [Fixtures::id("Probe.run")];
-    let (host, runs) = Fixtures::probe_standalone(&probe);
+    let (host, _) = Fixtures::probe_standalone(&probe);
     host.resolve(&wanted);
-    assert_eq!(runs.load(Ordering::Relaxed), 1);
 
     let file = probe.recipes.join("probe.hcl");
     let text = std::fs::read_to_string(&file).unwrap();
-    std::fs::write(&file, format!("{text}\n# edited\n")).unwrap();
-    assert!(RecipeLoader::load_dir(&probe.recipes).is_ok());
+    std::fs::write(
+        &file,
+        format!(
+            "{text}
+# edited
+"
+        ),
+    )
+    .unwrap();
+
+    let (edited, edited_runs) = Fixtures::probe_standalone(&probe);
+    let table = edited.resolve(&wanted);
+    assert_eq!(edited_runs.load(Ordering::Relaxed), 0);
+    assert_eq!(table.source_of(&Fixtures::id("Probe.run")), Some("cache"));
+}
+
+#[test]
+fn a_changed_recipe_derives_that_entry_again_and_keeps_the_others() {
+    let dir = tempfile::tempdir().unwrap();
+    let probe = Fixtures::probe_dir(dir.path());
+    let wanted = [Fixtures::id("Probe.run"), Fixtures::id("Probe.global")];
+    let (host, _) = Fixtures::probe_standalone(&probe);
+    host.resolve(&wanted);
+
+    let file = probe.recipes.join("probe.hcl");
+    let text = std::fs::read_to_string(&file).unwrap();
+    std::fs::write(
+        &file,
+        text.replacen(
+            "  check \"function_start\" {}
+",
+            "  check \"section\" {
+    name = \".text\"
+  }
+  check \"function_start\" {}
+",
+            1,
+        ),
+    )
+    .unwrap();
 
     let (changed, changed_runs) = Fixtures::probe_standalone(&probe);
     let table = changed.resolve(&wanted);
     assert_eq!(changed_runs.load(Ordering::Relaxed), 1);
     assert_eq!(table.source_of(&Fixtures::id("Probe.run")), Some("derive"));
-    assert_eq!(table.notes().first(), Some(&SourceNote::CacheMissing));
+    assert_eq!(table.source_of(&Fixtures::id("Probe.global")), Some("cache"));
+    assert!(table.notes().iter().any(|note| matches!(note, SourceNote::DeriveRan { hits: 1, derived: 1, .. })));
 }
 
 #[test]
@@ -180,12 +221,17 @@ fn guarded_setup() -> (tempfile::TempDir, HostResolver) {
     Fixtures::write_cache(
         dir.path(),
         build,
-        DIGEST,
         build,
+        &set,
         vec![("L", Fixtures::resolved(EntryKind::Field, 1)), ("V", Fixtures::resolved(EntryKind::Field, 0x28))],
     );
-    let cache = CacheSource::new(dir.path().to_path_buf(), build, DIGEST.to_string(), set.clone());
-    let derive = DeriveSource::new(dir.path().join("none.exe"), dir.path().join("none"), dir.path().join("out"));
+    let cache = CacheSource::new(dir.path().to_path_buf(), dir.path().join("data"), build, set.clone());
+    let derive = DeriveSource::new(
+        dir.path().join("none.exe"),
+        dir.path().join("none"),
+        dir.path().join("out"),
+        dir.path().join("data"),
+    );
     (dir, HostResolver::standalone(cache, derive, set))
 }
 

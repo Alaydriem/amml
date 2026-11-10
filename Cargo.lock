@@ -178,6 +178,7 @@ version = "26.62.0"
 dependencies = [
  "amml-gdk",
  "amml-launcher-core",
+ "amml-proof-fixture",
  "amml-registry",
  "curia",
  "serde",
@@ -192,6 +193,7 @@ name = "amml-launcher-core"
 version = "26.62.0"
 dependencies = [
  "amml-gdk",
+ "amml-proof-fixture",
  "amml-registry",
  "clap",
  "curia",
@@ -213,6 +215,7 @@ version = "26.62.0"
 dependencies = [
  "amml-abi",
  "amml-data",
+ "amml-msvc",
  "amml-runtime",
  "curia",
  "hcl-rs",
@@ -250,6 +253,17 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "amml-proof-fixture"
+version = "26.62.0"
+dependencies = [
+ "amml-registry",
+ "serde_json",
+ "tempfile",
+ "ureq",
+ "zip",
 ]
 
 [[package]]

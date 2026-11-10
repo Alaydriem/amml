@@ -363,3 +363,39 @@ entry "Actor.setYHeadRotations" {
 
   check "leaf_start" {}
 }
+
+entry "Actor.getItemInHandSlot" {
+  kind      = "function"
+  msvc_name = "?getItemInHandSlot@Actor@@QEBAAEBVItemStack@@W4HandSlot@@@Z"
+  notes     = "ItemStack const& Actor::getItemInHandSlot(HandSlot slot) const, not virtual: rcx the Actor, dl the HandSlot (0 Mainhand, 1 Offhand), the ItemStack reference in rax. LeviLamina header world/actor/Actor.h. The body: for slot 1 it takes the hand SimpleContainer (ActorEquipmentComponent::mHand) from the entity context (`add rcx,8; call <EntityContext ActorEquipmentComponent hand getter>`, the EnTT lookup with the type hash 0B06141A9h, FNV-1a of `ActorEquipmentComponent`) and tail-jumps to its getItem (Container slot 7, `[rcx+38h]`) with edx = 1; for any other slot it tail-jumps to the virtual Actor::getCarriedItem (`[rax+268h]`, slot 77). Found from the EnTT hash: the game inlines `hand->getItem(1)` in about 170 places, and the only small .pdata functions with the shape are this one, Actor::getCarriedItem (the same tail with edx = 0, in 114 vtables) and a wrapper that first loads an Actor from [rcx+8] (0x3f9cac0 on 26.63, in one vtable). Recipe 0 is the body from its first byte (`sub rsp,imm; cmp dl,1; je; movzx eax,dl; test eax,eax; mov rax,[rcx]; mov rax,[rax+disp]; mov rdx,[rip+guard]; add rsp,imm; jmp rdx; add rcx,imm; call`), offset 0, ended at the call; the `sub rsp` right before `cmp dl,1` keeps the wrapper (which has `mov rcx,[rcx+8]` there) out, and the kept `cmp dl,1` immediate keeps getCarriedItem out. Recipe 1 is a call site in a function of its own (an item use handler that stores a bool at +42h and then reads the stack in the chosen hand): `mov [reg+disp8],al; mov rcx,[reg+disp8]; movzx edx,byte ptr [rbp+disp32]; call`, read as the branch target; the ModRM bytes are wildcards because 26.51 uses rcx there and 26.60 and later use rbx. The two recipes are in two functions and share no pattern bytes. Every other displacement, immediate and branch byte is a wildcard. The check is function_start (recipe 0 does not end with function_start_of, so it counts). The mod reads the offhand stack as getItemInHandSlot(player, 1) on the game thread; the reference is the container's own slot, so it changes when the slot is set again. Values: 0x1a0d000 on 6aa482fd-2658118eba0dbac5 (26.51), 0xbb6ba0 on 6ad79ee4-17d51891a1119914 (26.60), 0xbb6bb0 on 6aea437e-7eff13daabb430da (26.62), 0xbb6ae0 on 6aed1906-b127418e74d2f2f9 (26.63). The body is the same on all four builds. Evidence on 26.63: (1) the body matches the 26.51 function byte for byte outside the call and guard displacements; (2) the call site, found from the 26.51 caller (0x259d580, the same `mov [reg+42h],al` store and HandSlot byte load), calls it on every build. Minecraft Preview 1.26.70.23 (6ae4eeee-4dd4fa7acacb4c41): 0x1c87870. There the function has a stack cookie and an assert path: `push rsi; sub rsp,imm; mov rax,[rip+cookie]; xor rax,rsp; mov [rsp+..],rax; cmp dl,1; je; movzx eax,dl; test eax,eax; jne <assert, then getCarriedItem>; mov rax,[rcx]; mov rax,[rax+disp]; mov rdx,[rip+guard]`. For slot 1 the EnTT lookup is no longer inline: it does `add rcx,8`, passes the context and the same hash 0B06141A9h to a generic component lookup (0x60a49c0), then `mov rcx,[rax]` (mHand) and tail-jumps to `[rax+38h]` with edx = 1 after the cookie check. Recipe 0 is a pattern_any with one alternative per shape, both from the function's first byte at offset 0: alternative 0 the 26.51..26.63 body above, alternative 1 the Preview prologue and body up to the guard load. In alternative 1 the near `jne` to the assert (`0F 85`) keeps out the Preview setter next to it (0x1c87780: a short `jne`, then `[rax+260h]`), and `mov rax,[rcx]` (ModRM 01) keeps out the Preview wrapper that first loads an Actor into rsi (0x58001e0, `mov rax,[rsi]`). Recipe 1 is a pattern_any too, both alternatives a direct call at offset 14 read as the branch target: alternative 0 the item use handler call above (26.51..26.63; on the Preview that handler, 0x23eeab0, holds the HandSlot in r13d, `mov [rbx+42h],al; mov rcx,[rbx+8]; mov edx,r13d; call`, so alternative 0 matches nothing there); alternative 1 a Preview caller of its own (0xf473f80: `mov [rbp+disp32],r15d; movzx edx,byte ptr [rsi+disp8]; mov rcx,rbx; call`, the ModRM bytes of the movzx and the mov wildcarded). Each alternative matches once on its own builds and nothing on the others. Evidence for 0x1c87870 on the Preview: (1) its body, read against the 26.63 function 0xbb6ae0, has the same two tails: vtable +268h (Actor::getCarriedItem) for slot 0, and for slot 1 the ActorEquipmentComponent hand container (hash 0B06141A9h) with getItem at +38h and edx = 1; (2) the 26.63 caller of recipe 1 (the item use handler 0x376c780, whose two calls both go to 0xbb6ae0) is 0x23eeab0 on the Preview, with the same `mov [rbx+42h],al; mov rcx,[rbx+8]` before the call, and both of its calls go to 0x1c87870. What changed in 6ae4eeee-4dd4fa7acacb4c41: the stack cookie, the assert and the out-of-line component lookup changed the body, and the caller of recipe 1 moved the HandSlot to a register. Class: real code change (code shape); the meaning of the function is the same."
+
+  recipe {
+    step "pattern_any" {
+      patterns   = [
+        "48 83 EC ?? 80 FA 01 74 ?? 0F B6 C2 85 C0 48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8B 15 ?? ?? ?? ?? 48 83 C4 ?? 48 FF E2 48 83 C1 ?? E8",
+        "56 48 83 EC ?? 48 8B 05 ?? ?? ?? ?? 48 31 E0 48 89 44 24 ?? 80 FA 01 74 ?? 0F B6 C2 85 C0 0F 85 ?? ?? ?? ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8B 15",
+      ]
+      offset     = 0
+      literal_ok = [
+        "0.6: cmp dl,1: the HandSlot::Offhand test; Actor::getCarriedItem has the same container tail without a compare",
+        "1.22: cmp dl,1: the HandSlot::Offhand test in the Preview shape; the Preview getCarriedItem has no compare",
+      ]
+    }
+  }
+
+  recipe {
+    step "pattern_any" {
+      patterns = [
+        "88 ?? ?? 48 8B ?? ?? 0F B6 95 ?? ?? ?? ?? E8",
+        "44 89 BD ?? ?? ?? ?? 0F B6 ?? ?? 48 89 ?? E8",
+      ]
+      offset   = 14
+    }
+    step "operand" {
+      index = 0
+      kind  = "branch_target"
+    }
+  }
+
+  check "function_start" {}
+}

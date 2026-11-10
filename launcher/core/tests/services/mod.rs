@@ -22,6 +22,7 @@ mod mod_swap;
 mod msi_hold;
 mod name_search;
 mod process_patcher;
+mod proof_matrix;
 mod registry_cache;
 mod registry_client;
 mod registry_set;

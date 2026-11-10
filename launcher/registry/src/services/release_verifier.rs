@@ -13,7 +13,6 @@ pub struct ReleaseVerifier<S: ReleaseSource> {
 
 impl<S: ReleaseSource> ReleaseVerifier<S> {
     const SUMS: &'static str = "SHA256SUMS.txt";
-    const HOST: &'static str = "https://github.com";
     // the largest single file the verifier reads out of a zip
     const MAX_ENTRY_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -63,7 +62,7 @@ impl<S: ReleaseSource> ReleaseVerifier<S> {
         let release = ModRelease {
             version: version.to_string(),
             api_version: manifest.api_version,
-            asset: format!("{}/{repo}/releases/download/{version}/{asset}", Self::HOST),
+            asset: self.source.asset_url(repo, version, &asset),
             sha256,
             size: zip.len() as u64,
             published: now.to_string(),
@@ -106,7 +105,7 @@ impl<S: ReleaseSource> ReleaseVerifier<S> {
             version: version.to_string(),
             api_version,
             game_versions: game_versions.to_vec(),
-            asset: format!("{}/{repo}/releases/download/{version}/{asset}", Self::HOST),
+            asset: self.source.asset_url(repo, version, &asset),
             sha256,
             size: zip.len() as u64,
         })

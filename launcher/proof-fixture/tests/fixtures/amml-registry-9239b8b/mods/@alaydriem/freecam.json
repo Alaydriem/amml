@@ -1,0 +1,47 @@
+{
+  "schema": 2,
+  "id": "@alaydriem/freecam",
+  "namespace": "alaydriem",
+  "name": "freecam",
+  "repo": "alaydriem/amml-freecam",
+  "core": false,
+  "default": true,
+  "listing": {
+    "title": "Freecam",
+    "summary": "Free camera with keyframed camera paths for recording smooth shots.",
+    "description": "A free camera mod to look at builds and scout out areas independently of your player position. It also has basic cinematic tools: create simple keyframe paths and quickly take screenshots.\n",
+    "authors": [
+      "Charles R. Portwood II"
+    ],
+    "license": "BSD-3-Clause",
+    "source": "https://github.com/alaydriem/amml-freecam",
+    "homepage": "https://github.com/alaydriem/amml-freecam#readme",
+    "tags": [
+      "freecam",
+      "camera",
+      "cinematic",
+      "recording",
+      "client"
+    ],
+    "icon": "icons/@alaydriem/freecam.png"
+  },
+  "versions": [
+    {
+      "version": "26.62.0",
+      "api_version": 2,
+      "asset": "https://github.com/alaydriem/amml-freecam/releases/download/26.62.0/freecam-26.62.0-windows-x64.zip",
+      "sha256": "8aab93032f4f56b91f5fbe5a2b61013ea8fcd06d5357cdf5c4e4ebfe53d92eff",
+      "size": 2737508,
+      "published": "2026-11-05T23:13:11Z",
+      "min_amml": "26.60.6"
+    },
+    {
+      "version": "26.60.6",
+      "api_version": 2,
+      "asset": "https://github.com/alaydriem/amml-freecam/releases/download/26.60.6/freecam-26.60.6-windows-x64.zip",
+      "sha256": "ee5c6d2281cb5ebb079ae780ab6e0d1b9017bcf496c39b0e92d6b50e0f4ef2a0",
+      "size": 2737014,
+      "published": "2026-11-05T00:23:19Z"
+    }
+  ]
+}

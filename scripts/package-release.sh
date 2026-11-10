@@ -6,7 +6,7 @@
 #   game-versions  tested Minecraft versions, comma separated (1.26.60.5)
 #
 # Writes, in the repository root:
-#   amml-<version>-windows-x64.zip   amml.dll, amml-patch.exe, amml/recipes/, amml/amml-version.txt
+#   amml-<version>-windows-x64.zip   amml.dll, amml-patch.exe, amml/recipes/, amml/data/ (data/*.hcl), amml/amml-version.txt
 #   SHA256SUMS.txt                   the checksum of the zip
 #   release-meta.env                 API_VERSION=<n> and GAME_VERSIONS=<list>
 #
@@ -53,6 +53,8 @@ mkdir -p stage/amml
 cp target/release/amml.dll stage/amml.dll
 cp target/release/amml-patch.exe stage/amml-patch.exe
 cp -r recipes stage/amml/recipes
+mkdir -p stage/amml/data
+cp data/*.hcl stage/amml/data/
 printf '%s' "$version" > stage/amml/amml-version.txt
 
 if command -v 7z > /dev/null 2>&1; then

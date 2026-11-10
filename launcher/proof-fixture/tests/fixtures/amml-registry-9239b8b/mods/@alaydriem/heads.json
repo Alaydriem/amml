@@ -1,0 +1,47 @@
+{
+  "schema": 2,
+  "id": "@alaydriem/heads",
+  "namespace": "alaydriem",
+  "name": "heads",
+  "repo": "alaydriem/amml-heads",
+  "core": false,
+  "default": true,
+  "listing": {
+    "title": "Heads",
+    "summary": "Player skin faces on the locator bar and in chat.",
+    "description": "View player heads in chat and in the locator bar. Works with both skin files and creator skins.\n",
+    "authors": [
+      "Charles R. Portwood II"
+    ],
+    "license": "BSD-3-Clause",
+    "source": "https://github.com/alaydriem/amml-heads",
+    "homepage": "https://github.com/alaydriem/amml-heads#readme",
+    "tags": [
+      "skins",
+      "locator-bar",
+      "chat",
+      "client",
+      "visual"
+    ],
+    "icon": "icons/@alaydriem/heads.png"
+  },
+  "versions": [
+    {
+      "version": "26.62.0",
+      "api_version": 2,
+      "asset": "https://github.com/alaydriem/amml-heads/releases/download/26.62.0/heads-26.62.0-windows-x64.zip",
+      "sha256": "18df03244c06acc650a00f3c03da06aa95e3ca40d1479211df84152f68436a18",
+      "size": 1036850,
+      "published": "2026-11-05T23:16:54Z",
+      "min_amml": "26.60.6"
+    },
+    {
+      "version": "26.60.6",
+      "api_version": 2,
+      "asset": "https://github.com/alaydriem/amml-heads/releases/download/26.60.6/heads-26.60.6-windows-x64.zip",
+      "sha256": "6a192982fc4ad2fa37392f4b66577e7f869ee345b12dc052ad4da5e375eb0891",
+      "size": 1042724,
+      "published": "2026-11-05T00:17:16Z"
+    }
+  ]
+}

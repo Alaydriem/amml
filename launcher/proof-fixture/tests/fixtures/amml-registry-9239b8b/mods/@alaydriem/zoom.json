@@ -1,0 +1,46 @@
+{
+  "schema": 2,
+  "id": "@alaydriem/zoom",
+  "namespace": "alaydriem",
+  "name": "zoom",
+  "repo": "alaydriem/amml-zoom",
+  "core": false,
+  "default": true,
+  "listing": {
+    "title": "Zoom",
+    "summary": "Hold a key to zoom, with smooth easing and matching mouse sensitivity.",
+    "description": "A configurable hold to zoom.\n",
+    "authors": [
+      "Charles R. Portwood II"
+    ],
+    "license": "BSD-3-Clause",
+    "source": "https://github.com/alaydriem/amml-zoom",
+    "homepage": "https://github.com/alaydriem/amml-zoom#readme",
+    "tags": [
+      "zoom",
+      "camera",
+      "client",
+      "utility"
+    ],
+    "icon": "icons/@alaydriem/zoom.png"
+  },
+  "versions": [
+    {
+      "version": "26.62.0",
+      "api_version": 2,
+      "asset": "https://github.com/alaydriem/amml-zoom/releases/download/26.62.0/zoom-26.62.0-windows-x64.zip",
+      "sha256": "f2faadb3993b90430523c437df3eef75364bcb1fec1ee9492cdda9446a6bcb91",
+      "size": 541403,
+      "published": "2026-11-05T23:52:22Z",
+      "min_amml": "26.60.6"
+    },
+    {
+      "version": "26.60.6",
+      "api_version": 2,
+      "asset": "https://github.com/alaydriem/amml-zoom/releases/download/26.60.6/zoom-26.60.6-windows-x64.zip",
+      "sha256": "2cea7e278c192aab2178c4679d0b2ef9d7e65b4280ae30832dc3dc1e68652b00",
+      "size": 541758,
+      "published": "2026-11-04T23:52:28Z"
+    }
+  ]
+}

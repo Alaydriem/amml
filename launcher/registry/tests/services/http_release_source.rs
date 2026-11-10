@@ -73,3 +73,11 @@ fn a_server_that_never_answers_is_a_network_error_after_the_timeout() {
     assert!(matches!(source.fetch("o/r", "1.0.0", "a.zip"), Err(RegistryError::Network(_))));
     drop(listener);
 }
+
+#[test]
+fn github_source_writes_the_same_asset_url_as_before() {
+    assert_eq!(
+        HttpReleaseSource::github().asset_url("alaydriem/amml-heads", "26.60.6", "heads-26.60.6-windows-x64.zip"),
+        "https://github.com/alaydriem/amml-heads/releases/download/26.60.6/heads-26.60.6-windows-x64.zip"
+    );
+}

@@ -58,3 +58,32 @@ fn a_zip_that_writes_outside_its_folder_is_refused() {
         other => panic!("{other:?}"),
     }
 }
+
+#[test]
+fn an_archive_without_data_is_accepted() {
+    let dir = tempfile::tempdir().unwrap();
+    let zip = Zips::amml_zip(&dir.path().join("amml.zip"), "26.60.1", true);
+    let archive = AmmlArchive::open(&zip).unwrap();
+    let dest = dir.path().join("out");
+    archive.extract_to(&dest).unwrap();
+    assert!(!dest.join("amml").join("data").exists());
+}
+
+#[test]
+fn an_archive_with_data_extracts_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let zip = Zips::raw(
+        &dir.path().join("a.zip"),
+        &[
+            ("amml.dll", b"x"),
+            ("amml-patch.exe", b"x"),
+            ("amml/recipes/a.hcl", b"x"),
+            ("amml/data/build-one.hcl", b"solved"),
+            ("amml/amml-version.txt", b"1.0.0"),
+        ],
+    );
+    let archive = AmmlArchive::open(&zip).unwrap();
+    let dest = dir.path().join("out");
+    archive.extract_to(&dest).unwrap();
+    assert_eq!(std::fs::read(dest.join("amml").join("data").join("build-one.hcl")).unwrap(), b"solved");
+}

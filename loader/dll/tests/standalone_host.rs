@@ -29,6 +29,51 @@ fn entries_resolve_from_derive_then_from_the_cache_and_again_from_derive_once_th
 }
 
 #[test]
+fn a_recipe_notes_change_resolves_from_the_cache() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Probe::standalone_layout(root.path());
+    let wanted = [id("Probe.run")];
+    let recipe = paths.recipes.join("probe.hcl");
+
+    let first = StandaloneHost::resolve(&paths, &wanted);
+    assert_eq!(first.source_of(&id("Probe.run")), Some("derive"));
+
+    let text = std::fs::read_to_string(&recipe).unwrap();
+    std::fs::write(
+        &recipe,
+        text.replacen(
+            "kind = \"function\"",
+            "kind = \"function\"
+  notes = \"edited\"",
+            1,
+        ),
+    )
+    .unwrap();
+    let second = StandaloneHost::resolve(&paths, &wanted);
+
+    assert_eq!(second.source_of(&id("Probe.run")), Some("cache"));
+}
+
+#[test]
+fn shipped_data_resolves_without_a_cache() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Probe::standalone_layout(root.path());
+    let wanted = [id("Probe.run")];
+    StandaloneHost::resolve(&paths, &wanted);
+    std::fs::create_dir_all(&paths.data).unwrap();
+    for item in std::fs::read_dir(&paths.cache).unwrap() {
+        let item = item.unwrap();
+        std::fs::copy(item.path(), paths.data.join(item.file_name())).unwrap();
+    }
+    std::fs::remove_dir_all(&paths.cache).unwrap();
+
+    let table = StandaloneHost::resolve(&paths, &wanted);
+
+    assert_eq!(table.source_of(&id("Probe.run")), Some("cache"));
+    assert!(!paths.cache.exists() || std::fs::read_dir(&paths.cache).unwrap().next().is_none());
+}
+
+#[test]
 fn an_unreadable_exe_leaves_every_entry_missing() {
     let root = tempfile::tempdir().unwrap();
     let paths = Probe::standalone_layout(root.path());
@@ -51,7 +96,7 @@ fn start_logs_coverage_defers_the_heap_check_and_works_once() {
     assert!(LoaderState::get().is_some());
     assert!(paths.mods.is_dir());
     let log = LogFile::wait_for(&paths.logs.join("loader.log"), "deferred");
-    assert!(log.contains("resolved 0/2"), "{log}");
+    assert!(log.contains("resolved 0/3"), "{log}");
     assert!(log.contains("game heap round trip deferred"), "{log}");
     assert!(!log.contains("game heap ok"), "{log}");
     assert!(StandaloneHost::start(&paths, 0x1000).is_err());

@@ -1,0 +1,47 @@
+{
+  "schema": 2,
+  "id": "@alaydriem/stratum",
+  "namespace": "alaydriem",
+  "name": "stratum",
+  "repo": "alaydriem/amml-stratum",
+  "core": false,
+  "default": true,
+  "listing": {
+    "title": "Stratum",
+    "summary": "Import .mcstructure files and build over ghost blocks layer by layer.",
+    "description": "Litematica for Bedrock. Everything you wished Structura or HoloPrint could be. Import, manage, and render ghost blocks in the game with a powerful F10 menu, with support for big builds, Easy Place, block opacity, structure position and rotation, and cycling through different structures. Stratum lets you see your ghost blocks out to your maximum render distance without the lag, with performance for millions of blocks.\n",
+    "authors": [
+      "Charles R. Portwood II"
+    ],
+    "license": "BSD-3-Clause",
+    "source": "https://github.com/alaydriem/amml-stratum",
+    "homepage": "https://github.com/alaydriem/amml-stratum#readme",
+    "tags": [
+      "structures",
+      "mcstructure",
+      "building",
+      "schematic",
+      "litematica"
+    ],
+    "icon": "icons/@alaydriem/stratum.png"
+  },
+  "versions": [
+    {
+      "version": "26.62.0",
+      "api_version": 2,
+      "asset": "https://github.com/alaydriem/amml-stratum/releases/download/26.62.0/stratum-26.62.0-windows-x64.zip",
+      "sha256": "008c727c08a89675372c9b2e8f7085a9a3e63659ffc2cab748baf49a383fc2ee",
+      "size": 3606015,
+      "published": "2026-11-05T23:45:12Z",
+      "min_amml": "26.60.6"
+    },
+    {
+      "version": "26.60.6",
+      "api_version": 2,
+      "asset": "https://github.com/alaydriem/amml-stratum/releases/download/26.60.6/stratum-26.60.6-windows-x64.zip",
+      "sha256": "59a445ccc0e1084cdd7f8f4feea511d2a52f25fb2b5b938eac49cd227d0973b8",
+      "size": 3605084,
+      "published": "2026-11-05T00:34:05Z"
+    }
+  ]
+}

@@ -18,3 +18,4 @@ mod mod_loader;
 mod standalone_host;
 mod startup_gate;
 mod support;
+mod version_label;

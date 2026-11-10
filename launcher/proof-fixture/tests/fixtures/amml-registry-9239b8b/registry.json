@@ -1,0 +1,46 @@
+{
+  "schema": 2,
+  "name": "Official",
+  "published": "2026-11-05T23:52:22Z",
+  "mod_count": 9,
+  "amml": {
+    "repo": "alaydriem/amml",
+    "versions": [
+      {
+        "version": "26.62.0",
+        "api_version": 2,
+        "game_versions": [
+          "1.26.60.5",
+          "1.26.62.1"
+        ],
+        "asset": "https://github.com/alaydriem/amml/releases/download/26.62.0/amml-26.62.0-windows-x64.zip",
+        "sha256": "077add5faa2cecb8b654b17b01fc0187ca26b6a3ef8daaa43b1878a23846fb7f",
+        "size": 1485912
+      },
+      {
+        "version": "26.60.5",
+        "api_version": 2,
+        "game_versions": [
+          "1.26.60.5"
+        ],
+        "asset": "https://github.com/alaydriem/amml/releases/download/26.60.5/amml-26.60.5-windows-x64.zip",
+        "sha256": "6b31c11d55b1978fbfef84c47df57dffa2d4fec97b8e4d5d5cf32d18902590df",
+        "size": 1481602
+      }
+    ]
+  },
+  "index": {
+    "page_size": 100,
+    "apis": {
+      "2": {
+        "mods": 9,
+        "pages": 1
+      }
+    }
+  },
+  "names": {
+    "path": "names.json",
+    "sha256": "50bfb53d99e89d62c2dde8ddcdaa4faa3576515845fc356bcb59569a99d83805",
+    "size": 854
+  }
+}

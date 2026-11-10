@@ -1,6 +1,10 @@
-use amml_data::{Check, Entry, EntryId, EntryKind, OperandKind, Recipe, RecipeSet, Step};
+use std::collections::BTreeSet;
+
+use amml_data::{
+    BuildData, BuildId, Check, Entry, EntryFingerprints, EntryId, EntryKind, OperandKind, Recipe, RecipeSet, Step,
+};
 use amml_derive::testing::ImageFixture;
-use amml_derive::{Deriver, FailureReason, LayoutGuard, LayoutRefusal, StepError};
+use amml_derive::{DERIVER_VERSION, Deriver, FailureReason, LayoutGuard, LayoutRefusal, ReportWriter, StepError};
 
 const BASE: u64 = 0x1_4000_0000;
 const CLASS: &str = ".?AVClientInstance@@";
@@ -704,4 +708,139 @@ fn a_guard_with_no_value_is_not_a_refusal() {
     let x = set.get(&Entries::id("X")).unwrap();
     assert_eq!(LayoutGuard::refusal(x, |_| None), None);
     assert_eq!(LayoutGuard::guards(x).cloned().collect::<Vec<_>>(), vec![Entries::id("Layout")]);
+}
+
+impl Entries {
+    // `A` and `D` from patterns, `B` refs `A`, `C` refs `B`, and `F` fails (no match); `b_bytes` is `B`'s own pattern,
+    // checked after the ref, so changing it changes `B` without changing its value
+    fn chain(b_bytes: &str) -> RecipeSet {
+        let set = RecipeSet::new(vec![
+            Entries::entry("A", EntryKind::Function, vec![vec![Entries::pattern("AA BB CC", 0)]], vec![]),
+            Entries::entry(
+                "B",
+                EntryKind::Function,
+                vec![vec![Entries::reference("A")], vec![Entries::pattern(b_bytes, 0)]],
+                vec![],
+            ),
+            Entries::entry("C", EntryKind::Function, vec![vec![Entries::reference("B")]], vec![]),
+            Entries::entry("D", EntryKind::Function, vec![vec![Entries::pattern("DD EE", 0)]], vec![]),
+            Entries::entry("F", EntryKind::Function, vec![vec![Entries::pattern("01 02 03", 0)]], vec![]),
+        ]);
+        match set {
+            Ok(set) => set,
+            Err(error) => panic!("{error}"),
+        }
+    }
+
+    fn ids(names: &[&str]) -> Vec<EntryId> {
+        names.iter().map(|name| Self::id(name)).collect()
+    }
+}
+
+// `A` at the start of a function `AA BB CC ?`, `D` at `DD EE`
+fn chain_image() -> (amml_derive::Image, u32) {
+    let mut fx = ImageFixture::new(BASE);
+    let a = fx.put_text(&[0xAA, 0xBB, 0xCC, 0x90, 0xC3]);
+    fx.put_function(a, a + 5);
+    fx.put_text(&[0xDD, 0xEE, 0xC3]);
+    (fx.image(), a)
+}
+
+#[test]
+fn a_full_derive_records_a_fingerprint_for_every_entry_and_failure() {
+    let (img, _) = chain_image();
+    let set = Entries::chain("AA BB CC");
+    let out = Deriver::new(&img, &set).derive().unwrap();
+    assert_eq!(out.data.fingerprints, EntryFingerprints::of(&set, DERIVER_VERSION).unwrap());
+    let failure = out.failures.iter().find(|f| f.id == Entries::id("F")).unwrap();
+    assert_eq!(out.data.failed.keys().cloned().collect::<Vec<_>>(), Entries::ids(&["F"]));
+    assert_eq!(out.data.failed[&Entries::id("F")], ReportWriter::reason(&failure.reason));
+    assert!(out.reused.is_empty());
+}
+
+#[test]
+fn reuse_gives_the_same_data_as_a_full_derive() {
+    let (img, a) = chain_image();
+    let set = Entries::chain("AA BB CC");
+    let deriver = Deriver::new(&img, &set);
+    let first = deriver.derive().unwrap();
+    let again = deriver.derive_with(&first.data, None).unwrap();
+    assert_eq!(again.data, first.data);
+    assert_eq!(again.reused, Entries::ids(&["A", "B", "C", "D", "F"]));
+    assert!(again.failures.is_empty() && again.degraded.is_empty());
+    // a stored value the image would not give comes back unchanged, so no recipe ran
+    let mut planted = first.data.clone();
+    planted.entries.get_mut(&Entries::id("A")).unwrap().value = 0x1234;
+    let out = deriver.derive_with(&planted, None).unwrap();
+    assert_eq!(out.data, planted);
+    assert_eq!(out.data.entries[&Entries::id("B")].value, u64::from(a));
+}
+
+#[test]
+fn a_changed_entry_and_its_dependents_are_derived_again() {
+    let (img, _) = chain_image();
+    let old = Deriver::new(&img, &Entries::chain("AA BB CC")).derive().unwrap();
+    let changed = Entries::chain("AA BB CC 90");
+    let deriver = Deriver::new(&img, &changed);
+    let out = deriver.derive_with(&old.data, None).unwrap();
+    assert_eq!(out.reused, Entries::ids(&["A", "D", "F"]));
+    assert_eq!(out.data, deriver.derive().unwrap().data);
+    assert_ne!(out.data.fingerprints[&Entries::id("C")], old.data.fingerprints[&Entries::id("C")]);
+}
+
+#[test]
+fn a_stored_failure_with_a_matching_fingerprint_stays_failed_without_running() {
+    let (img, _) = chain_image();
+    let set = Entries::chain("AA BB CC");
+    let deriver = Deriver::new(&img, &set);
+    let mut known = deriver.derive().unwrap().data;
+    // `D` resolves on this image; a stored failure with its fingerprint must be kept, not derived
+    known.entries.remove(&Entries::id("D"));
+    known.failed.insert(Entries::id("D"), "stored reason".to_string());
+    let out = deriver.derive_with(&known, None).unwrap();
+    assert!(!out.data.entries.contains_key(&Entries::id("D")));
+    assert_eq!(out.data.failed[&Entries::id("D")], "stored reason");
+    assert!(out.reused.contains(&Entries::id("D")));
+    assert!(out.failures.is_empty());
+}
+
+#[test]
+fn a_stored_fingerprint_without_a_record_is_derived() {
+    let (img, _) = chain_image();
+    let set = Entries::chain("AA BB CC");
+    let deriver = Deriver::new(&img, &set);
+    let full = deriver.derive().unwrap();
+    let mut known = full.data.clone();
+    known.failed.clear();
+    known.entries.remove(&Entries::id("D"));
+    let out = deriver.derive_with(&known, None).unwrap();
+    assert_eq!(out.data, full.data);
+    assert_eq!(out.reused, Entries::ids(&["A", "B", "C"]));
+    assert_eq!(out.failures.len(), 1);
+}
+
+#[test]
+fn known_data_for_another_build_reuses_nothing() {
+    let (img, a) = chain_image();
+    let set = Entries::chain("AA BB CC");
+    let deriver = Deriver::new(&img, &set);
+    let mut known = deriver.derive().unwrap().data;
+    known.build = BuildId::new(known.build.timestamp.wrapping_add(1), known.build.text_hash);
+    known.entries.get_mut(&Entries::id("A")).unwrap().value = 0x1234;
+    let out = deriver.derive_with(&known, None).unwrap();
+    assert!(out.reused.is_empty());
+    assert_eq!(out.data.build, img.build());
+    assert_eq!(out.data.entries[&Entries::id("A")].value, u64::from(a));
+}
+
+#[test]
+fn solve_limits_the_run_to_the_set_and_its_references() {
+    let (img, _) = chain_image();
+    let set = Entries::chain("AA BB CC");
+    let deriver = Deriver::new(&img, &set);
+    let solve: BTreeSet<EntryId> = [Entries::id("C")].into_iter().collect();
+    let out = deriver.derive_with(&BuildData::new(img.build()), Some(&solve)).unwrap();
+    assert_eq!(out.data.entries.keys().cloned().collect::<Vec<_>>(), Entries::ids(&["A", "B", "C"]));
+    assert_eq!(out.data.fingerprints.keys().cloned().collect::<Vec<_>>(), Entries::ids(&["A", "B", "C"]));
+    assert!(out.data.failed.is_empty() && out.failures.is_empty());
 }

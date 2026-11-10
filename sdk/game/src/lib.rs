@@ -25,8 +25,8 @@ pub use game::{
 pub use game::{
     BaseActorRenderContext, BaseActorRenderContextLayout, CaretMeasureDataLayout, CompoundTagLayout, CompoundTagRef,
     CompoundTagVariantLayout, ContainerScreenController, ItemRenderer, ItemStackBaseRef, ListTagLayout, NbtList,
-    OwnedItemStack, RectangleAreaLayout, ScreenControllerRef, ScreenView, ScreenViewLayout, StringViewLayout,
-    TextMeasureDataLayout, UiColorLayout, UiRenderContext, UiScene,
+    OwnedItemStack, PlayerInventoryRef, RectangleAreaLayout, ScreenControllerRef, ScreenView, ScreenViewLayout,
+    StringViewLayout, TextMeasureDataLayout, UiColorLayout, UiRenderContext, UiScene,
 };
 pub use game::{
     BlockLayout, BlockTypePointerLayout, BlockTypeValueLayout, DbStorageLayout, DimensionLayout, HashedStringLayout,

@@ -17,6 +17,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 amml-abi = { path = "../abi" }
 amml-data = { path = "../../derive/data" }
+amml-msvc = { path = "../../sdk/msvc" }
 amml-runtime = { path = "../runtime" }
 curia.workspace = true
 hcl-rs.workspace = true

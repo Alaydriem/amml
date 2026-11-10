@@ -2,13 +2,13 @@ use std::collections::BTreeSet;
 
 use amml_data::EntryId;
 use amml_runtime::{
-    CacheSource, DeriveSource, EntryTable, Grade, HostResolver, ImageLayout, LeviLaminaSource, ModRegistry, ModScan,
-    ModSpec, SymbolLookup,
+    CacheFile, CacheSource, DeriveSource, EntryTable, Grade, HostResolver, ImageLayout, LeviLaminaSource, ModRegistry,
+    ModScan, ModSpec, SourceNote, SymbolLookup,
 };
 
 use crate::{
     GameHeap, HeapCheck, HostError, HostInputs, HostPaths, HostProcess, LlSymbols, LoaderConfig, LoaderLog,
-    LoaderSettings, LoaderState, ModLoader,
+    LoaderSettings, LoaderState, ModLoader, VersionLabel,
 };
 
 /// The steps of the host: what `ll_mod_load`, `ll_mod_enable`, `ll_mod_disable` and `ll_mod_unload`
@@ -20,11 +20,13 @@ use crate::{
 pub struct HostStartup;
 
 impl HostStartup {
-    /// Every entry a mod lists, and the two the loader itself needs, sorted and without repeats.
+    /// Every entry a mod lists, and the ones the loader itself needs (the game heap and the version
+    /// label), sorted and without repeats.
     pub fn wanted(mods: &[ModSpec]) -> Vec<EntryId> {
         let mut wanted: BTreeSet<EntryId> = mods.iter().flat_map(|spec| spec.entries.iter().cloned()).collect();
         wanted.insert(EntryId(GameHeap::NEW_ID.to_string()));
         wanted.insert(EntryId(GameHeap::DELETE_ID.to_string()));
+        wanted.insert(EntryId(VersionLabel::ENTRY_ID.to_string()));
         wanted.into_iter().collect()
     }
 
@@ -54,15 +56,21 @@ impl HostStartup {
         }
     }
 
-    /// Creates the mods folder and the cache folder. A folder that cannot be created is not fatal:
-    /// a missing mods folder scans as no mods, and a missing cache folder only costs the cache file.
+    /// Creates the mods folder and the cache folder, and removes cache files of the older naming. A folder
+    /// that cannot be created is not fatal: a missing mods folder scans as no mods, and a missing cache
+    /// folder only costs the cache file.
     pub fn prepare_folders(paths: &HostPaths) -> Vec<HostError> {
-        [&paths.mods, &paths.cache]
+        let errors = [&paths.mods, &paths.cache]
             .into_iter()
             .filter_map(|path| {
                 std::fs::create_dir_all(path).err().map(|source| HostError::Folder { path: path.clone(), source })
             })
-            .collect()
+            .collect();
+        let count = CacheFile::remove_stale(&paths.cache);
+        if count > 0 {
+            curia::info!("old cache files removed", { count: count });
+        }
+        errors
     }
 
     /// Shared by every host: reads and publishes the loader settings, creates the folders and scans
@@ -117,6 +125,7 @@ impl HostStartup {
             }
         }
         ModLoader::new(state).load_all(&scan.mods);
+        VersionLabel::install(state, VersionLabel::new(&VersionLabel::instance_name(&paths.game)));
         Ok(())
     }
 
@@ -136,11 +145,11 @@ impl HostStartup {
         let inputs = HostInputs::read(paths);
         let set = inputs.set().clone();
         let levilamina = LeviLaminaSource::new(lookup, set.clone(), module_base, layout);
-        let derived_sources = inputs.cache_key().map(|(build, digest)| {
+        let derived_sources = inputs.build().map(|build| {
             (
-                *build,
-                CacheSource::new(paths.cache.clone(), *build, digest.clone(), set.clone()),
-                DeriveSource::new(paths.exe.clone(), paths.recipes.clone(), paths.cache.clone()),
+                build,
+                CacheSource::new(paths.cache.clone(), paths.data.clone(), build, set.clone()),
+                DeriveSource::new(paths.exe.clone(), paths.recipes.clone(), paths.cache.clone(), paths.data.clone()),
             )
         });
         let resolver = match &derived_sources {
@@ -154,9 +163,7 @@ impl HostStartup {
         Self::log_coverage(&table, wanted.len());
         if settings.grade {
             match derived_sources {
-                Some((build, cache, derive)) => {
-                    Self::grade(Grade::new(cache, derive, levilamina, set), paths, &build.file_stem())
-                }
+                Some((build, _, derive)) => Self::grade(Grade::new(derive, levilamina, set), paths, &build.file_stem()),
                 None => curia::warn!("grade skipped: the exe build or the recipes cannot be read"),
             }
         }
@@ -229,8 +236,23 @@ impl HostStartup {
         for (EntryId(id), refusal) in refused {
             curia::info!("entry not for this build", { entry: id.as_str(), check: refusal.to_string() });
         }
+        let (hits, derived, ms) = table
+            .notes()
+            .iter()
+            .find_map(|note| match note {
+                SourceNote::DeriveRan { hits, derived, elapsed_ms } => Some((*hits, *derived, *elapsed_ms)),
+                _ => None,
+            })
+            .unwrap_or((table.count_from("cache"), 0, 0));
+        curia::info!("entries resolved from cache and derive", { hits: hits, derived: derived, ms: ms });
         for note in table.notes() {
-            curia::warn!("resolver note", { note: note.to_string() });
+            match note {
+                SourceNote::DeriveRan { .. } => {}
+                SourceNote::CacheMissing => {
+                    curia::info!("resolver note", { note: note.to_string() });
+                }
+                _ => curia::warn!("resolver note", { note: note.to_string() }),
+            }
         }
     }
 }

@@ -1,9 +1,13 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use amml_data::{BuildData, Check, DataError, DependencyOrder, Entry, EntryId, EntryKind, RecipeSet, Resolved, Step};
+use amml_data::{
+    BuildData, Check, DataError, DependencyOrder, Entry, EntryFingerprints, EntryId, EntryKind, RecipeSet, Resolved,
+    Step,
+};
 
+use crate::DERIVER_VERSION;
 use crate::errors::StepError;
-use crate::services::{CheckRunner, RecipeRunner, RttiIndex, StringXref};
+use crate::services::{CheckRunner, RecipeRunner, ReportWriter, RttiIndex, StringXref};
 use crate::structs::{Degraded, DeriveOutcome, Failure, FailureReason, Image};
 
 // the resolved value, the errors of the recipes that failed (by recipe index) and the number of counted checks
@@ -29,29 +33,81 @@ impl<'a> Deriver<'a> {
         RecipeRunner::new(self.image, &self.rtti, &self.xrefs)
     }
 
-    /// Fails only on a dependency cycle; every per-entry problem is a `Failure`.
+    /// Derives every entry. Fails only on a dependency cycle; every per-entry problem is a `Failure`.
     pub fn derive(&self) -> Result<DeriveOutcome, DataError> {
+        self.derive_with(&BuildData::new(self.image.build()), None)
+    }
+
+    /// Derives the entries of `solve` (every entry when `None`) and every entry they reference, transitively.
+    ///
+    /// An entry is reused from `known` only when `known` is for this image's build, its stored fingerprint equals
+    /// the current one, and `known` holds exactly one record for it (`resolved` of the same kind, or `failed`).
+    /// Every other entry is derived. Fails only on a dependency cycle.
+    pub fn derive_with(
+        &self,
+        known: &BuildData,
+        solve: Option<&BTreeSet<EntryId>>,
+    ) -> Result<DeriveOutcome, DataError> {
         let order = DependencyOrder::of(self.set)?;
+        let prints = EntryFingerprints::of(self.set, DERIVER_VERSION)?;
+        let wanted = solve.map(|roots| self.closure(roots));
+        let same_build = known.build == self.image.build();
         let runner = self.runner();
-        let mut resolved: BTreeMap<EntryId, Resolved> = BTreeMap::new();
+        let mut data = BuildData::new(self.image.build());
         let mut failures = Vec::new();
         let mut degraded = Vec::new();
+        let mut reused = Vec::new();
         for id in order {
+            if wanted.as_ref().is_some_and(|wanted| !wanted.contains(&id)) {
+                continue;
+            }
             let Some(entry) = self.set.get(&id) else { continue };
-            match self.resolve(&runner, entry, &resolved) {
+            let Some(print) = prints.get(&id).copied() else { continue };
+            data.fingerprints.insert(id.clone(), print);
+            if same_build && known.fingerprints.get(&id) == Some(&print) {
+                match (known.entries.get(&id), known.failed.get(&id)) {
+                    (Some(value), None) if value.kind == entry.kind => {
+                        data.entries.insert(id.clone(), *value);
+                        reused.push(id);
+                        continue;
+                    }
+                    (None, Some(reason)) => {
+                        data.failed.insert(id.clone(), reason.clone());
+                        reused.push(id);
+                        continue;
+                    }
+                    _ => {}
+                }
+            }
+            match self.resolve(&runner, entry, &data.entries) {
                 Ok((value, recipe_errors, counted_checks)) => {
                     let unverified = value.recipes_agreeing == 1 && counted_checks == 0;
                     if !recipe_errors.is_empty() || unverified {
                         degraded.push(Degraded::new(id.clone(), recipe_errors, unverified));
                     }
-                    resolved.insert(id, value);
+                    data.entries.insert(id, value);
                 }
-                Err(reason) => failures.push(Failure::new(id, reason)),
+                Err(reason) => {
+                    data.failed.insert(id.clone(), ReportWriter::reason(&reason));
+                    failures.push(Failure::new(id, reason));
+                }
             }
         }
-        let mut data = BuildData::new(self.image.build());
-        data.entries = resolved;
-        Ok(DeriveOutcome::new(data, failures, degraded))
+        reused.sort();
+        Ok(DeriveOutcome { data, failures, degraded, reused })
+    }
+
+    // `roots` and every entry they reference, transitively; ids not in the set are left out
+    fn closure(&self, roots: &BTreeSet<EntryId>) -> BTreeSet<EntryId> {
+        let mut found = BTreeSet::new();
+        let mut pending: Vec<&EntryId> = roots.iter().collect();
+        while let Some(id) = pending.pop() {
+            let Some(entry) = self.set.get(id) else { continue };
+            if found.insert(id.clone()) {
+                pending.extend(entry.references());
+            }
+        }
+        found
     }
 
     // the resolved value, the errors of the recipes that failed (by recipe index) and the number of checks that

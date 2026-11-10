@@ -1,0 +1,48 @@
+{
+  "schema": 2,
+  "id": "@alaydriem/minimap",
+  "namespace": "alaydriem",
+  "name": "minimap",
+  "repo": "alaydriem/amml-minimap",
+  "core": false,
+  "default": true,
+  "listing": {
+    "title": "Mini Map",
+    "summary": "Minimap and full-screen world map with waypoints, cave mode, and PNG export.",
+    "description": "A full map mod that grows as you explore the world. View a full map, place waypoints and markers, view chunk borders, find slime chunks, and place a minimap anywhere on your screen during gameplay to find your favorite spots, with support for PNG exports.\n",
+    "authors": [
+      "Charles R. Portwood II"
+    ],
+    "license": "BSD-3-Clause",
+    "source": "https://github.com/alaydriem/amml-minimap",
+    "homepage": "https://github.com/alaydriem/amml-minimap#readme",
+    "tags": [
+      "minimap",
+      "map",
+      "waypoints",
+      "cave-mode",
+      "export",
+      "client"
+    ],
+    "icon": "icons/@alaydriem/minimap.png"
+  },
+  "versions": [
+    {
+      "version": "26.62.0",
+      "api_version": 2,
+      "asset": "https://github.com/alaydriem/amml-minimap/releases/download/26.62.0/minimap-26.62.0-windows-x64.zip",
+      "sha256": "7e82d99309a1c320563307e288799e01474dd1e2ab612f3ebd2b87f2313b2c31",
+      "size": 3578907,
+      "published": "2026-11-05T23:33:37Z",
+      "min_amml": "26.60.6"
+    },
+    {
+      "version": "26.60.6",
+      "api_version": 2,
+      "asset": "https://github.com/alaydriem/amml-minimap/releases/download/26.60.6/minimap-26.60.6-windows-x64.zip",
+      "sha256": "d4a3a142f8da95249ec786323227de60fbf58f5a1aa3634b2bfd33b0e32bcb8d",
+      "size": 3579608,
+      "published": "2026-11-05T00:43:23Z"
+    }
+  ]
+}

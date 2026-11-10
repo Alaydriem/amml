@@ -7,12 +7,12 @@ use amml_data::{BuildData, BuildDataStore, RecipeLoader, RecipeSet};
 use super::DeriveArgs;
 use crate::errors::CliError;
 use crate::services::{Deriver, ImageLoader, JobWriter, ReportWriter};
-use crate::structs::{DeriveOutcome, Report};
+use crate::structs::{DeriveOutcome, Image, Report};
 
 pub struct DeriveCommand;
 
 impl DeriveCommand {
-    /// Loads the image once, derives twice with fresh state to prove the result is stable, and writes the report
+    /// Loads the image once, reuses the entries of an existing data file in `--out` unless `--full` is set, derives twice with fresh state to prove the result is stable, and writes the report
     /// and, when both runs agree, the data. With `--jobs` it then writes the repair jobs, which never change the data
     /// or the report.
     pub fn run(args: &DeriveArgs) -> Result<Report, CliError> {
@@ -20,8 +20,9 @@ impl DeriveCommand {
         let previous = args.compare.as_deref().map(BuildDataStore::read).transpose()?;
         let started = Instant::now();
         let image = ImageLoader::from_path(&args.exe)?;
-        let outcome = Deriver::new(&image, &set).derive()?;
-        let again = Deriver::new(&image, &set).derive()?;
+        let known = Self::known(args, &image);
+        let outcome = Deriver::new(&image, &set).derive_with(&known, None)?;
+        let again = Deriver::new(&image, &set).derive_with(&known, None)?;
         let report = Self::finish(args, &set, previous.as_ref(), &outcome, &again, started.elapsed())?;
         if let Some(dir) = &args.jobs {
             JobWriter::new(&image, &set, &outcome, previous.as_ref())
@@ -29,6 +30,25 @@ impl DeriveCommand {
                 .map_err(|source| CliError::Write { path: dir.clone(), source })?;
         }
         Ok(report)
+    }
+
+    // The data file an earlier run wrote, or an empty set when `--full` is given or the file is missing or unreadable.
+    // With `--jobs` the stored failures are dropped, so they are derived again and carry their recipe trace.
+    fn known(args: &DeriveArgs, image: &Image) -> BuildData {
+        let empty = BuildData::new(image.build());
+        if args.full {
+            return empty;
+        }
+        let path = args.out.join(format!("{}.hcl", image.build().file_stem()));
+        match BuildDataStore::read(&path) {
+            Ok(mut data) => {
+                if args.jobs.is_some() {
+                    data.failed.clear();
+                }
+                data
+            }
+            Err(_) => empty,
+        }
     }
 
     /// Compares the two outcomes (data, failures and degraded entries), always writes the report, and writes the

@@ -22,6 +22,9 @@ pub struct DeriveArgs {
     /// Directory that receives `<build>/README.md` and one repair job file per failed entry
     #[arg(long)]
     pub jobs: Option<PathBuf>,
+    /// Derive every entry again instead of reusing the entries of an existing `<build>.hcl` in `--out`
+    #[arg(long)]
+    pub full: bool,
 }
 
 impl DeriveArgs {
@@ -32,7 +35,8 @@ impl DeriveArgs {
         report: PathBuf,
         compare: Option<PathBuf>,
         jobs: Option<PathBuf>,
+        full: bool,
     ) -> Self {
-        Self { exe, recipes, out, report, compare, jobs }
+        Self { exe, recipes, out, report, compare, jobs, full }
     }
 }
