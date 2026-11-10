@@ -2651,6 +2651,13 @@ resolved "ServerWorldJoiner.joinExternalServer" {
   fingerprint = "b591484dc366fc92"
 }
 
+resolved "SharedConstants.NetworkProtocolVersion" {
+  kind        = "field"
+  value       = "0x8b1"
+  recipes     = 2
+  fingerprint = "dd69aad2b4056c53"
+}
+
 resolved "ShulkerBoxBlockItem.appendFormattedHovertext" {
   kind        = "function"
   value       = "0x3580240"
