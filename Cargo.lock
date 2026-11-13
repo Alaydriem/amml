@@ -71,11 +71,11 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
 name = "amml-abi"
-version = "26.63.3"
+version = "26.63.4"
 
 [[package]]
 name = "amml-data"
-version = "26.63.3"
+version = "26.63.4"
 dependencies = [
  "hcl-rs",
  "pelite",
@@ -86,7 +86,7 @@ dependencies = [
 
 [[package]]
 name = "amml-derive"
-version = "26.63.3"
+version = "26.63.4"
 dependencies = [
  "amml-data",
  "amml-derive",
@@ -102,7 +102,7 @@ dependencies = [
 
 [[package]]
 name = "amml-game"
-version = "26.63.3"
+version = "26.63.4"
 dependencies = [
  "amml-msvc",
  "amml-sdk",
@@ -111,7 +111,7 @@ dependencies = [
 
 [[package]]
 name = "amml-gdk"
-version = "26.63.3"
+version = "26.63.4"
 dependencies = [
  "base64 0.23.1",
  "clap",
@@ -128,7 +128,7 @@ dependencies = [
 
 [[package]]
 name = "amml-i18n"
-version = "26.63.3"
+version = "26.63.4"
 dependencies = [
  "curia",
  "icu_locale_core",
@@ -142,7 +142,7 @@ dependencies = [
 
 [[package]]
 name = "amml-i18n-tool"
-version = "26.63.3"
+version = "26.63.4"
 dependencies = [
  "amml-i18n",
  "icu_locale_core",
@@ -155,7 +155,7 @@ dependencies = [
 
 [[package]]
 name = "amml-launcher-app"
-version = "26.63.3"
+version = "26.63.4"
 dependencies = [
  "amml-gdk",
  "amml-i18n",
@@ -175,7 +175,7 @@ dependencies = [
 
 [[package]]
 name = "amml-launcher-bridge"
-version = "26.63.3"
+version = "26.63.4"
 dependencies = [
  "amml-gdk",
  "amml-launcher-core",
@@ -191,7 +191,7 @@ dependencies = [
 
 [[package]]
 name = "amml-launcher-core"
-version = "26.63.3"
+version = "26.63.4"
 dependencies = [
  "amml-gdk",
  "amml-proof-fixture",
@@ -212,7 +212,7 @@ dependencies = [
 
 [[package]]
 name = "amml-loader"
-version = "26.63.3"
+version = "26.63.4"
 dependencies = [
  "amml-abi",
  "amml-data",
@@ -231,7 +231,7 @@ dependencies = [
 
 [[package]]
 name = "amml-msvc"
-version = "26.63.3"
+version = "26.63.4"
 dependencies = [
  "amml-msvc-fixture",
  "thiserror 2.0.21",
@@ -239,14 +239,14 @@ dependencies = [
 
 [[package]]
 name = "amml-msvc-fixture"
-version = "26.63.3"
+version = "26.63.4"
 dependencies = [
  "cc",
 ]
 
 [[package]]
 name = "amml-patch"
-version = "26.63.3"
+version = "26.63.4"
 dependencies = [
  "amml-data",
  "clap",
@@ -258,7 +258,7 @@ dependencies = [
 
 [[package]]
 name = "amml-proof-fixture"
-version = "26.63.3"
+version = "26.63.4"
 dependencies = [
  "amml-registry",
  "serde_json",
@@ -269,7 +269,7 @@ dependencies = [
 
 [[package]]
 name = "amml-registry"
-version = "26.63.3"
+version = "26.63.4"
 dependencies = [
  "clap",
  "hcl-rs",
@@ -284,7 +284,7 @@ dependencies = [
 
 [[package]]
 name = "amml-runtime"
-version = "26.63.3"
+version = "26.63.4"
 dependencies = [
  "amml-abi",
  "amml-data",
@@ -298,7 +298,7 @@ dependencies = [
 
 [[package]]
 name = "amml-sdk"
-version = "26.63.3"
+version = "26.63.4"
 dependencies = [
  "amml-abi",
  "thiserror 2.0.21",
@@ -306,7 +306,7 @@ dependencies = [
 
 [[package]]
 name = "amml-studio-ui"
-version = "26.63.3"
+version = "26.63.4"
 dependencies = [
  "amml-i18n",
  "amml-i18n-tool",
@@ -322,7 +322,7 @@ dependencies = [
 
 [[package]]
 name = "amml-testmod"
-version = "26.63.3"
+version = "26.63.4"
 dependencies = [
  "amml-game",
  "amml-msvc",
@@ -332,7 +332,7 @@ dependencies = [
 
 [[package]]
 name = "amml-ui"
-version = "26.63.3"
+version = "26.63.4"
 dependencies = [
  "amml-i18n",
  "amml-i18n-tool",
@@ -350,7 +350,7 @@ dependencies = [
 
 [[package]]
 name = "amml-ui-gen"
-version = "26.63.3"
+version = "26.63.4"
 dependencies = [
  "serde",
  "serde_json",
@@ -360,7 +360,7 @@ dependencies = [
 
 [[package]]
 name = "amml-ui-rules"
-version = "26.63.3"
+version = "26.63.4"
 dependencies = [
  "tempfile",
 ]
