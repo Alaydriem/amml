@@ -98,6 +98,8 @@
                 version={store.about.launcherVersion}
                 builtOn={store.about.builtOn}
                 platform={store.platform()}
+                updateVersion={store.update?.version}
+                onupdate={store.update ? () => store.installUpdate() : undefined}
                 author={SettingsStore.AUTHOR}
                 links={SettingsStore.LINKS}
                 report={store.report()}

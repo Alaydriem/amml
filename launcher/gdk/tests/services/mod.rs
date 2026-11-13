@@ -7,6 +7,7 @@ mod install_lock;
 mod install_service;
 mod instance_service;
 mod journal_store;
+mod package_context;
 mod package_context_command;
 mod package_deployer;
 mod pe_check;

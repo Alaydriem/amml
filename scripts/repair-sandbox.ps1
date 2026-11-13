@@ -2,7 +2,7 @@
 # Usage (through mise): mise run repair-sandbox -- --name <name> --recipes <dir>
 #                         [--hide-key <key.hcl> --hide-ids <id,id,...> [--hide-slots <n,n,...>]] [--force]
 #
-# The copy has no .git, target, reports, .superpowers, .claude or data (data/smoke stays). Junctions
+# The copy has no .git, target, reports, .superpowers, .claude or data. Junctions
 # are not followed. recipes/ is
 # replaced by <dir>. CLAUDE.md is copied. mise.local.toml points CARGO_TARGET_DIR at the main
 # repo's target folder, so the copy does not rebuild the dependencies.
@@ -61,10 +61,6 @@ $sw = [System.Diagnostics.Stopwatch]::StartNew()
 $skip = @('.git', 'target', 'reports', 'data', 'recipes', '.superpowers', '.claude') | ForEach-Object { Join-Path $repo $_ }
 & robocopy $repo $sandbox /E /XJ /NFL /NDL /NJH /NJS /NP /XD @skip | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "robocopy failed with exit code $LASTEXITCODE" }
-if (Test-Path -LiteralPath (Join-Path $repo 'data\smoke')) {
-  & robocopy (Join-Path $repo 'data\smoke') (Join-Path $sandbox 'data\smoke') /E /NFL /NDL /NJH /NJS /NP | Out-Null
-  if ($LASTEXITCODE -ge 8) { throw "robocopy failed with exit code $LASTEXITCODE" }
-}
 & robocopy $recipes (Join-Path $sandbox 'recipes') /E /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "robocopy failed with exit code $LASTEXITCODE" }
 Copy-Item -LiteralPath (Join-Path $repo 'CLAUDE.md') -Destination (Join-Path $sandbox 'CLAUDE.md') -Force

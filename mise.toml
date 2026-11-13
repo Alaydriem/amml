@@ -1,6 +1,8 @@
 [tools]
 # ingame-ll-manager reads the LeviLamina manifests with it
 jq = "1.8.1"
+node = "24"
+"npm:yarn" = "1.22.22"
 
 [tasks.preflight]
 description = "Names a missing cargo, cargo-nextest or pinned toolchain before a build turns it into an obscure error"
@@ -115,23 +117,35 @@ if ($IsWindows) {
 Write-Output "linked: $link -> $target"
 '''
 
-[tasks.derive-smoke]
-description = "Derives the smoke recipes into data/smoke and reports/smoke; AMML_GAME_EXE overrides the default 1.26.51.01-ll original"
-dir = "{{config_root}}"
-run = "cargo run -p amml-derive --release -- derive --exe \"{{ get_env(name='AMML_GAME_EXE', default=env.LOCALAPPDATA ~ '/amml/instances/1.26.51.01-ll/Minecraft.Windows.exe.orig') }}\" --recipes fixtures/smoke-recipes --out data/smoke --report reports/smoke"
-
 [tasks.game-test-patch]
-description = "Patches the pristine 1.26.51.01-ll executable into a temp folder and checks its BuildId and imports; AMML_GAME_EXE overrides the default .bak"
+description = "Patches the pristine game executable of the highest-version instance in %LOCALAPPDATA%/amml/instances into a temp folder and checks its BuildId and imports; AMML_GAME_EXE overrides the pick"
 dir = "{{config_root}}"
-env = { AMML_GAME_EXE = "{{ get_env(name='AMML_GAME_EXE', default=env.LOCALAPPDATA ~ '/amml/instances/1.26.51.01-ll/Minecraft.Windows.exe.bak') }}" }
-run = "cargo nextest run -p amml-patch --release --run-ignored only --test game --no-capture"
+shell = "bash -c"
+run = '''
+set -e
+if [ -z "${AMML_GAME_EXE:-}" ]; then
+  AMML_GAME_EXE="$(bash scripts/find-game-exe.sh)"
+fi
+export AMML_GAME_EXE
+echo "game-test-patch: exe $AMML_GAME_EXE"
+cargo nextest run -p amml-patch --release --run-ignored only --test game --no-capture
+'''
 
 [tasks.game-test]
-description = "Derives the smoke recipes on a real game executable and compares them with data/smoke, then runs game-test-patch; AMML_GAME_EXE overrides the default 1.26.51.01-ll original"
+description = "On the executable of the highest-version instance in %LOCALAPPDATA%/amml/instances: the patcher game test, the derive game tests, then derive-check; AMML_GAME_EXE overrides the pick"
 dir = "{{config_root}}"
-depends = ["game-test-patch"]
-env = { AMML_GAME_EXE = "{{ get_env(name='AMML_GAME_EXE', default=env.LOCALAPPDATA ~ '/amml/instances/1.26.51.01-ll/Minecraft.Windows.exe.orig') }}" }
-run = "cargo nextest run -p amml-derive --release --run-ignored only --test game --no-capture"
+shell = "bash -c"
+run = '''
+set -e
+if [ -z "${AMML_GAME_EXE:-}" ]; then
+  AMML_GAME_EXE="$(bash scripts/find-game-exe.sh)"
+fi
+export AMML_GAME_EXE
+echo "game-test: exe $AMML_GAME_EXE"
+mise run game-test-patch
+cargo nextest run -p amml-derive --release --run-ignored only --test game --no-capture
+mise run derive-check -- --exe "$AMML_GAME_EXE"
+'''
 
 [tasks.package-ll]
 description = "Builds release amml.dll and copies the LeviLamina package into <game>/mods/amml-loader: --game, default %LOCALAPPDATA%/amml/instances/1.26.51.01-ll"
@@ -1394,6 +1408,51 @@ run = "yarn tauri dev"
 description = "Builds the launcher app without an installer: target/release/amml-launcher-app.exe (tauri build --no-bundle)"
 dir = "{{config_root}}/launcher/app"
 run = "yarn tauri build --no-bundle"
+
+[tasks."launcher-app:bundle"]
+description = "Builds the NSIS and MSI installers with updater signatures (needs TAURI_SIGNING_PRIVATE_KEY and its password in the environment); extra arguments go to tauri build: mise run launcher-app:bundle -- --config '<json>'"
+dir = "{{config_root}}/launcher/app"
+depends = ["launcher-kit:install", "launcher-app:install", "launcher-app:i18n-build"]
+shell = "bash -c"
+run = """
+if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then echo "TAURI_SIGNING_PRIVATE_KEY is empty: set it to the updater private key (and TAURI_SIGNING_PRIVATE_KEY_PASSWORD) before launcher-app:bundle" >&2; exit 1; fi
+yarn tauri build --bundles nsis,msi"""
+
+[tasks."launcher-app:msix"]
+description = "Packs target/release/amml-launcher-app.exe into an unsigned MSIX with MakeAppx (run launcher-app:build first): mise run launcher-app:msix -- --version 26.63.3"
+dir = "{{config_root}}/launcher/app"
+shell = "bash -c"
+usage = '''
+flag "--version <version>" help="Release version, three numeric parts (26.63.3); the package version is <version>.0"
+flag "--name <name>" default="Alaydriem.AMMLLauncher" help="MSIX identity name"
+flag "--publisher <publisher>" default="CN=Alaydriem" help="MSIX publisher; equals the signing certificate subject"
+flag "--publisher-display <publisher_display>" default="Alaydriem" help="Publisher display name"
+flag "--out <out>" default="../../target/msix/amml-launcher.msix" help="Output file, relative to launcher/app"
+'''
+run = '''powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pack-msix.ps1 -Version "${usage_version:-}" -Name "$usage_name" -Publisher "$usage_publisher" -PublisherDisplay "$usage_publisher_display" -Out "$usage_out"'''
+
+[tasks."launcher-app:release-files"]
+description = "Copies the built launcher bundles into launcher-dist/ under the release names, packs the MSIX and writes latest.json and launcher-SHA256SUMS.txt; checks the updater key ID first (run launcher-app:bundle and launcher-app:build first): mise run launcher-app:release-files -- --version 26.63.3"
+dir = "{{config_root}}/launcher/app"
+shell = "bash -c"
+usage = '''
+flag "--version <version>" help="Release version, three numeric parts (26.63.3)"
+flag "--name <name>" default="Alaydriem.AMMLLauncher" help="MSIX identity name"
+flag "--publisher <publisher>" default="CN=Alaydriem" help="MSIX publisher"
+flag "--publisher-display <publisher_display>" default="Alaydriem" help="Publisher display name"
+'''
+run = '''bash scripts/release-files.sh "${usage_version:-}" "$usage_name" "$usage_publisher" "$usage_publisher_display"'''
+
+[tasks."launcher-app:update-loop"]
+description = "Local self-update test: builds two signed launcher bundles (default 26.63.90 and 26.63.91) that check http://127.0.0.1:<port>/latest.json, copies the older setup exe to update-loop/install/, serves the newer files from update-loop/serve/ (needs TAURI_SIGNING_PRIVATE_KEY and its password)"
+dir = "{{config_root}}/launcher/app"
+shell = "bash -c"
+usage = '''
+flag "--from <from>" default="26.63.90" help="Version to install"
+flag "--to <to>" default="26.63.91" help="Version to update to"
+flag "--port <port>" default="8765" help="Local server port"
+'''
+run = '''bash scripts/update-loop.sh "$usage_from" "$usage_to" "$usage_port"'''
 
 [tasks."launcher-app:i18n-extract"]
 description = "Writes launcher/app/i18n/amml-launcher.pot from every I18n call in launcher/app/src"

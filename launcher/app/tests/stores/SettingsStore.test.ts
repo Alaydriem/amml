@@ -56,6 +56,8 @@ function api(overrides: Partial<SettingsApi> = {}): SettingsApi {
         downloadRemove: vi.fn(async () => {}),
         downloadsRemoveUnfinished: vi.fn(async () => 0),
         aboutGet: vi.fn(async () => about),
+        updateCheck: vi.fn(async () => null),
+        updateInstall: vi.fn(async () => {}),
         openPath: vi.fn(async () => {}),
         openUrl: vi.fn(async () => {}),
         ...overrides,
@@ -237,5 +239,51 @@ describe("SettingsStore", () => {
         expect(lines.find((line) => line.id === "windows")?.value).toBe("Windows 10.0.26300.7171");
         expect(lines.find((line) => line.id === "devMode")?.value).toBe("On");
         expect(lines.find((line) => line.id === "logs")?.href).toBe(about.logsDir);
+    });
+
+    it("holds an update only when the check returns one, and checks once per About load", async () => {
+        const found = { version: "26.63.5", installs: true, page: "https://github.com/alaydriem/amml/releases/tag/26.63.5" };
+        const updateCheck = vi.fn(async () => found);
+        const settings = store({ updateCheck });
+
+        await settings.open("about");
+
+        expect(updateCheck).toHaveBeenCalledTimes(1);
+        expect(settings.update).toEqual(found);
+        const none = store({ updateCheck: vi.fn(async () => null) });
+        await none.open("about");
+        expect(none.update).toBeNull();
+    });
+
+    it("shows no update and no fault when the check is refused", async () => {
+        const settings = store({
+            updateCheck: vi.fn(async () => {
+                throw new Error("offline");
+            }),
+        });
+
+        await settings.open("about");
+
+        expect(settings.update).toBeNull();
+        expect(settings.fault).toBeNull();
+        expect(settings.about).not.toBeNull();
+    });
+
+    it("does not check for an update on the other pages", async () => {
+        const updateCheck = vi.fn(async () => null);
+        const settings = store({ updateCheck });
+
+        await settings.open("registries");
+
+        expect(updateCheck).not.toHaveBeenCalled();
+    });
+
+    it("installs the update through the api", async () => {
+        const updateInstall = vi.fn(async () => {});
+        const settings = store({ updateInstall });
+
+        await settings.installUpdate();
+
+        expect(updateInstall).toHaveBeenCalledTimes(1);
     });
 });

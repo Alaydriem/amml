@@ -106,6 +106,35 @@ jobs:
       - run: mise run check
       - run: mise run test
 
+      - name: Launcher is not built for a pre-release
+        if: ${{ contains(inputs.version, '-') }}
+        env:
+          VERSION: ${{ inputs.version }}
+        run: echo "::notice::pre-release $VERSION builds no launcher"
+
+      - name: Build the launcher
+        if: ${{ !contains(inputs.version, '-') }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -eu
+          mise run launcher-app:bundle
+
+      - name: Assemble the launcher files
+        if: ${{ !contains(inputs.version, '-') }}
+        env:
+          VERSION: ${{ inputs.version }}
+          MSIX_IDENTITY_NAME: ${{ vars.MSIX_IDENTITY_NAME || 'Alaydriem.AMMLLauncher' }}
+          MSIX_PUBLISHER: ${{ vars.MSIX_PUBLISHER || 'CN=Alaydriem' }}
+          MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.MSIX_PUBLISHER_DISPLAY_NAME || 'Alaydriem' }}
+        run: |
+          set -eu
+          mise run launcher-app:release-files -- --version "$VERSION" \
+            --name "$MSIX_IDENTITY_NAME" \
+            --publisher "$MSIX_PUBLISHER" \
+            --publisher-display "$MSIX_PUBLISHER_DISPLAY_NAME"
+
       - name: Package
         id: meta
         env:
@@ -150,13 +179,28 @@ jobs:
           TARGET: ${{ steps.commit.outputs.sha }}
         run: |
           set -eu
+          files=("amml-$VERSION-windows-x64.zip" SHA256SUMS.txt)
+          if [ -d launcher-dist ]; then
+            files+=(launcher-dist/*)
+          fi
+          latest_args=(--latest=true)
+          case "$VERSION" in
+            *-*) latest_args=(--prerelease --latest=false) ;;
+            *)
+              existing=$(git ls-remote --tags --refs origin | sed 's|.*refs/tags/||' | grep -v -e '-' || true)
+              highest=$(printf '%s\n%s\n' "$existing" "$VERSION" | grep -v '^$' | sort -V | tail -n 1)
+              if [ "$highest" != "$VERSION" ]; then
+                latest_args=(--latest=false)
+                echo "::notice::$VERSION is older than $highest, so it is not marked as the latest release"
+              fi
+              ;;
+          esac
           gh release create "$VERSION" \
-            "amml-$VERSION-windows-x64.zip" \
-            SHA256SUMS.txt \
+            "${files[@]}" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$TARGET" \
             --title "AMML $VERSION" \
-            --latest=true \
+            "${latest_args[@]}" \
             --generate-notes \
             --notes "Built from amml $TARGET"
 

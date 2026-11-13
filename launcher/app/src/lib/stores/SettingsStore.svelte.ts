@@ -3,6 +3,7 @@ import type { LauncherApi } from "#lib/api/LauncherApi.ts";
 import type { AboutView } from "#lib/bindings/AboutView.ts";
 import type { DataOverviewView } from "#lib/bindings/DataOverviewView.ts";
 import type { DownloadsView } from "#lib/bindings/DownloadsView.ts";
+import type { LauncherUpdateView } from "#lib/bindings/LauncherUpdateView.ts";
 import type { FaultView } from "#lib/bindings/FaultView.ts";
 import type { RegistryView } from "#lib/bindings/RegistryView.ts";
 import type { SettingsView } from "#lib/bindings/SettingsView.ts";
@@ -54,6 +55,8 @@ export type SettingsApi = Pick<
     | "downloadRemove"
     | "downloadsRemoveUnfinished"
     | "aboutGet"
+    | "updateCheck"
+    | "updateInstall"
     | "openPath"
     | "openUrl"
 >;
@@ -92,6 +95,7 @@ export class SettingsStore {
     overview = $state<DataOverviewView | null>(null);
     downloads = $state<DownloadsView | null>(null);
     about = $state<AboutView | null>(null);
+    update = $state<LauncherUpdateView | null>(null);
     fault = $state<FaultView | null>(null);
 
     readonly texts = $derived({
@@ -165,6 +169,7 @@ export class SettingsStore {
                     break;
                 case "about":
                     this.about = await this.api.aboutGet();
+                    this.update = await this.checkUpdate();
                     break;
             }
         });
@@ -331,6 +336,19 @@ export class SettingsStore {
     // Opens the author, a project link or the logs folder.
     async openLink(href: string): Promise<void> {
         await this.guard(() => (href.startsWith("https://") ? this.api.openUrl(href) : this.api.openPath(href)));
+    }
+
+    // The updater answers `null` when there is nothing newer or the check failed; a refused call is no update either.
+    private async checkUpdate(): Promise<LauncherUpdateView | null> {
+        try {
+            return await this.api.updateCheck();
+        } catch {
+            return null;
+        }
+    }
+
+    async installUpdate(): Promise<void> {
+        await this.guard(() => this.api.updateInstall());
     }
 
     async copyReport(report: string): Promise<void> {

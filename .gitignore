@@ -8,3 +8,13 @@ launcher/app/node_modules/
 launcher/app/src-tauri/gen/
 **/tests/snapshots/**/*.new.png
 **/tests/snapshots/**/*.diff.png
+
+# Updater signing keys: only the .pub is tracked
+*.key
+!*.key.pub
+
+# Launcher release files
+launcher-dist/
+
+# Local update loop output
+update-loop/

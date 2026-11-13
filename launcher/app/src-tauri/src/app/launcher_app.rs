@@ -1,4 +1,4 @@
-use super::{LanguagePacks, LogSetup, RegistrySchedule, TauriJobSink, WindowFocus};
+use super::{LanguagePacks, LauncherUpdater, LogSetup, RegistrySchedule, TauriJobSink, WindowFocus};
 use crate::commands;
 use amml_gdk::{AmmlPaths, CancelFlag};
 use amml_launcher_bridge::LauncherSession;
@@ -26,6 +26,7 @@ impl LauncherApp {
             .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| WindowFocus::main(app)))
             .plugin(tauri_plugin_curia::init())
             .plugin(tauri_plugin_opener::init())
+            .plugin(tauri_plugin_updater::Builder::new().build())
             .setup(|app| Self::setup(app))
             .invoke_handler(tauri::generate_handler![
                 commands::i18n::i18n_locales,
@@ -76,6 +77,8 @@ impl LauncherApp {
                 commands::settings::startup_fault,
                 commands::system::open_path,
                 commands::system::open_url,
+                commands::update::update_check,
+                commands::update::update_install,
             ])
     }
 
@@ -86,6 +89,8 @@ impl LauncherApp {
 
         let packs = app.path().resolve("resources/i18n", BaseDirectory::Resource)?;
         app.manage(LanguagePacks::new(packs));
+
+        app.manage(LauncherUpdater::new(app.handle().clone(), LauncherUpdater::detect_kind()));
 
         let cancel = CancelFlag::new();
         let services = CoreServices::new(LauncherPaths::new(AmmlPaths::new(root)), None, cancel.clone());

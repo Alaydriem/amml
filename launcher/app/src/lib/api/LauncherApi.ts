@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AboutView } from "#lib/bindings/AboutView.ts";
+import type { LauncherUpdateView } from "#lib/bindings/LauncherUpdateView.ts";
 import type { AdoptCandidatesView } from "#lib/bindings/AdoptCandidatesView.ts";
 import type { CardView } from "#lib/bindings/CardView.ts";
 import type { CatalogLayoutView } from "#lib/bindings/CatalogLayoutView.ts";
@@ -216,6 +217,14 @@ export class LauncherApi {
 
     static openUrl(url: string): Promise<void> {
         return LauncherApi.call("open_url", { url });
+    }
+
+    static updateCheck(): Promise<LauncherUpdateView | null> {
+        return LauncherApi.call("update_check");
+    }
+
+    static updateInstall(): Promise<void> {
+        return LauncherApi.call("update_install");
     }
 
     private static async call<T>(command: string, args?: Record<string, unknown>): Promise<T> {

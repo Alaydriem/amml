@@ -4,3 +4,4 @@ pub mod instances;
 pub mod jobs;
 pub mod settings;
 pub mod system;
+pub mod update;

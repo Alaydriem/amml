@@ -132,7 +132,7 @@ msgstr ""
 msgid "{n} min"
 msgstr ""
 
-#: src/lib/stores/SettingsStore.svelte.ts:357
+#: src/lib/stores/SettingsStore.svelte.ts:375
 #: src/lib/text/ActivityTextSet.ts:25
 msgid "{n} min ago"
 msgstr ""
@@ -809,7 +809,7 @@ msgstr ""
 msgid "instances\\{name}"
 msgstr ""
 
-#: src/lib/stores/SettingsStore.svelte.ts:357
+#: src/lib/stores/SettingsStore.svelte.ts:375
 msgid "just now"
 msgstr ""
 
@@ -951,7 +951,7 @@ msgstr ""
 msgid "Needs your OK"
 msgstr ""
 
-#: src/lib/stores/SettingsStore.svelte.ts:240
+#: src/lib/stores/SettingsStore.svelte.ts:245
 msgid "never"
 msgstr ""
 
@@ -1206,7 +1206,7 @@ msgstr ""
 msgid "Report a problem"
 msgstr ""
 
-#: src/lib/stores/SettingsStore.svelte.ts:339
+#: src/lib/stores/SettingsStore.svelte.ts:357
 msgid "Report copied"
 msgstr ""
 
@@ -1384,7 +1384,7 @@ msgstr ""
 msgid "Store Bedrock {version} registered"
 msgstr ""
 
-#: src/lib/stores/SettingsStore.svelte.ts:286
+#: src/lib/stores/SettingsStore.svelte.ts:291
 #: src/lib/stores/SetupProgressStore.svelte.ts:35
 #: src/lib/stores/SetupStore.svelte.ts:45
 msgid "Store Minecraft"
@@ -1576,7 +1576,7 @@ msgstr ""
 msgid "Windows would not let the launcher copy **{file}** for {version}. With Developer Mode on, it can. Windows asks for admin rights once."
 msgstr ""
 
-#: src/lib/stores/SettingsStore.svelte.ts:324
+#: src/lib/stores/SettingsStore.svelte.ts:329
 msgid "Windows x64"
 msgstr ""
 
