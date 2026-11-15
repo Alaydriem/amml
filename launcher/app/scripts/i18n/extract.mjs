@@ -46,7 +46,8 @@ const generated = extractor.getPotString(HEADERS);
 // Compared in process rather than through `git diff`, which reports nothing for a file that is untracked and so
 // would pass the gate on a catalog that was never committed.
 if (checking) {
-    const current = existsSync(POT) ? readFileSync(POT, "utf8") : null;
+    // A Windows checkout with core.autocrlf gives the committed LF catalog CRLF line ends.
+    const current = existsSync(POT) ? readFileSync(POT, "utf8").replace(/\r\n/g, "\n") : null;
 
     if (current !== generated) {
         const reason = current === null ? "does not exist" : "is out of date";

@@ -1,0 +1,45 @@
+name: Checks
+
+# Formatting, cargo check and clippy with warnings denied, as one status.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Git ref to checkout (tag, branch, or SHA)'
+        required: false
+        type: string
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  rust-check:
+    name: Rust check
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Install mise
+        uses: jdx/mise-action@v4
+        with:
+          version: 2026.8.2
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: check
+
+      - name: Check
+        run: mise run check

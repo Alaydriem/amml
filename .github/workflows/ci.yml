@@ -21,43 +21,93 @@ defaults:
     shell: bash
 
 jobs:
-  test:
-    runs-on: windows-latest
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      launcher: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.launcher }}
     steps:
       - uses: actions/checkout@v7
 
-      - uses: jdx/mise-action@v2
-
-      - uses: taiki-e/install-action@nextest
-
-      - uses: actions/cache@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: cargo-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            cargo-
+          filters: |
+            launcher:
+              - 'launcher/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - 'mise.toml'
+              - '.github/workflows/build-launcher.yml'
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/release.yml'
 
-      - id: yarn-cache
-        run: echo "dir=$(yarn cache dir)" >> "$GITHUB_OUTPUT"
+  checks:
+    uses: ./.github/workflows/checks.yml
+    secrets: inherit
 
-      - uses: actions/cache@v6
-        with:
-          path: ${{ steps.yarn-cache.outputs.dir }}
-          key: yarn-${{ hashFiles('launcher/kit/yarn.lock', 'launcher/app/yarn.lock') }}
-          restore-keys: |
-            yarn-
+  tests:
+    uses: ./.github/workflows/tests.yml
+    secrets: inherit
 
-      - run: mise run preflight
-      - run: mise run check
-      - run: mise run test
-      - run: mise run launcher-kit:install
-      - run: mise run launcher-kit:check
-      - run: mise run launcher-kit:test
-      - run: mise run launcher-app:install
-      - run: mise run launcher-app:check
-      - run: mise run launcher-app:test
-      - run: mise run launcher-app:i18n-check
-      - run: mise run launcher-app:build
+  i18n:
+    uses: ./.github/workflows/i18n.yml
+    secrets: inherit
+
+  build-lib:
+    uses: ./.github/workflows/build-lib.yml
+    with:
+      build_mode: debug
+    secrets: inherit
+
+  build-launcher:
+    needs: changes
+    if: needs.changes.outputs.launcher == 'true'
+    uses: ./.github/workflows/build-launcher.yml
+    with:
+      build_mode: debug
+    secrets: inherit
+
+  # The one status for pull requests to require. checks, tests, build-lib and changes must succeed; build-launcher may
+  # also be skipped (no launcher change). i18n is soft and is not listed. release.yml pushes the version commit with
+  # GITHUB_TOKEN, so a rule that requires this status on direct pushes to master needs github-actions as a bypass actor.
+  ci-result:
+    needs: [changes, checks, tests, build-lib, build-launcher]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report the results
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          CHECKS: ${{ needs.checks.result }}
+          TESTS: ${{ needs.tests.result }}
+          BUILD_LIB: ${{ needs.build-lib.result }}
+          BUILD_LAUNCHER: ${{ needs.build-launcher.result }}
+        run: |
+          set -eu
+          {
+            echo "## CI result"
+            echo
+            echo "| Job | Result |"
+            echo "| --- | --- |"
+            echo "| changes | $CHANGES |"
+            echo "| checks | $CHECKS |"
+            echo "| tests | $TESTS |"
+            echo "| build-lib | $BUILD_LIB |"
+            echo "| build-launcher | $BUILD_LAUNCHER |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          failed=0
+          for result in "$CHANGES" "$CHECKS" "$TESTS" "$BUILD_LIB"; do
+            [ "$result" = success ] || failed=1
+          done
+          case "$BUILD_LAUNCHER" in
+            success|skipped) ;;
+            *) failed=1 ;;
+          esac
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::a CI job did not succeed"
+            exit 1
+          fi

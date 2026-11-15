@@ -230,3 +230,37 @@ entry "BlockType.mTintMethod" {
     max = 392
   }
 }
+
+entry "BlockType.getExtraRenderLayers" {
+  kind     = "vslot"
+  notes    = "Slot of int BlockType::getExtraRenderLayers() const in the BlockType vtable: 124 on 26.63 (LeviLamina header index 124, right after getRenderLayer 123; the header and the binary agree here, as they do for isInteractiveBlock 120 and getMapColor 129). It returns a bit mask of BlockRenderLayer: the chunk builder puts the block into one more layer queue for each set bit 0..21, besides its main layer. Of the 265 BlockType vtables with the base getRenderLayer at slot 123, 261 hold the shared `xor eax,eax; ret` at slot 124, three return 0x20 (Opaque) and one returns 8 (Blend); the header names the overriders CauldronBlock, ChemicalHeatBlock, HoneyBlock and SlimeBlock. Both recipes load the block type of a block and call this slot: `mov rcx,[reg+68h]; mov rax,[rcx]; mov rax,[rax+disp]; call [guard]`. Recipe 0 is in the RenderChunkBuilder block sort (0x7919B60): the call with the guard load `mov rdx,[rip+..]` and the frame stores before `call rdx; mov [rbp+..],eax`. Recipe 1 is in function 0x6A83A10: the call that is followed by `nop; mov r15d,eax; test eax,eax; je; xor ebx,ebx`, the start of a loop over the 22 layer bits (`cmp bl,16h`). Both read the displacement as a slot. They are in two functions. Every displacement, immediate and branch byte is a wildcard. Range window 116..132. Value 124 in 6aed1906-b127418e74d2f2f9 (26.63). Class: new entry."
+
+  recipe {
+    step "pattern" {
+      bytes  = "48 8B 48 ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8B 15 ?? ?? ?? ?? 4C 8B 85 ?? ?? ?? ?? 4C 89 85 ?? ?? ?? ?? FF D2 89 85"
+      offset = 7
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+    step "displacement_to_slot" {}
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "48 8B 4A ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15 ?? ?? ?? ?? 90 41 89 C7 85 C0 0F 84 ?? ?? ?? ?? 31 DB"
+      offset = 7
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+    step "displacement_to_slot" {}
+  }
+
+  check "range" {
+    min = 116
+    max = 132
+  }
+}

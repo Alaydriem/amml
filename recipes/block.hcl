@@ -92,3 +92,26 @@ entry "Block.mDirectData.mLightEmission" {
     max = 256
   }
 }
+
+entry "Block.getRenderLayer" {
+  kind     = "function"
+  notes    = "BlockRenderLayer Block::getRenderLayer() const, the static form with no position. No exported name; the name follows Block::getRenderLayer(BlockSource&, BlockPos const&) const (at 0x6A3A3C0 on 26.63), which has the same body but ends in a tail call to BlockType::getRenderLayer (vslot 123). Signature: rcx = Block this, the layer (a BlockRenderLayer, one byte) returned in al. The body fetches the material instances component of the block (`push rsi; sub rsp,..; mov rsi,rcx; call Block::tryGetComponent; mov rcx,[rsi+68h]; test rax,rax; je`). When the block has the component and its block type's default state is not in the BlockGraphics static map that follows the getForBlock map, the result is the render layer of the first material instance (5 when the material map is empty); otherwise it reads BlockType::mRenderLayer directly (`movzx eax, byte ptr [rcx+162h]; ret`). BlockGraphics::mRenderLayer is not read on any layer path, so this function replaces it for the layer of a ghost. Callers: the block tessellator neighbour occlusion test (0x680A070, which treats layers 5, 9 and 17 as occluders) twice, and 0x530D094; the same code is inlined in BlockTessellator::tessellateInWorld for the extra block. Recipe 0 is the head of the body, then function_start_of (the pattern starts at the function start). Recipe 1 is the call site in the occlusion test: `mov r14,rax; mov rcx,rsi; call X; mov ecx,[r14+10h]; cmp al,11h; ja`, read as a branch target. They are in two functions. Every displacement, immediate and branch byte is a wildcard. Check function_start. Value 0x6A3A2D0 in 6aed1906-b127418e74d2f2f9 (26.63). Class: new entry."
+
+  recipe {
+    step "pattern" { bytes = "56 48 83 EC ?? 48 89 CE E8 ?? ?? ?? ?? 48 8B 4E ?? 48 85 C0 0F 84" }
+    step "function_start_of" {}
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "49 89 C6 48 89 F1 E8 ?? ?? ?? ?? 41 8B 4E ?? 3C ?? 0F 87"
+      offset = 6
+    }
+    step "operand" {
+      index = 0
+      kind  = "branch_target"
+    }
+  }
+
+  check "function_start" {}
+}

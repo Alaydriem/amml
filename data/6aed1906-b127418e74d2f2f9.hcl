@@ -257,6 +257,13 @@ resolved "Block.canProvideFullSupport" {
   fingerprint = "35d262682cd28a89"
 }
 
+resolved "Block.getRenderLayer" {
+  kind        = "function"
+  value       = "0x6a3a2d0"
+  recipes     = 2
+  fingerprint = "72671cdfcacf4ecf"
+}
+
 resolved "Block.mDirectData.mLightEmission" {
   kind        = "field"
   value       = "0xa4"
@@ -451,6 +458,13 @@ resolved "BlockType.getCollisionShape" {
   value       = "0x4"
   recipes     = 2
   fingerprint = "527f233252c06282"
+}
+
+resolved "BlockType.getExtraRenderLayers" {
+  kind        = "vslot"
+  value       = "0x7c"
+  recipes     = 2
+  fingerprint = "fb63cf4fb0e3f5a7"
 }
 
 resolved "BlockType.getMapColor" {

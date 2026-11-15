@@ -1,0 +1,130 @@
+name: Tests
+
+# Suites run as parallel jobs, each its own status:
+#   - `Rust tests`         (Windows) - the workspace tests through cargo-nextest.
+#   - `Launcher kit tests` (Linux)   - the launcher kit: install, check, test.
+#   - `Launcher app tests` (Linux)   - the launcher app: kit install (the app imports
+#                                      it), app install, check, test.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Git ref to checkout (tag, branch, or SHA)'
+        required: false
+        type: string
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  rust-tests:
+    name: Rust tests
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Install mise
+        uses: jdx/mise-action@v4
+        with:
+          version: 2026.8.2
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: test
+
+      - name: Preflight
+        run: mise run preflight
+
+      - name: Test
+        run: mise run test
+
+  launcher-kit-tests:
+    name: Launcher kit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Install mise
+        uses: jdx/mise-action@v4
+        with:
+          version: 2026.8.2
+
+      - name: Find the yarn cache
+        id: yarn-cache
+        run: echo "dir=$(yarn cache dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache yarn
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.yarn-cache.outputs.dir }}
+          key: yarn-${{ hashFiles('launcher/kit/yarn.lock', 'launcher/app/yarn.lock') }}
+          restore-keys: |
+            yarn-
+
+      - name: Install kit dependencies
+        run: mise run launcher-kit:install
+
+      - name: Check kit
+        run: mise run launcher-kit:check
+
+      - name: Test kit
+        run: mise run launcher-kit:test
+
+  launcher-app-tests:
+    name: Launcher app tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Install mise
+        uses: jdx/mise-action@v4
+        with:
+          version: 2026.8.2
+
+      - name: Find the yarn cache
+        id: yarn-cache
+        run: echo "dir=$(yarn cache dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache yarn
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.yarn-cache.outputs.dir }}
+          key: yarn-${{ hashFiles('launcher/kit/yarn.lock', 'launcher/app/yarn.lock') }}
+          restore-keys: |
+            yarn-
+
+      - name: Install kit dependencies
+        run: mise run launcher-kit:install
+
+      - name: Install app dependencies
+        run: mise run launcher-app:install
+
+      - name: Check app
+        run: mise run launcher-app:check
+
+      - name: Test app
+        run: mise run launcher-app:test

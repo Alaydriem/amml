@@ -1482,6 +1482,20 @@ flag "--game-versions <game_versions>" help="Tested game versions, comma separat
 '''
 run = 'bash scripts/package-release.sh "${usage_version:-}" "${usage_game_versions:-}"'
 
+[tasks.set-version]
+description = "Writes the release version into Cargo.toml and Cargo.lock and checks that every workspace crate has it: mise run set-version -- <version>"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+arg "<version>" help="Release version, Cargo semver (26.60.5)"
+'''
+run = 'bash scripts/set-version.sh "${usage_version:-}"'
+
+[tasks.build-lib]
+description = "Builds the release amml.dll and amml-patch.exe into target/release"
+dir = "{{config_root}}"
+run = "cargo build --release -p amml-loader -p amml-patch"
+
 [tasks.build-folder-trace]
 description = "Builds the release loader with the folder-trace feature (it logs every folder request the game makes) and copies it to target/operator/amml-folder-trace.dll; never ships"
 dir = "{{config_root}}"

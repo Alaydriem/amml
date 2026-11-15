@@ -1,0 +1,88 @@
+name: i18n
+
+# Translation catalog checks. Both jobs are soft: a failure shows on the run and
+# writes a warning, and the calling workflow stays green.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Git ref to checkout (tag, branch, or SHA)'
+        required: false
+        type: string
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  launcher-i18n:
+    name: Launcher i18n
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Install mise
+        uses: jdx/mise-action@v4
+        with:
+          version: 2026.8.2
+
+      - name: Find the yarn cache
+        id: yarn-cache
+        run: echo "dir=$(yarn cache dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache yarn
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.yarn-cache.outputs.dir }}
+          key: yarn-${{ hashFiles('launcher/kit/yarn.lock', 'launcher/app/yarn.lock') }}
+          restore-keys: |
+            yarn-
+
+      - name: Install app dependencies
+        run: mise run launcher-app:install
+
+      - name: Check launcher catalog
+        run: mise run launcher-app:i18n-check
+
+      - name: Warn that the catalog is out of date
+        if: failure()
+        run: echo "::warning::The launcher catalog is out of date; run mise run launcher-app:i18n-extract"
+
+  crate-i18n:
+    name: Crate i18n
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Install mise
+        uses: jdx/mise-action@v4
+        with:
+          version: 2026.8.2
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: i18n
+
+      - name: Check crate catalogs
+        run: mise run i18n:check
+
+      - name: Warn that the catalogs are out of date
+        if: failure()
+        run: echo "::warning::The crate catalogs are out of date; run mise run i18n:extract"
