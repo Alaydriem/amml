@@ -1,0 +1,162 @@
+name: Build Launcher
+
+# The launcher app. Debug mode builds the executable without a bundle and needs no
+# secrets, so fork pull requests can run it. Release mode writes the version, builds
+# the signed NSIS and MSI bundles, and assembles the release files. Both modes upload
+# as `amml-launcher`.
+
+on:
+  workflow_call:
+    inputs:
+      build_mode:
+        description: 'Build mode (debug or release)'
+        required: false
+        default: 'debug'
+        type: string
+      ref:
+        description: 'Git ref to checkout (tag, branch, or SHA)'
+        required: false
+        type: string
+      version:
+        description: 'Release version, written into Cargo.toml before the build'
+        required: false
+        default: ''
+        type: string
+  workflow_dispatch:
+    inputs:
+      build_mode:
+        description: 'Build mode'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+      version:
+        description: 'Release version, written into Cargo.toml before the build'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-launcher:
+    name: Build launcher
+    runs-on: windows-latest
+    steps:
+      - name: Check the release inputs
+        if: ${{ inputs.build_mode == 'release' }}
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          if [ -z "$VERSION" ]; then
+            echo "::error::a release build needs version"
+            exit 1
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Install mise
+        uses: jdx/mise-action@v4
+        with:
+          version: 2026.8.2
+
+      - name: Find the yarn cache
+        id: yarn-cache
+        run: echo "dir=$(yarn cache dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache yarn
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.yarn-cache.outputs.dir }}
+          key: yarn-${{ hashFiles('launcher/kit/yarn.lock', 'launcher/app/yarn.lock') }}
+          restore-keys: |
+            yarn-
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: launcher
+
+      - name: Write the version
+        if: ${{ inputs.version != '' }}
+        env:
+          VERSION: ${{ inputs.version }}
+        run: mise run set-version -- "$VERSION"
+
+      - name: Install kit dependencies
+        run: mise run launcher-kit:install
+
+      - name: Install app dependencies
+        run: mise run launcher-app:install
+
+      - name: Build the launcher (debug)
+        if: ${{ inputs.build_mode != 'release' }}
+        run: mise run launcher-app:build
+
+      - name: Build the launcher bundles (release)
+        if: ${{ inputs.build_mode == 'release' }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: mise run launcher-app:bundle
+
+      - name: Assemble the launcher files
+        if: ${{ inputs.build_mode == 'release' }}
+        env:
+          VERSION: ${{ inputs.version }}
+          MSIX_IDENTITY_NAME: ${{ vars.MSIX_IDENTITY_NAME || 'Alaydriem.AMMLLauncher' }}
+          MSIX_PUBLISHER: ${{ vars.MSIX_PUBLISHER || 'CN=Alaydriem' }}
+          MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.MSIX_PUBLISHER_DISPLAY_NAME || 'Alaydriem' }}
+        run: |
+          set -eu
+          mise run launcher-app:release-files -- --version "$VERSION" \
+            --name "$MSIX_IDENTITY_NAME" \
+            --publisher "$MSIX_PUBLISHER" \
+            --publisher-display "$MSIX_PUBLISHER_DISPLAY_NAME"
+
+      - name: Upload the launcher (debug)
+        if: ${{ inputs.build_mode != 'release' }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: amml-launcher
+          path: target/release/amml-launcher-app.exe
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload the launcher files
+        if: ${{ inputs.build_mode == 'release' }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: amml-launcher
+          path: launcher-dist/*
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Summary
+        env:
+          BUILD_MODE: ${{ inputs.build_mode || 'debug' }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          {
+            echo "## Launcher Build Complete"
+            echo ""
+            echo "| Name | Value |"
+            echo "| ---- | ----- |"
+            echo "| Build Mode | ${BUILD_MODE} |"
+            echo "| Version | ${VERSION:-unchanged} |"
+            echo "| Artifact | amml-launcher |"
+          } >> "$GITHUB_STEP_SUMMARY"

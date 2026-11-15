@@ -1,0 +1,145 @@
+name: Build Library
+
+# amml.dll and amml-patch. Debug mode builds them and uploads the two files.
+# Release mode writes the version, packs the release zip and uploads the zip,
+# SHA256SUMS.txt and release-meta.env. Both modes upload as `amml-lib`.
+
+on:
+  workflow_call:
+    inputs:
+      build_mode:
+        description: 'Build mode (debug or release)'
+        required: false
+        default: 'debug'
+        type: string
+      ref:
+        description: 'Git ref to checkout (tag, branch, or SHA)'
+        required: false
+        type: string
+      version:
+        description: 'Release version, written into Cargo.toml before the build'
+        required: false
+        default: ''
+        type: string
+      game_versions:
+        description: 'Tested game versions, comma separated (release mode)'
+        required: false
+        default: ''
+        type: string
+  workflow_dispatch:
+    inputs:
+      build_mode:
+        description: 'Build mode'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+      version:
+        description: 'Release version, written into Cargo.toml before the build'
+        required: false
+        default: ''
+        type: string
+      game_versions:
+        description: 'Tested game versions, comma separated (release mode)'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-lib:
+    name: Build library
+    runs-on: windows-latest
+    steps:
+      - name: Check the release inputs
+        if: ${{ inputs.build_mode == 'release' }}
+        env:
+          VERSION: ${{ inputs.version }}
+          GAME_VERSIONS: ${{ inputs.game_versions }}
+        run: |
+          set -eu
+          if [ -z "$VERSION" ] || [ -z "$GAME_VERSIONS" ]; then
+            echo "::error::a release build needs version and game_versions"
+            exit 1
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Install mise
+        uses: jdx/mise-action@v4
+        with:
+          version: 2026.8.2
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: lib
+
+      - name: Write the version
+        if: ${{ inputs.version != '' }}
+        env:
+          VERSION: ${{ inputs.version }}
+        run: mise run set-version -- "$VERSION"
+
+      - name: Build the library (debug)
+        if: ${{ inputs.build_mode != 'release' }}
+        run: mise run build-lib
+
+      - name: Package the release
+        if: ${{ inputs.build_mode == 'release' }}
+        env:
+          VERSION: ${{ inputs.version }}
+          GAME_VERSIONS: ${{ inputs.game_versions }}
+        run: mise run package-release -- --version "$VERSION" --game-versions "$GAME_VERSIONS"
+
+      - name: Upload the library (debug)
+        if: ${{ inputs.build_mode != 'release' }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: amml-lib
+          path: |
+            target/release/amml.dll
+            target/release/amml-patch.exe
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload the release files
+        if: ${{ inputs.build_mode == 'release' }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: amml-lib
+          path: |
+            amml-${{ inputs.version }}-windows-x64.zip
+            SHA256SUMS.txt
+            release-meta.env
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Summary
+        env:
+          BUILD_MODE: ${{ inputs.build_mode || 'debug' }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          {
+            echo "## Library Build Complete"
+            echo ""
+            echo "| Name | Value |"
+            echo "| ---- | ----- |"
+            echo "| Build Mode | ${BUILD_MODE} |"
+            echo "| Version | ${VERSION:-unchanged} |"
+            echo "| Artifact | amml-lib |"
+          } >> "$GITHUB_STEP_SUMMARY"
