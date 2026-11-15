@@ -185,3 +185,26 @@ entry "LevelRendererCamera.renderBlockEntities" {
     max = 20
   }
 }
+
+entry "LevelRendererCamera.renderBlockEntitiesBody" {
+  kind   = "function"
+  hooked = true
+  notes  = "void LevelRendererCamera::renderBlockEntities(BaseActorRenderContext&, bool renderAlphaLayer), the shared body: 0x5369340 on 26.63 (6aed1906-b127418e74d2f2f9). rcx = this (a LevelRendererCamera), rdx = the context, r8b = renderAlphaLayer; it returns void. Two vtables hold it directly (0xf2477d0 and 0xf247e00, slot 16 of the camera vtables at 0xf247750 and 0xf247d80). LevelRendererPlayer.vtable (0xf247fb0) and one more vtable (0xf248240, built in 0x5363490) hold the `jmp` thunk LevelRendererPlayer.renderBlockEntities (0x539e030) in slot 16, and the thunk jumps here. The function has no direct callers. The body saves r8d in ebx, rdx in rsi and rcx in rdi, reads the steady clock, selects the opaque list (this+220h) or the alpha list (this+238h) by `test bl,bl; mov eax,238h; mov r12d,220h; cmovne r12,rax`, then calls BlockActorRenderDispatcher's first render form (0x6a5e650) for each IVanillaRenderBlockActorComponent with `mov rcx,[rsi+30h]` (BaseActorRenderContext.mBlockEntityRenderDispatcher) and the BlockSource at this+978h in r8. Hook choice: this entry has two recipes; the thunk entry has one, because the thunk has no .pdata and no reference other than the two vtable slots, so no second code site exists for it. A hook on this body sees every camera; a hook that wants only the player renderer compares `*(void**)this` with LevelRendererPlayer.vtable and passes every other camera through. Recipe 0 is the list select in the body (`test bl,bl; mov eax,imm32; mov r12d,imm32; cmovne r12,rax; mov r15,[rdi+disp32]; mov r13,[rdi+disp32]; cmp r15,r13; je`), then function_start_of. Recipe 1 starts at LevelRendererPlayer.renderBlockEntities (the thunk) and reads the branch target of its `jmp rel32` (operand 0). The two recipes share no bytes: recipe 0 is in the body, recipe 1 depends on the thunk's link-order recipe and its in_vtable check. Every displacement, immediate and branch byte is a wildcard. Check function_start; it counts because recipe 1 does not end with function_start_of. Dependency: recipe 1 needs LevelRendererPlayer.renderBlockEntities, which has one recipe that depends on link order and on the padding length. If that recipe breaks on a new build, recipe 1 fails with DependencyFailed, and only recipe 0 is left. Recipe 0 ends with function_start_of, so the deriver does not count function_start, and the entry fails (a refusal, not a wrong value). The hook is then off until the thunk recipe is repaired; a repair of the thunk recipe repairs both entries."
+
+  recipe {
+    step "pattern" {
+      bytes = "84 DB B8 ?? ?? ?? ?? 41 BC ?? ?? ?? ?? 4C 0F 45 E0 4C 8B BF ?? ?? ?? ?? 4C 8B AF ?? ?? ?? ?? 4D 39 EF 74"
+    }
+    step "function_start_of" {}
+  }
+
+  recipe {
+    step "ref" { entry = "LevelRendererPlayer.renderBlockEntities" }
+    step "operand" {
+      index = 0
+      kind  = "branch_target"
+    }
+  }
+
+  check "function_start" {}
+}

@@ -159,6 +159,13 @@ resolved "AnimationComponent.applyAnimationsCallback" {
   fingerprint = "7b81daca7ecd4178"
 }
 
+resolved "BaseActorRenderContext.Impl.mCameraTargetPosition" {
+  kind        = "field"
+  value       = "0x20"
+  recipes     = 2
+  fingerprint = "a211fca3ed2be8ed"
+}
+
 resolved "BaseActorRenderContext.ctor" {
   kind        = "function"
   value       = "0x57e22c0"
@@ -178,6 +185,13 @@ resolved "BaseActorRenderContext.mBlockEntityRenderDispatcher" {
   value       = "0x30"
   recipes     = 2
   fingerprint = "f39f75c3addfcd5c"
+}
+
+resolved "BaseActorRenderContext.mImpl" {
+  kind        = "field"
+  value       = "0xa8"
+  recipes     = 2
+  fingerprint = "ceee84c8a6c31d4e"
 }
 
 resolved "BaseActorRenderContext.size" {
@@ -619,6 +633,20 @@ resolved "CameraRegistry.mCameraEntities" {
   value       = "0x1d8"
   recipes     = 2
   fingerprint = "fccb11fbd66a8b1d"
+}
+
+resolved "ChestBlockActor.mLargeChestPaired" {
+  kind        = "field"
+  value       = "0x308"
+  recipes     = 2
+  fingerprint = "223aa503e6bb0422"
+}
+
+resolved "ChestBlockActor.mLargeChestPairedPosition" {
+  kind        = "field"
+  value       = "0x310"
+  recipes     = 2
+  fingerprint = "1b6e7be2a110a71b"
 }
 
 resolved "ClientEntityWaypoint.mActorId" {
@@ -1851,6 +1879,13 @@ resolved "LevelRendererCamera.renderBlockEntities" {
   value       = "0x10"
   recipes     = 2
   fingerprint = "11ae0338bbf5ef2b"
+}
+
+resolved "LevelRendererCamera.renderBlockEntitiesBody" {
+  kind        = "function"
+  value       = "0x5369340"
+  recipes     = 2
+  fingerprint = "8ea045dbd32da4cd"
 }
 
 resolved "LevelRendererPlayer.PlayerListener.vtable" {
