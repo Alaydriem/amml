@@ -158,3 +158,30 @@ entry "LevelRendererCamera.mWireframeMaterial" {
     max = 1024
   }
 }
+
+entry "LevelRendererCamera.renderBlockEntities" {
+  kind  = "vslot"
+  notes = "Slot of void LevelRendererCamera::renderBlockEntities(BaseActorRenderContext&, bool renderAlphaLayer): 16 on 26.63 (6aed1906-b127418e74d2f2f9). rcx = this, rdx = the context, r8b = renderAlphaLayer. LevelRendererPlayer.vtable holds a `jmp` thunk to the shared body (0x5369340) in this slot; see LevelRendererPlayer.renderBlockEntities. Recipe 0 is the opaque-pass call in the function at slot 23 of LevelRendererPlayer.vtable (0x5376760), right after the `Level renderer camera - Render block entities` profiler scope: `mov [rbp+..],rax; mov rax,[rbx]; mov rax,[rax+disp32]; mov rcx,rbx; xor r8d,r8d; call [guard]`, offset 10, the displacement turned into a slot (80h = slot 16). The same function has the alpha-pass call (`mov rdx,rsi; mov r8b,1`) at 0x53799c1, which is not used. Recipe 1 is LevelRendererPlayer.renderBlockEntities, then slot_of LevelRendererPlayer.vtable. The two recipes are in two places and share no bytes. Every displacement is a wildcard. The range check is a window of 4 slots around 16."
+
+  recipe {
+    step "pattern" {
+      bytes  = "48 89 85 ?? ?? ?? ?? 48 8B 03 48 8B 80 ?? ?? ?? ?? 48 89 D9 45 31 C0 FF 15"
+      offset = 10
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+    step "displacement_to_slot" {}
+  }
+
+  recipe {
+    step "ref" { entry = "LevelRendererPlayer.renderBlockEntities" }
+    step "slot_of" { vtable = "LevelRendererPlayer.vtable" }
+  }
+
+  check "range" {
+    min = 12
+    max = 20
+  }
+}

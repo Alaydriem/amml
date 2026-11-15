@@ -92,3 +92,33 @@ entry "BaseActorRenderContext.size" {
     value = 456
   }
 }
+
+entry "BaseActorRenderContext.mBlockEntityRenderDispatcher" {
+  kind  = "field"
+  notes = "Offset of `BlockActorRenderDispatcher& mBlockEntityRenderDispatcher` in BaseActorRenderContext: 30h on 26.63 (6aed1906-b127418e74d2f2f9). The header order puts it after the ScreenContext, ClientInstance, IMinecraftGame, render dispatcher and texture references. Every caller of BlockActorRenderDispatcher.render loads it from the context into rcx right before the call. Recipe 0 is in the shared LevelRendererCamera::renderBlockEntities body (0x5369340): `mov rcx,[rsi+30h]; mov byte ptr [rsp+..],imm8; mov eax,[rip+..]` (rsi = the context), the displacement of operand 1. Recipe 1 is in MovingBlockActorRenderer's draw (0x6a83a10), before its call of BlockActorRenderDispatcher.render: `mov rcx,[r15+30h]; mov byte ptr [rbp+..],imm8; mov edx,[rip+..]`. A third load (`mov rcx,[rdx+30h]`) is in the block selection overlay draw (0x539b520). The two recipes are in two functions. Every displacement and immediate is a wildcard. The range check is 10h..60h."
+
+  recipe {
+    step "pattern" {
+      bytes = "48 8B 4E ?? C6 84 24 ?? ?? ?? ?? ?? 8B 05"
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes = "49 8B 4F ?? C6 45 ?? ?? 8B 15"
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 16
+    max = 96
+  }
+}

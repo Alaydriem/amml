@@ -38,3 +38,24 @@ entry "WorldSystem.mNetworkWorldJoiner" {
     max = 176
   }
 }
+
+entry "WorldSystem.mLocalWorldStarter" {
+  kind  = "field"
+  notes = "Offset of the std::unique_ptr<World::LocalWorldStarter> in World::WorldSystem, the object that MinecraftGame.getWorldSystem returns: 78h on 26.63. In the LeviLamina header it is WorldSystem::mModules (a World::WorldSystemModules at offset 0) .mLocalWorldStarter, the member right before mNetworkWorldJoiner (WorldSystem.mNetworkWorldJoiner, 80h on 26.63); the header layout (bool, then unique_ptr and shared_ptr members) puts it at 78h. The code loads the LocalWorldStarter* from it (an 8-byte load); that pointer is the `this` of LocalWorldStarter.startLocalWorld. Evidence: the function that makes the Ore UI WorldStartupFacet (0x62d8240 on 26.63) calls getWorldSystem three times and loads `mov rbx,[rax+38h]`, `mov r14,[rax+50h]`, `mov r15,[rax+78h]`, then passes r15, r14 and rbx as the first three arguments of the WorldStartupFacet constructor (0x7aca290), whose header order is LocalWorldStarter&, IWorldCloudSyncer&, IWorldResourcePackHandler&; 38h, 50h and 78h are mWorldResourcePackHandler, mWorldCloudSyncer and mLocalWorldStarter in the header layout. The constructor stores the first argument at facet+18h, and the facet's start task passes [facet+18h] as `this` to LocalWorldStarter.startLocalWorld. Recipe 0: the third load and the allocation of the facet after it, `nop; mov r15,[rax+disp8]; mov rcx,[rip+..]; mov rax,[rcx]; mov rax,[rax+disp8]; mov edx,imm; call [guard]`, offset 1, the displacement of operand 1. It starts at the `nop` that follows the getWorldSystem call and ends at the allocator call; without the `nop` it has 28 matches. Every immediate, displacement and branch byte is a wildcard. One recipe and a range check, as for the other field entries found in one function. Check: range 64 to 176 (inside the 184-byte WorldSystemModules). Values: 0x78 on 6aed1906-b127418e74d2f2f9 (26.63) and 6aea437e-7eff13daabb430da (26.62). Found on 26.63; 26.60 (6ad79ee4-17d51891a1119914) was not checked, because no 26.60 exe was available."
+
+  recipe {
+    step "pattern" {
+      bytes  = "90 4C 8B 78 ?? 48 8B 0D ?? ?? ?? ?? 48 8B 01 48 8B 40 ?? BA ?? ?? ?? ?? FF 15"
+      offset = 1
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 64
+    max = 176
+  }
+}

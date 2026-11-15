@@ -173,6 +173,13 @@ resolved "BaseActorRenderContext.dtor" {
   fingerprint = "1946d70770c3b467"
 }
 
+resolved "BaseActorRenderContext.mBlockEntityRenderDispatcher" {
+  kind        = "field"
+  value       = "0x30"
+  recipes     = 2
+  fingerprint = "f39f75c3addfcd5c"
+}
+
 resolved "BaseActorRenderContext.size" {
   kind        = "field"
   value       = "0xc0"
@@ -276,6 +283,27 @@ resolved "Block.tryGetComponent.BlockMapColorComponent" {
   value       = "0x3166210"
   recipes     = 2
   fingerprint = "69971ad027ea27d0"
+}
+
+resolved "BlockActor._getRenderComponent" {
+  kind        = "vslot"
+  value       = "0x15"
+  recipes     = 2
+  fingerprint = "285ee4673c783261"
+}
+
+resolved "BlockActor.loadStatic" {
+  kind        = "function"
+  value       = "0x3301fb0"
+  recipes     = 2
+  fingerprint = "c00f86946a0f8bbd"
+}
+
+resolved "BlockActorRenderDispatcher.render" {
+  kind        = "function"
+  value       = "0x6a5dcf0"
+  recipes     = 2
+  fingerprint = "f56eb1a26d69781c"
 }
 
 resolved "BlockGraphics.getForBlock" {
@@ -1111,6 +1139,13 @@ resolved "DBStorage.vtable" {
   fingerprint = "a494d6f23b4b24ad"
 }
 
+resolved "DefaultDataLoadHelper.vtable" {
+  kind        = "global"
+  value       = "0xf0c7d50"
+  recipes     = 2
+  fingerprint = "37cc819f44e86dc5"
+}
+
 resolved "Dimension.getBlockSourceFromMainChunkSource" {
   kind        = "vslot"
   value       = "0xd"
@@ -1811,6 +1846,13 @@ resolved "LevelRendererCamera.preRenderUpdate" {
   fingerprint = "496f671a325cc6b7"
 }
 
+resolved "LevelRendererCamera.renderBlockEntities" {
+  kind        = "vslot"
+  value       = "0x10"
+  recipes     = 2
+  fingerprint = "11ae0338bbf5ef2b"
+}
+
 resolved "LevelRendererPlayer.PlayerListener.vtable" {
   kind        = "global"
   value       = "0xf2481c0"
@@ -1851,6 +1893,13 @@ resolved "LevelRendererPlayer.queueRenderEntities" {
   value       = "0x1b"
   recipes     = 2
   fingerprint = "f8605db2cb408c55"
+}
+
+resolved "LevelRendererPlayer.renderBlockEntities" {
+  kind        = "function"
+  value       = "0x539e030"
+  recipes     = 1
+  fingerprint = "2cd8ec974b1fee7f"
 }
 
 resolved "LevelRendererPlayer.setupCamera" {
@@ -1900,6 +1949,13 @@ resolved "LocalPlayer.mClientLocatorBar" {
   value       = "0xef0"
   recipes     = 2
   fingerprint = "cdd87578bb454296"
+}
+
+resolved "LocalWorldStarter.startLocalWorld" {
+  kind        = "function"
+  value       = "0x251abc0"
+  recipes     = 2
+  fingerprint = "8e4458044c859613"
 }
 
 resolved "MapPolicy.get" {
@@ -2882,6 +2938,13 @@ resolved "UIScene.vtable" {
   fingerprint = "c682d59392df2600"
 }
 
+resolved "VanillaBlockActorFactory.createBlockActor" {
+  kind        = "function"
+  value       = "0x7150f90"
+  recipes     = 2
+  fingerprint = "e4e34c09299a936c"
+}
+
 resolved "VanillaBlockStateTransformUtils.hasTransformableConnectionStates" {
   kind        = "function"
   value       = "0x5e93650"
@@ -2936,6 +2999,13 @@ resolved "VisualTree.mRootControl" {
   value       = "0x8"
   recipes     = 2
   fingerprint = "cea4a25ff8ce8530"
+}
+
+resolved "WorldSystem.mLocalWorldStarter" {
+  kind        = "field"
+  value       = "0x78"
+  recipes     = 1
+  fingerprint = "870a234de9dfc49f"
 }
 
 resolved "WorldSystem.mNetworkWorldJoiner" {
