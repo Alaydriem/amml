@@ -74,3 +74,32 @@ entry "HIDControllerGameCoreDesktop.vtable" {
     name = ".rdata"
   }
 }
+
+entry "HIDControllerGameCoreDesktop.update" {
+  kind      = "function"
+  hooked    = true
+  msvc_name = "?update@HIDControllerGameCoreDesktop@@UEAAXXZ"
+  notes     = "void HIDControllerGameCoreDesktop::update(), the HIDController::update override: slot 3 of the HIDControllerGameCoreDesktop.vtable global in both builds (destructor, onKeyDown, onKeyUp, then HIDController's update, updateEditContext .. setIMEEnabled; 15 slots). It takes only `this`, the keyboard controller that onKeyDown and onKeyUp also get, so a hook here gives the controller without a real key press. The function is 0x5F bytes and has `.pdata`: it runs the queued work of [this+98h]->[+50h] (a guarded vcall of slot 1 with edx=1 until it returns 0), then, when the CoreTextEdit member at this+60h is set and its state is not 0, tail-jumps to the text-edit update with dl = (state != 2). The base HIDController::update (0x417860 on 26.63) has the same first 45 bytes (the queue loop up to the guard call) and then returns, so neither recipe uses those bytes. Recipe 0 starts right after the guard call: `test rax,rax; jne` (the loop back), `cmp qword ptr [rsi+..],0; je; lea rcx,[rsi+..]` and the call to the CoreTextEdit state getter, then `function_start_of`. Recipe 1 shares no bytes with recipe 0: from the `test eax,eax` after that call through `je; cmp eax,imm; setne dl; mov rcx,rsi; add rsp,..; pop rsi` to the tail `jmp`, then `function_start_of`. Both end at a call or the tail jump. Every immediate, displacement and branch byte is a wildcard. Both are unique in both exes and agree. The checks are `function_start` and `in_vtable` of HIDControllerGameCoreDesktop.vtable, slots 3 to 7 (it leaves out onKeyUp in slot 2; the vtable has 15 slots). Values: 0x7cbed0 in 26.62, 0x7cbe00 in 26.63. The Preview 1.26.70.23 has no HIDController (see onKeyDown), so this entry refuses there."
+
+  recipe {
+    step "pattern" {
+      bytes = "48 85 C0 75 ?? 48 83 7E ?? ?? 74 ?? 48 8D 4E ?? E8"
+    }
+    step "function_start_of" {}
+  }
+
+  recipe {
+    step "pattern" {
+      bytes = "85 C0 74 ?? 83 F8 ?? 0F 95 C2 48 89 F1 48 83 C4 ?? 5E E9"
+    }
+    step "function_start_of" {}
+  }
+
+  check "function_start" {}
+
+  check "in_vtable" {
+    vtable   = "HIDControllerGameCoreDesktop.vtable"
+    min_slot = 3
+    max_slot = 7
+  }
+}

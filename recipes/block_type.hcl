@@ -264,3 +264,39 @@ entry "BlockType.getExtraRenderLayers" {
     max = 132
   }
 }
+
+entry "BlockType.mNameInfo.mFullName" {
+  kind  = "field"
+  notes = "Offset in BlockType of mNameInfo.mFullName, the HashedString that holds the block's full name (for example `minecraft:skeleton_skull`): E0h on 26.63 (6aed1906-b127418e74d2f2f9). The LeviLamina header order gives the same value: vtable 8, mDescriptionId (std::string, 20h), the Material and padding to 30h, mComponents (60h) to 90h, then NameInfo with mRawName (a HashedString, 30h) and mNamespaceName (std::string, 20h), so mFullName is at E0h. Every caller of SkullBlockRenderer::renderSkull (0x6a5ea50) passes BlockType+E0h as the skull name argument, and renderSkull compares it with the 7 static skull block names (hash, then text), so the member is the block name. Recipe 0 is in SkullBlockRenderer::render (0x6a90c50), right before the call to renderSkull: `mov eax,imm32; mov rcx,[rbp+..]; add rax,[rcx+disp8]` (the BlockType pointer of the world Block, Block+68h) `; movss [rsp+..],xmm6; mov [rsp+..],r14; ...; call`, offset 0, the immediate of the mov. Recipe 1 is in the item skull path 0x598e6f0: `mov rax,[rax+disp32]` (Item+178h, the block type of the item) `; test rax,rax; je; mov rcx,[r12+disp8]; test rcx,rcx; je; add rax,imm32; ...; call`, offset 22, the immediate of the add. The two recipes are in two functions and share no bytes. Every displacement, immediate and branch byte is a wildcard. The range check is 80h..140h. The gate (check entry_is) LevelChunk.mSubChunks = 456 (1C8h, the 26.60 layout) ties this entry to the HashedString of 26.60 to 26.63, as for Item.mFullName: on the Preview 1.26.70.23 HashedString grew from 30h to 38h, so this member and its type change there. Value E0h on 26.63. Class: new entry."
+
+  recipe {
+    step "pattern" {
+      bytes = "B8 ?? ?? ?? ?? 48 8B 4D ?? 48 03 41 ?? F3 0F 11 74 24 ?? 4C 89 74 24 ?? 48 8B 4D ?? 48 89 4C 24 ?? 48 89 44 24 ?? F3 0F 11 7C 24 ?? 89 5C 24 ?? C6 44 24 ?? ?? 4C 8D 45 ?? 48 8B 4D ?? 48 89 F2 4C 8B 4D ?? E8"
+    }
+    step "operand" {
+      index = 1
+      kind  = "immediate"
+    }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "48 8B 80 ?? ?? ?? ?? 48 85 C0 74 ?? 49 8B 4C 24 ?? 48 85 C9 74 ?? 48 05 ?? ?? ?? ?? 44 88 7C 24 ?? 0F 57 C0 0F 11 44 24 ?? 48 89 44 24 ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? 4C 8D 0D ?? ?? ?? ?? 48 89 F2 4C 8B 45 ?? E8"
+      offset = 22
+    }
+    step "operand" {
+      index = 1
+      kind  = "immediate"
+    }
+  }
+
+  check "range" {
+    min = 128
+    max = 320
+  }
+
+  check "entry_is" {
+    entry = "LevelChunk.mSubChunks"
+    value = 456
+  }
+}

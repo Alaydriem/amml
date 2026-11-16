@@ -306,11 +306,25 @@ resolved "BlockActor._getRenderComponent" {
   fingerprint = "285ee4673c783261"
 }
 
+resolved "BlockActor.isType" {
+  kind        = "vslot"
+  value       = "0x10"
+  recipes     = 2
+  fingerprint = "d3eee77640128314"
+}
+
 resolved "BlockActor.loadStatic" {
   kind        = "function"
   value       = "0x3301fb0"
   recipes     = 2
   fingerprint = "c00f86946a0f8bbd"
+}
+
+resolved "BlockActor.mPosition" {
+  kind        = "field"
+  value       = "0x8"
+  recipes     = 2
+  fingerprint = "12a1c924ad71cbd5"
 }
 
 resolved "BlockActorRenderDispatcher.render" {
@@ -530,6 +544,13 @@ resolved "BlockType.mMaterialInline" {
   fingerprint = "2e189de0acf70c53"
 }
 
+resolved "BlockType.mNameInfo.mFullName" {
+  kind        = "field"
+  value       = "0xe0"
+  recipes     = 2
+  fingerprint = "e8c1e9e80f10afa4"
+}
+
 resolved "BlockType.mTintMethod" {
   kind        = "field"
   value       = "0x17c"
@@ -649,6 +670,13 @@ resolved "ChestBlockActor.mLargeChestPairedPosition" {
   fingerprint = "1b6e7be2a110a71b"
 }
 
+resolved "ChestBlockActor.mPairFlags" {
+  kind        = "field"
+  value       = "0x2f8"
+  recipes     = 2
+  fingerprint = "dce1f9dfda55100b"
+}
+
 resolved "ClientEntityWaypoint.mActorId" {
   kind        = "field"
   value       = "0x78"
@@ -675,6 +703,20 @@ resolved "ClientInputCallbacks.handleBuildAction" {
   value       = "0x6585170"
   recipes     = 2
   fingerprint = "8739040c4afca109"
+}
+
+resolved "ClientInputLockComponent.applyToMoveInputState" {
+  kind        = "function"
+  value       = "0x4932d0"
+  recipes     = 2
+  fingerprint = "a81d487a7c8fcc16"
+}
+
+resolved "ClientInputUpdateSystem.extractRawHIDInput" {
+  kind        = "function"
+  value       = "0x6d51230"
+  recipes     = 2
+  fingerprint = "a6bc1bb34e44b3af"
 }
 
 resolved "ClientInstance.GameCallbacks.vtable" {
@@ -1410,6 +1452,13 @@ resolved "HIDControllerGameCoreDesktop.onKeyUp" {
   value       = "0x7cc420"
   recipes     = 1
   fingerprint = "caa2edbd4d538455"
+}
+
+resolved "HIDControllerGameCoreDesktop.update" {
+  kind        = "function"
+  value       = "0x7cbe00"
+  recipes     = 2
+  fingerprint = "a91894b331b3c432"
 }
 
 resolved "HIDControllerGameCoreDesktop.vtable" {
@@ -2266,6 +2315,62 @@ resolved "MouseDevice.feed" {
   fingerprint = "e533de036a9c2a13"
 }
 
+resolved "MoveInputState.bitDown" {
+  kind        = "field"
+  value       = "0xe"
+  recipes     = 1
+  fingerprint = "ee93ffb8fb18db59"
+}
+
+resolved "MoveInputState.bitLeft" {
+  kind        = "field"
+  value       = "0xf"
+  recipes     = 1
+  fingerprint = "c8acae30010aa646"
+}
+
+resolved "MoveInputState.bitRight" {
+  kind        = "field"
+  value       = "0x10"
+  recipes     = 1
+  fingerprint = "ec6183c192d3dcff"
+}
+
+resolved "MoveInputState.bitSprintDown" {
+  kind        = "field"
+  value       = "0x8"
+  recipes     = 1
+  fingerprint = "1c35b7b0845a2e40"
+}
+
+resolved "MoveInputState.bitUp" {
+  kind        = "field"
+  value       = "0xd"
+  recipes     = 1
+  fingerprint = "70efd19c833bc1c0"
+}
+
+resolved "MoveInputState.mAnalogMoveVector" {
+  kind        = "field"
+  value       = "0x4"
+  recipes     = 2
+  fingerprint = "9bf89c9e2724c18b"
+}
+
+resolved "MoveInputState.maskJumpDown" {
+  kind        = "field"
+  value       = "0x80"
+  recipes     = 1
+  fingerprint = "389f86a9017dfb10"
+}
+
+resolved "MoveInputState.maskSneakTest" {
+  kind        = "field"
+  value       = "0x40001"
+  recipes     = 2
+  fingerprint = "714345bf836588b4"
+}
+
 resolved "NameTagRenderObject.size" {
   kind        = "field"
   value       = "0x90"
@@ -2516,6 +2621,20 @@ resolved "PrimitiveShapesPacket.mShapes" {
   value       = "0x30"
   recipes     = 1
   fingerprint = "1af7ba255a2e0ad2"
+}
+
+resolved "RawMoveInputComponent.mInputState" {
+  kind        = "field"
+  value       = "0x0"
+  recipes     = 2
+  fingerprint = "1f59290a2fdebe14"
+}
+
+resolved "RawMoveInputComponent.mRawMove" {
+  kind        = "field"
+  value       = "0x10"
+  recipes     = 2
+  fingerprint = "1a90843f499ef777"
 }
 
 resolved "ReadOnlyBinaryStream.dtor" {
@@ -2775,6 +2894,13 @@ resolved "ShulkerBoxBlockItem.vtable" {
   value       = "0xf1993b0"
   recipes     = 2
   fingerprint = "e1b0f6e6bb00cd9b"
+}
+
+resolved "SkullBlockRenderer.renderSkull" {
+  kind        = "function"
+  value       = "0x6a5ea50"
+  recipes     = 2
+  fingerprint = "6ccd651a403e9e93"
 }
 
 resolved "StateVectorComponent.mPos" {

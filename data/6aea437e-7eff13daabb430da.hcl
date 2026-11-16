@@ -159,6 +159,13 @@ resolved "AnimationComponent.applyAnimationsCallback" {
   fingerprint = "7b81daca7ecd4178"
 }
 
+resolved "BaseActorRenderContext.Impl.mCameraTargetPosition" {
+  kind        = "field"
+  value       = "0x20"
+  recipes     = 2
+  fingerprint = "a211fca3ed2be8ed"
+}
+
 resolved "BaseActorRenderContext.ctor" {
   kind        = "function"
   value       = "0x57e2560"
@@ -171,6 +178,20 @@ resolved "BaseActorRenderContext.dtor" {
   value       = "0x57e29e0"
   recipes     = 2
   fingerprint = "1946d70770c3b467"
+}
+
+resolved "BaseActorRenderContext.mBlockEntityRenderDispatcher" {
+  kind        = "field"
+  value       = "0x30"
+  recipes     = 2
+  fingerprint = "f39f75c3addfcd5c"
+}
+
+resolved "BaseActorRenderContext.mImpl" {
+  kind        = "field"
+  value       = "0xa8"
+  recipes     = 2
+  fingerprint = "ceee84c8a6c31d4e"
 }
 
 resolved "BaseActorRenderContext.size" {
@@ -257,6 +278,13 @@ resolved "Block.canProvideFullSupport" {
   fingerprint = "35d262682cd28a89"
 }
 
+resolved "Block.getRenderLayer" {
+  kind        = "function"
+  value       = "0x6a3a570"
+  recipes     = 2
+  fingerprint = "72671cdfcacf4ecf"
+}
+
 resolved "Block.mDirectData.mLightEmission" {
   kind        = "field"
   value       = "0xa4"
@@ -269,6 +297,27 @@ resolved "Block.tryGetComponent.BlockMapColorComponent" {
   value       = "0x31664b0"
   recipes     = 2
   fingerprint = "69971ad027ea27d0"
+}
+
+resolved "BlockActor._getRenderComponent" {
+  kind        = "vslot"
+  value       = "0x15"
+  recipes     = 2
+  fingerprint = "285ee4673c783261"
+}
+
+resolved "BlockActor.loadStatic" {
+  kind        = "function"
+  value       = "0x3302250"
+  recipes     = 2
+  fingerprint = "c00f86946a0f8bbd"
+}
+
+resolved "BlockActorRenderDispatcher.render" {
+  kind        = "function"
+  value       = "0x6a5df90"
+  recipes     = 2
+  fingerprint = "f56eb1a26d69781c"
 }
 
 resolved "BlockGraphics.getForBlock" {
@@ -453,6 +502,13 @@ resolved "BlockType.getCollisionShape" {
   fingerprint = "527f233252c06282"
 }
 
+resolved "BlockType.getExtraRenderLayers" {
+  kind        = "vslot"
+  value       = "0x7c"
+  recipes     = 2
+  fingerprint = "fb63cf4fb0e3f5a7"
+}
+
 resolved "BlockType.getMapColor" {
   kind        = "vslot"
   value       = "0x81"
@@ -579,6 +635,20 @@ resolved "CameraRegistry.mCameraEntities" {
   fingerprint = "fccb11fbd66a8b1d"
 }
 
+resolved "ChestBlockActor.mLargeChestPaired" {
+  kind        = "field"
+  value       = "0x308"
+  recipes     = 2
+  fingerprint = "223aa503e6bb0422"
+}
+
+resolved "ChestBlockActor.mLargeChestPairedPosition" {
+  kind        = "field"
+  value       = "0x310"
+  recipes     = 2
+  fingerprint = "1b6e7be2a110a71b"
+}
+
 resolved "ClientEntityWaypoint.mActorId" {
   kind        = "field"
   value       = "0x78"
@@ -605,6 +675,20 @@ resolved "ClientInputCallbacks.handleBuildAction" {
   value       = "0x6585410"
   recipes     = 2
   fingerprint = "8739040c4afca109"
+}
+
+resolved "ClientInputLockComponent.applyToMoveInputState" {
+  kind        = "function"
+  value       = "0x4933f0"
+  recipes     = 2
+  fingerprint = "a81d487a7c8fcc16"
+}
+
+resolved "ClientInputUpdateSystem.extractRawHIDInput" {
+  kind        = "function"
+  value       = "0x6d514d0"
+  recipes     = 2
+  fingerprint = "a6bc1bb34e44b3af"
 }
 
 resolved "ClientInstance.GameCallbacks.vtable" {
@@ -1097,6 +1181,13 @@ resolved "DBStorage.vtable" {
   fingerprint = "a494d6f23b4b24ad"
 }
 
+resolved "DefaultDataLoadHelper.vtable" {
+  kind        = "global"
+  value       = "0xf0c7d80"
+  recipes     = 2
+  fingerprint = "37cc819f44e86dc5"
+}
+
 resolved "Dimension.getBlockSourceFromMainChunkSource" {
   kind        = "vslot"
   value       = "0xd"
@@ -1333,6 +1424,13 @@ resolved "HIDControllerGameCoreDesktop.onKeyUp" {
   value       = "0x7cc4f0"
   recipes     = 1
   fingerprint = "caa2edbd4d538455"
+}
+
+resolved "HIDControllerGameCoreDesktop.update" {
+  kind        = "function"
+  value       = "0x7cbed0"
+  recipes     = 2
+  fingerprint = "a91894b331b3c432"
 }
 
 resolved "HIDControllerGameCoreDesktop.vtable" {
@@ -1797,6 +1895,20 @@ resolved "LevelRendererCamera.preRenderUpdate" {
   fingerprint = "496f671a325cc6b7"
 }
 
+resolved "LevelRendererCamera.renderBlockEntities" {
+  kind        = "vslot"
+  value       = "0x10"
+  recipes     = 2
+  fingerprint = "11ae0338bbf5ef2b"
+}
+
+resolved "LevelRendererCamera.renderBlockEntitiesBody" {
+  kind        = "function"
+  value       = "0x53695e0"
+  recipes     = 2
+  fingerprint = "8ea045dbd32da4cd"
+}
+
 resolved "LevelRendererPlayer.PlayerListener.vtable" {
   kind        = "global"
   value       = "0xf2481e0"
@@ -1837,6 +1949,13 @@ resolved "LevelRendererPlayer.queueRenderEntities" {
   value       = "0x1b"
   recipes     = 2
   fingerprint = "f8605db2cb408c55"
+}
+
+resolved "LevelRendererPlayer.renderBlockEntities" {
+  kind        = "function"
+  value       = "0x539e2d0"
+  recipes     = 1
+  fingerprint = "2cd8ec974b1fee7f"
 }
 
 resolved "LevelRendererPlayer.setupCamera" {
@@ -1886,6 +2005,13 @@ resolved "LocalPlayer.mClientLocatorBar" {
   value       = "0xef0"
   recipes     = 2
   fingerprint = "cdd87578bb454296"
+}
+
+resolved "LocalWorldStarter.startLocalWorld" {
+  kind        = "function"
+  value       = "0x251ae60"
+  recipes     = 2
+  fingerprint = "8e4458044c859613"
 }
 
 resolved "MapPolicy.get" {
@@ -2161,6 +2287,62 @@ resolved "MouseDevice.feed" {
   fingerprint = "e533de036a9c2a13"
 }
 
+resolved "MoveInputState.bitDown" {
+  kind        = "field"
+  value       = "0xe"
+  recipes     = 1
+  fingerprint = "ee93ffb8fb18db59"
+}
+
+resolved "MoveInputState.bitLeft" {
+  kind        = "field"
+  value       = "0xf"
+  recipes     = 1
+  fingerprint = "c8acae30010aa646"
+}
+
+resolved "MoveInputState.bitRight" {
+  kind        = "field"
+  value       = "0x10"
+  recipes     = 1
+  fingerprint = "ec6183c192d3dcff"
+}
+
+resolved "MoveInputState.bitSprintDown" {
+  kind        = "field"
+  value       = "0x8"
+  recipes     = 1
+  fingerprint = "1c35b7b0845a2e40"
+}
+
+resolved "MoveInputState.bitUp" {
+  kind        = "field"
+  value       = "0xd"
+  recipes     = 1
+  fingerprint = "70efd19c833bc1c0"
+}
+
+resolved "MoveInputState.mAnalogMoveVector" {
+  kind        = "field"
+  value       = "0x4"
+  recipes     = 2
+  fingerprint = "9bf89c9e2724c18b"
+}
+
+resolved "MoveInputState.maskJumpDown" {
+  kind        = "field"
+  value       = "0x80"
+  recipes     = 1
+  fingerprint = "389f86a9017dfb10"
+}
+
+resolved "MoveInputState.maskSneakTest" {
+  kind        = "field"
+  value       = "0x40001"
+  recipes     = 2
+  fingerprint = "714345bf836588b4"
+}
+
 resolved "NameTagRenderObject.size" {
   kind        = "field"
   value       = "0x90"
@@ -2411,6 +2593,20 @@ resolved "PrimitiveShapesPacket.mShapes" {
   value       = "0x30"
   recipes     = 1
   fingerprint = "1af7ba255a2e0ad2"
+}
+
+resolved "RawMoveInputComponent.mInputState" {
+  kind        = "field"
+  value       = "0x0"
+  recipes     = 2
+  fingerprint = "1f59290a2fdebe14"
+}
+
+resolved "RawMoveInputComponent.mRawMove" {
+  kind        = "field"
+  value       = "0x10"
+  recipes     = 2
+  fingerprint = "1a90843f499ef777"
 }
 
 resolved "ReadOnlyBinaryStream.dtor" {
@@ -2868,6 +3064,13 @@ resolved "UIScene.vtable" {
   fingerprint = "c682d59392df2600"
 }
 
+resolved "VanillaBlockActorFactory.createBlockActor" {
+  kind        = "function"
+  value       = "0x7151230"
+  recipes     = 2
+  fingerprint = "e4e34c09299a936c"
+}
+
 resolved "VanillaBlockStateTransformUtils.hasTransformableConnectionStates" {
   kind        = "function"
   value       = "0x5e938f0"
@@ -2922,6 +3125,13 @@ resolved "VisualTree.mRootControl" {
   value       = "0x8"
   recipes     = 2
   fingerprint = "cea4a25ff8ce8530"
+}
+
+resolved "WorldSystem.mLocalWorldStarter" {
+  kind        = "field"
+  value       = "0x78"
+  recipes     = 1
+  fingerprint = "870a234de9dfc49f"
 }
 
 resolved "WorldSystem.mNetworkWorldJoiner" {
