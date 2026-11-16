@@ -306,11 +306,25 @@ resolved "BlockActor._getRenderComponent" {
   fingerprint = "285ee4673c783261"
 }
 
+resolved "BlockActor.isType" {
+  kind        = "vslot"
+  value       = "0x10"
+  recipes     = 2
+  fingerprint = "d3eee77640128314"
+}
+
 resolved "BlockActor.loadStatic" {
   kind        = "function"
   value       = "0x3302250"
   recipes     = 2
   fingerprint = "c00f86946a0f8bbd"
+}
+
+resolved "BlockActor.mPosition" {
+  kind        = "field"
+  value       = "0x8"
+  recipes     = 2
+  fingerprint = "12a1c924ad71cbd5"
 }
 
 resolved "BlockActorRenderDispatcher.render" {
@@ -530,6 +544,13 @@ resolved "BlockType.mMaterialInline" {
   fingerprint = "2e189de0acf70c53"
 }
 
+resolved "BlockType.mNameInfo.mFullName" {
+  kind        = "field"
+  value       = "0xe0"
+  recipes     = 2
+  fingerprint = "e8c1e9e80f10afa4"
+}
+
 resolved "BlockType.mTintMethod" {
   kind        = "field"
   value       = "0x17c"
@@ -647,6 +668,13 @@ resolved "ChestBlockActor.mLargeChestPairedPosition" {
   value       = "0x310"
   recipes     = 2
   fingerprint = "1b6e7be2a110a71b"
+}
+
+resolved "ChestBlockActor.mPairFlags" {
+  kind        = "field"
+  value       = "0x2f8"
+  recipes     = 2
+  fingerprint = "dce1f9dfda55100b"
 }
 
 resolved "ClientEntityWaypoint.mActorId" {
@@ -2287,6 +2315,13 @@ resolved "MouseDevice.feed" {
   fingerprint = "e533de036a9c2a13"
 }
 
+resolved "MouseDevice.instance" {
+  kind        = "global"
+  value       = "0x128d0010"
+  recipes     = 3
+  fingerprint = "0a81afba03ac4100"
+}
+
 resolved "MoveInputState.bitDown" {
   kind        = "field"
   value       = "0xe"
@@ -2866,6 +2901,13 @@ resolved "ShulkerBoxBlockItem.vtable" {
   value       = "0xf1993d0"
   recipes     = 2
   fingerprint = "e1b0f6e6bb00cd9b"
+}
+
+resolved "SkullBlockRenderer.renderSkull" {
+  kind        = "function"
+  value       = "0x6a5ecf0"
+  recipes     = 2
+  fingerprint = "6ccd651a403e9e93"
 }
 
 resolved "StateVectorComponent.mPos" {

@@ -2315,6 +2315,13 @@ resolved "MouseDevice.feed" {
   fingerprint = "e533de036a9c2a13"
 }
 
+resolved "MouseDevice.instance" {
+  kind        = "global"
+  value       = "0x128d0010"
+  recipes     = 3
+  fingerprint = "0a81afba03ac4100"
+}
+
 resolved "MoveInputState.bitDown" {
   kind        = "field"
   value       = "0xe"

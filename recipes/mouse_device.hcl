@@ -30,3 +30,43 @@ entry "MouseDevice.feed" {
 
   check "function_start" {}
 }
+
+entry "MouseDevice.instance" {
+  kind  = "global"
+  notes = "The game's one MouseDevice object, a static global (not a pointer): every direct caller of MouseDevice.feed that feeds the desktop mouse passes it as `this` with `lea rcx,[rip+..]`. Three callers in three functions use the same address: the GDK gamepad poll (GameControllerHandler_GameCore.refresh, its emulated cursor click: `mov [rsp+..],ax; mov byte ptr [rsp+..],imm; lea rcx,[rip+..]; mov dl,imm; mov r8b,imm; call`), the window handler of the mouse button messages (WM_LBUTTONDOWN to WM_XBUTTONDBLCLK through a jump table on msg-201h; `lea rcx,[rip+..]; mov edx,r14d (button); mov r8d,ebx (state); mov r9d,edi (x); call`), and the WM_INPUT raw mouse handler (GetRawInputData, then `feed(this,0,0,0,..)` with the motion delta: `lea rcx,[rip+..]; xor edx,edx; xor r8d,r8d; xor r9d,r9d; call`). One recipe per caller; each pattern ends at the call and offset gives the `lea`, whose RIP target is the operand. The window code also feeds a second address (0x140 bytes after this one on 26.63, the base of an array of 38h-byte per-pointer devices indexed by the WM_POINTER id, the touch and pen path); no recipe reads that one. Every immediate, displacement and branch byte is a wildcard. Check: section .data. Requested by the mod manager, so fake mouse buttons reach the game before the first real mouse event. Values: 0x128d0010 in 26.62 and 26.63."
+
+  recipe {
+    step "pattern" {
+      bytes  = "66 89 44 24 ?? C6 44 24 ?? ?? 48 8D 0D ?? ?? ?? ?? B2 ?? 41 B0 ?? E8"
+      offset = 10
+    }
+    step "operand" {
+      index = 1
+      kind  = "rip_target"
+    }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "66 C7 44 24 ?? ?? ?? 48 8D 0D ?? ?? ?? ?? 44 89 F2 41 89 D8 41 89 F9 E8"
+      offset = 7
+    }
+    step "operand" {
+      index = 1
+      kind  = "rip_target"
+    }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "C6 44 24 ?? ?? 66 C7 44 24 ?? ?? ?? 48 8D 0D ?? ?? ?? ?? 31 D2 45 31 C0 45 31 C9 E8"
+      offset = 12
+    }
+    step "operand" {
+      index = 1
+      kind  = "rip_target"
+    }
+  }
+
+  check "section" { name = ".data" }
+}
