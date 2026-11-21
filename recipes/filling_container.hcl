@@ -1,11 +1,14 @@
 entry "FillingContainer.swapSlots" {
   kind     = "vslot"
-  notes    = "Slot of void FillingContainer::swapSlots(int from, int to) in the container vtable: 44 on 26.51 (Container has 43 virtuals, 0..42, and swapSlots is the second new virtual of FillingContainer, after removeResource). In the Inventory vtable (the one that holds Inventory::setItemWithForceBalance at slot 13), slot 44 takes two ints, indexes mItems by both (`movsxd rax,r8d; imul rdi,rax,98h` and the same for edx; 98h is the ItemStack size) and swaps the two stacks through a temporary. Both recipes are calls in one PlayerInventory function on the player's Inventory (`mov rcx,[r14+..]`, PlayerInventory::mInventory) with the two slots in edx and r8d: `mov rcx,[r14+..]; mov rax,[rcx]; mov rax,[rax+disp]; (mov edi,[rbp+..];) mov edx,edi; mov r8d,r12d; call [guard]`. Recipe 0 is the call that first loads the slot from the frame; recipe 1 is the call that has it in edi already. They are two call sites of one function (no other caller passes two plain ints). Both read the displacement as a slot. Every displacement and immediate byte is a wildcard. Range window 36..52."
+  notes    = "Slot of void FillingContainer::swapSlots(int from, int to) in the container vtable: 44 on 26.51 (Container has 43 virtuals, 0..42, and swapSlots is the second new virtual of FillingContainer, after removeResource). In the Inventory vtable (the one that holds Inventory::setItemWithForceBalance at slot 13), slot 44 takes two ints, indexes mItems by both (`movsxd rax,r8d; imul rdi,rax,98h` and the same for edx; 98h is the ItemStack size) and swaps the two stacks through a temporary. Both recipes are calls in one PlayerInventory function on the player's Inventory (`mov rcx,[r14+..]`, PlayerInventory::mInventory) with the two slots in edx and r8d: `mov rcx,[r14+..]; mov rax,[rcx]; mov rax,[rax+disp]; (mov edi,[rbp+..];) mov edx,edi; mov r8d,r12d; call [guard]`. Recipe 0 is the first call, after the test of the slot against -1 (`cmp r12d,-1; je`), and recipe 1 is the second call, after the test of the `cmp byte ptr [rax+8],1` (a jne over `xor eax,eax; jmp`); each pattern starts at the code before its call so that the two sites are told apart (the call bytes alone match both). Recipe 0 is a pattern_any with one alternative per shape: on 26.63 the slot is loaded from the frame (`mov edi,[rbp+..]`) between the displacement load and `mov edx,edi`, on 70.26 it is not. They are two call sites of one function (no other caller passes two plain ints). Both read the displacement as a slot. Every displacement and immediate byte is a wildcard. Range window 36..52. What changed in 6afa4e47-dadc375797a3d31a (70.26): the load of the first slot into edi moved out of the first call, so the call bytes of both sites became equal and each recipe saw two matches (or none); would have survived with a better recipe. The value is still 45 (168h). Evidence on 70.26: both sites are found by code before them that was drafted from the two sites of the 26.63 function (`cmp r12d,-1; je` before the first, the `cmp byte ptr [rax+8],1; mov r12d,..; jne short; xor eax,eax; jmp` before the second), each matches once in the same function on both builds, and both read the same displacement."
 
   recipe {
-    step "pattern" {
-      bytes  = "49 8B 8E ?? ?? ?? ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 8B BD ?? ?? ?? ?? 89 FA 45 89 E0 FF 15"
-      offset = 10
+    step "pattern_any" {
+      patterns = [
+        "41 83 FC ?? 0F 84 ?? ?? ?? ?? 49 8B 8E ?? ?? ?? ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 8B BD ?? ?? ?? ?? 89 FA 45 89 E0 FF 15",
+        "41 83 FC ?? 0F 84 ?? ?? ?? ?? 49 8B 8E ?? ?? ?? ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 89 FA 45 89 E0 FF 15",
+      ]
+      offset   = 20
     }
     step "operand" {
       index = 1
@@ -16,8 +19,8 @@ entry "FillingContainer.swapSlots" {
 
   recipe {
     step "pattern" {
-      bytes  = "49 8B 8E ?? ?? ?? ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 89 FA 45 89 E0 FF 15"
-      offset = 10
+      bytes  = "80 78 ?? ?? 45 89 ?? 75 ?? 31 C0 E9 ?? ?? ?? ?? 45 89 ?? 49 8B 8E ?? ?? ?? ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 89 FA 45 89 E0 FF 15"
+      offset = 29
     }
     step "operand" {
       index = 1
@@ -34,7 +37,7 @@ entry "FillingContainer.swapSlots" {
 
 entry "FillingContainer.setItem" {
   kind     = "vslot"
-  notes    = "Slot of void Container::setItem(int slot, ItemStack const&) in the container vtable: 12 on 26.51 (Container header order: getItem 7, setItem 12, setItemWithForceBalance 13). In the Inventory vtable slot 12 is the leaf `mov rax,[rcx]; mov rax,[rax+68h]; mov r10,[guard]; xor r9d,r9d; jmp r10` (setItemWithForceBalance with false), and slot 13 is the function that holds the lambda named `setItemWithForceBalance@Inventory`. Both recipes are the inline Player::setSelectedItem on the player's Inventory: `mov rax,[player+5B8h]` (Player::mInventory), `mov rcx,[rax+0B8h]` (PlayerInventory::mInventory), the selected slot in edx, the stack in r8, `mov rax,[rcx]; mov rax,[rax+disp]; call [guard]`. Recipe 0 first tests the selected container id (`cmp byte ptr [rax+..],..; jne`) and passes the stack from rsi. Recipe 1 is a second function that passes the slot from ebx and the stack from r14. Both read the displacement as a slot. The two recipes are in two functions. Every displacement and immediate byte is a wildcard. Range window 4..20."
+  notes    = "Slot of void Container::setItem(int slot, ItemStack const&) in the container vtable: 12 on 26.51 (Container header order: getItem 7, setItem 12, setItemWithForceBalance 13). In the Inventory vtable slot 12 is the leaf `mov rax,[rcx]; mov rax,[rax+68h]; mov r10,[guard]; xor r9d,r9d; jmp r10` (setItemWithForceBalance with false), and slot 13 is the function that holds the lambda named `setItemWithForceBalance@Inventory`. Both recipes are the inline Player::setSelectedItem on the player's Inventory: `mov rax,[player+5B8h]` (Player::mInventory), `mov rcx,[rax+0B8h]` (PlayerInventory::mInventory), the selected slot in edx, the stack in r8, `mov rax,[rcx]; mov rax,[rax+disp]; call [guard]`. Recipe 0 first tests the selected container id (`cmp byte ptr [rax+..],..; jne`) and passes the stack from rsi. Recipe 1 is a second function that passes the slot from a register (ebx, or esi) and the stack from another (r14 on both builds); the registers and the register of the first load are wildcards. Both read the displacement as a slot. The two recipes are in two functions. Every displacement and immediate byte is a wildcard. Range window 4..20. What changed in 6afa4e47-dadc375797a3d31a (70.26): the slot is moved to edx from esi instead of ebx (ModRM byte 89 DA became 89 F2) and the function with the call is another function of the same shape, so the fixed ModRM bytes no longer matched; would have survived with a better recipe. The value is still 12 (60h). Evidence on 70.26: recipe 0, a body anchor drafted from the 26.63 Player::setSelectedItem inline, reads the same call in the same shape (the test of the selected container id, the selected slot in edx, the stack in r8); and recipe 1 reads the call of the same virtual (int slot in edx and an ItemStack const& in r8, no third argument, so it is setItem and not setItemWithForceBalance, slot 13) in a second function."
 
   recipe {
     step "pattern" {
@@ -50,7 +53,7 @@ entry "FillingContainer.setItem" {
 
   recipe {
     step "pattern" {
-      bytes  = "48 8B 87 ?? ?? ?? ?? 48 8B 88 ?? ?? ?? ?? 48 8B 01 48 8B 40 ?? 89 DA 4D 89 F0 FF 15"
+      bytes  = "48 8B ?? ?? ?? ?? ?? 48 8B 88 ?? ?? ?? ?? 48 8B 01 48 8B 40 ?? 89 ?? 4D 89 ?? FF 15"
       offset = 17
     }
     step "operand" {

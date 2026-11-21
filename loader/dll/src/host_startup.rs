@@ -100,7 +100,7 @@ impl HostStartup {
     }
 
     /// Shared by every host: starts `LoaderState` over `table`, runs the heap check when `heap_check`
-    /// asks for it and loads the mods of `scan`.
+    /// asks for it, runs `before_mods` (the host's own loader hooks) and loads the mods of `scan`.
     ///
     /// `LoaderState` starts once per process: a second start after `ll_mod_unload` finds the state in
     /// place, returns an error and loads nothing.
@@ -114,6 +114,7 @@ impl HostStartup {
         table: EntryTable,
         scan: &ModScan,
         heap_check: HeapCheck,
+        before_mods: impl FnOnce(&'static LoaderState),
     ) -> Result<(), HostError> {
         // SAFETY: the caller guarantees the table matches the module base.
         let state = unsafe { LoaderState::init(LoaderConfig::new(module_base, table, paths.loader_dirs())) }?;
@@ -124,6 +125,7 @@ impl HostStartup {
                 curia::info!("game heap round trip deferred to the first allocation: the game is not initialized yet");
             }
         }
+        before_mods(state);
         ModLoader::new(state).load_all(&scan.mods);
         VersionLabel::install(state, VersionLabel::new(&VersionLabel::instance_name(&paths.game)));
         Ok(())
@@ -171,7 +173,7 @@ impl HostStartup {
         // SAFETY: the table holds RVAs for the game module at `module_base`, from the cache and derive
         // data of this exe build, or from LeviLamina's lookup of the running process, which accepts
         // only addresses inside the image.
-        unsafe { Self::finish(paths, module_base, table, &scan, HeapCheck::AtLoad) }
+        unsafe { Self::finish(paths, module_base, table, &scan, HeapCheck::AtLoad, |_| {}) }
     }
 
     /// `ll_mod_enable`: enables the loaded mods. Hooks are installed here.
@@ -183,12 +185,13 @@ impl HostStartup {
         true
     }
 
-    /// `ll_mod_disable`: disables the mods, which removes their hooks. With no state there is nothing to undo.
+    /// `ll_mod_disable`, at process exit: raises `Shutdown`, then disables the mods, which removes their
+    /// listeners, providers and hooks. With no state there is nothing to undo.
     pub fn disable() -> bool {
         let Some(state) = LoaderState::get() else {
             return true;
         };
-        ModLoader::new(state).disable_all();
+        ModLoader::new(state).shutdown();
         true
     }
 

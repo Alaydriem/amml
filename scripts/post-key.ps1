@@ -1,4 +1,5 @@
-# Posts one key press (WM_KEYDOWN then WM_KEYUP) to the game window of one PID, without focus.
+# Posts one key press (WM_KEYDOWN then WM_KEYUP) to the game window of one PID, without focus. -Phase down posts the
+# WM_KEYDOWN only (the key stays held for the game until a later -Phase up), -Phase up the WM_KEYUP only.
 #
 # The keys are PostMessage to that one HWND: no SendInput, no SetForegroundWindow, so nothing reaches any other
 # window. A posted message does not change GetAsyncKeyState, so the key must be a chord without a modifier (the
@@ -6,7 +7,8 @@
 # Exit 1 when the PID has no visible window.
 param(
   [Parameter(Mandatory = $true)][int]$ProcessId,
-  [Parameter(Mandatory = $true)][int]$Key
+  [Parameter(Mandatory = $true)][int]$Key,
+  [ValidateSet('press', 'down', 'up')][string]$Phase = 'press'
 )
 Add-Type -TypeDefinition @'
 using System;
@@ -42,16 +44,28 @@ public static class GameKey {
   }
 
   public static void Press(IntPtr hwnd, uint vk) {
-    uint scan = MapVirtualKeyW(vk, 0);
-    long down = 1 | ((long)scan << 16);
-    long up = down | (3L << 30);
-    PostMessageW(hwnd, WM_KEYDOWN, (IntPtr)vk, (IntPtr)down);
+    Down(hwnd, vk);
     System.Threading.Thread.Sleep(80);
-    PostMessageW(hwnd, WM_KEYUP, (IntPtr)vk, (IntPtr)up);
+    Up(hwnd, vk);
+  }
+
+  static long DownParam(uint vk) { return 1 | ((long)MapVirtualKeyW(vk, 0) << 16); }
+
+  public static void Down(IntPtr hwnd, uint vk) {
+    PostMessageW(hwnd, WM_KEYDOWN, (IntPtr)vk, (IntPtr)DownParam(vk));
+  }
+
+  // previous state down, transition up
+  public static void Up(IntPtr hwnd, uint vk) {
+    PostMessageW(hwnd, WM_KEYUP, (IntPtr)vk, (IntPtr)(DownParam(vk) | (3L << 30)));
   }
 }
 '@
 $hwnd = [GameKey]::Find([uint32]$ProcessId)
 if ($hwnd -eq [IntPtr]::Zero) { "no visible window for pid $ProcessId"; exit 1 }
-[GameKey]::Press($hwnd, [uint32]$Key)
-"posted key 0x{0:x} to window 0x{1:x} of pid {2}" -f $Key, $hwnd.ToInt64(), $ProcessId
+switch ($Phase) {
+  'press' { [GameKey]::Press($hwnd, [uint32]$Key) }
+  'down' { [GameKey]::Down($hwnd, [uint32]$Key) }
+  'up' { [GameKey]::Up($hwnd, [uint32]$Key) }
+}
+"posted key 0x{0:x} ({1}) to window 0x{2:x} of pid {3}" -f $Key, $Phase, $hwnd.ToInt64(), $ProcessId

@@ -40,16 +40,27 @@ entry "HudLocatorBarRenderer.vtable" {
 
 entry "HudLocatorBarRenderer.render" {
   kind     = "vslot"
-  notes    = "Slot of `void HudLocatorBarRenderer::render(MinecraftUIRenderContext&, IClientInstance&, UIControl&, int)` (the 26.60 body reads rcx, rdx, r8, r9 and one stack int) in the HudLocatorBarRenderer.vtable: 16 on 26.51 and 26.60 (0x8dc8e60 and 0x5745690). Slot 5 (the UIRenderContext overload) is a shared `jmp [rax+80h]` thunk to it. The function draws the bar background, then walks the local player's waypoint list (`mov r13,[r13+mClientLocatorBar+10h]`), sorts it by distance, and draws each visible waypoint with one call of HudLocatorBarRenderer.drawIcon and an arrow mesh. Recipe 0 is the argument stores before the drawIcon call (`mov dword ptr [rsp+80h],imm; mov dword ptr [rsp+..],imm` seven times; `lea rdx,[rbp+..]; lea r8,[rbp+..]; call`), then function_start_of and slot_of the HudLocatorBarRenderer.vtable. Recipe 1 is the start of the list walk (`xorps xmm0,xmm0; movaps [rbp+..],xmm0; mov qword ptr [rbp+..],imm; mov r13,[r13+..]; mov rX,[r13+..]; cmp rX,r13; je`, the ModRM bytes of the two list registers wildcarded because 26.51 uses r14 and 26.60 r12), then function_start_of and slot_of. The two anchors are in different parts of the function and share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. The range check is a window around the slot."
+  hooked   = true
+  notes    = "Slot of `void HudLocatorBarRenderer::render(MinecraftUIRenderContext&, IClientInstance&, UIControl&, int)` (the 26.60 body reads rcx, rdx, r8, r9 and one stack int) in the HudLocatorBarRenderer.vtable: 16 on 26.51 and 26.60 (0x8dc8e60 and 0x5745690). Slot 5 (the UIRenderContext overload) is a shared `jmp [rax+80h]` thunk to it. The function draws the bar background, then walks the local player's waypoint list (`mov r13,[r13+mClientLocatorBar+10h]`), sorts it by distance, and draws each visible waypoint with one call of HudLocatorBarRenderer.drawIcon and an arrow mesh. Recipe 0 is the argument stores before the drawIcon call (`mov dword ptr [rsp+80h],imm; mov dword ptr [rsp+..],imm` seven times; `lea rdx,[rbp+..]; lea r8,[rbp+..]; call`), then function_start_of and slot_of the HudLocatorBarRenderer.vtable. Recipe 1 is the start of the list walk (`xorps xmm0,xmm0; movaps [rbp+..],xmm0; mov qword ptr [rbp+..],imm; mov r13,[r13+..]; mov rX,[r13+..]; cmp rX,r13; je`, the ModRM bytes of the two list registers wildcarded because 26.51 uses r14 and 26.60 r12), then function_start_of and slot_of. The two anchors are in different parts of the function and share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. The range check is a window around the slot. What changed in 6afa4e47-dadc375797a3d31a (preview 1.26.70.26): slot 16 (the vtable neighbours are the same: shared stubs at 17, functions at 18 and 20). The list walk is gone (the waypoint list is walked through helper calls), so recipe 1 is a pattern_any: alternative 0 is the list walk (26.51 to 26.63), alternative 1 is the start of the body (`mov rbx,r9; mov rsi,r8; mov r12,rdx; mov rdi,rcx; mov rax,[r8]; mov rax,[rax+disp]; mov rcx,r8; call [guard]; test rax,rax; je; mov r13,rax; mov rcx,rsi; mov rdx,rax; mov r8b,imm; call`). Recipe 0 is a pattern_any because the call to drawIcon has `mov rcx,reg` before the two leas now (alternative 1). Evidence on 6afa4e47: both recipes are in two parts of the one function (the same prologue, the same helper call order as the old function, the eight argument stores before the drawIcon call); the vtable neighbours of slot 16 line up with the old table. Class: would have survived with a better recipe (call shape) plus a real change in the waypoint walk. `hooked = true`: the loader hooks the function in this slot of the vtables its slot_of steps name; `signature` probes those slot targets across builds."
 
   recipe {
-    step "pattern" { bytes = "C7 84 24 ?? ?? ?? ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? 48 8D 55 ?? 4C 8D 85 ?? ?? ?? ?? E8" }
+    step "pattern_any" {
+      patterns = [
+        "C7 84 24 ?? ?? ?? ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? 48 8D 55 ?? 4C 8D 85 ?? ?? ?? ?? E8",
+        "C7 84 24 ?? ?? ?? ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? 4C 89 ?? 48 8D 55 ?? 4C 8D 85 ?? ?? ?? ?? E8",
+      ]
+    }
     step "function_start_of" {}
     step "slot_of" { vtable = "HudLocatorBarRenderer.vtable" }
   }
 
   recipe {
-    step "pattern" { bytes = "0F 57 C0 0F 29 85 ?? ?? ?? ?? 48 C7 85 ?? ?? ?? ?? ?? ?? ?? ?? 4D 8B AD ?? ?? ?? ?? 4D 8B ?? ?? 4D 39 ?? 74" }
+    step "pattern_any" {
+      patterns = [
+        "0F 57 C0 0F 29 85 ?? ?? ?? ?? 48 C7 85 ?? ?? ?? ?? ?? ?? ?? ?? 4D 8B AD ?? ?? ?? ?? 4D 8B ?? ?? 4D 39 ?? 74",
+        "4C 89 CB 4C 89 C6 49 89 D4 48 89 CF 49 8B 00 48 8B 40 ?? 4C 89 C1 FF 15 ?? ?? ?? ?? 48 85 C0 0F 84 ?? ?? ?? ?? 49 89 C5 48 89 F1 48 89 C2 41 B0 ?? E8",
+      ]
+    }
     step "function_start_of" {}
     step "slot_of" { vtable = "HudLocatorBarRenderer.vtable" }
   }
@@ -63,17 +74,28 @@ entry "HudLocatorBarRenderer.render" {
 entry "HudLocatorBarRenderer.drawIcon" {
   kind     = "function"
   hooked   = true
-  notes    = "The icon blit that draws one locator bar waypoint: 0x598a9d0 on 26.60. It has exactly one caller in the exe, HudLocatorBarRenderer.render (the call at 0x5746e85 on 26.60). The name is ours; the owner class is not proven (rcx is a renderer member of the BaseActorRenderContext at +60h). Arguments (26.60, checked in the caller and in the body): rcx the renderer, rdx BaseActorRenderContext*, r8 mce::TexturePtr const*, xmm3 x; on the stack [rsp+20h] y, [rsp+28h] u0, [rsp+30h] u1, [rsp+38h] v0, [rsp+40h] v1, [rsp+48h] w, [rsp+50h] h, [rsp+58h] 1.0, [rsp+60h] alpha, [rsp+68h] packed colour 0xAARRGGBB, [rsp+70h] 0xFFFFFFFF, [rsp+78h] 1.0, [rsp+80h] 1.0. It returns void. Recipe 0 is the body after the prologue (`movaps xmm6,xmm3; mov r15,r8 (r12 on 26.51, so the ModRM byte is a wildcard); mov r14,rdx; mov rsi,rcx; mov ebx,[rbp+..] (the colour); mov rax,[rdx+..]; mov rdi,[rax+..]; cmp byte ptr [rdi+..],imm; jne`), then function_start_of. Recipe 1 is the one call in render (the argument stores, `lea rdx,[rbp+..]; lea r8,[rbp+..]; call`), read as a branch target. The two anchors are in two functions and share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. Both recipes give 0x598a9d0 on 26.60 and 0x5596cc0 on 26.51."
+  notes    = "The icon blit that draws one locator bar waypoint: 0x598a9d0 on 26.60. It has exactly one caller in the exe, HudLocatorBarRenderer.render (the call at 0x5746e85 on 26.60). The name is ours; the owner class is not proven (rcx is a renderer member of the BaseActorRenderContext at +60h). Arguments (26.60, checked in the caller and in the body): rcx the renderer, rdx BaseActorRenderContext*, r8 mce::TexturePtr const*, xmm3 x; on the stack [rsp+20h] y, [rsp+28h] u0, [rsp+30h] u1, [rsp+38h] v0, [rsp+40h] v1, [rsp+48h] w, [rsp+50h] h, [rsp+58h] 1.0, [rsp+60h] alpha, [rsp+68h] packed colour 0xAARRGGBB, [rsp+70h] 0xFFFFFFFF, [rsp+78h] 1.0, [rsp+80h] 1.0. It returns void. Recipe 0 is the body after the prologue (`movaps xmm6,xmm3; mov r15,r8 (r12 on 26.51, so the ModRM byte is a wildcard); mov r14,rdx; mov rsi,rcx; mov ebx,[rbp+..] (the colour); mov rax,[rdx+..]; mov rdi,[rax+..]; cmp byte ptr [rdi+..],imm; jne`), then function_start_of. Recipe 1 is the one call in render (the argument stores, `lea rdx,[rbp+..]; lea r8,[rbp+..]; call`), read as a branch target. The two anchors are in two functions and share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. Both recipes give 0x598a9d0 on 26.60 and 0x5596cc0 on 26.51. What changed in 6afa4e47-dadc375797a3d31a (preview 1.26.70.26): the body no longer tests and clears the renderer state inline after the prologue (it sets up a callback object on the stack and calls a helper), so recipe 0 is a pattern_any whose alternative 1 reads the same argument moves (`movaps xmm6,xmm3; mov r12,r8; mov r14,rdx; mov rsi,rcx; mov rax,[rdx+28h]; mov rdi,[rax+0B0h]`) and the callback setup (`lea rax,[rip+..]; mov [rbp-..],rax; lea rax,[rbp-..]; mov [rbp-..],rax`). Recipe 1 is a chain: the eight argument stores and the leas before the call (alternatives for `mov rcx,reg` before the leas, which the new render has) are unique, then the call is found in the same function by `lea rdx,[rbp+..]; lea r8,[rbp+..]; call`. Evidence on 6afa4e47: recipe 1 reads the one call that has the eight stores in render (found from the old call), and recipe 0 matches a body with the same argument registers and the same xmm save list; both give the same function. Class: real code change (callee prologue) plus a better recipe (call shape)."
 
   recipe {
-    step "pattern" { bytes = "0F 28 F3 4D 89 ?? 49 89 D6 48 89 CE 8B 9D ?? ?? ?? ?? 48 8B 42 ?? 48 8B B8 ?? ?? ?? ?? 80 BF ?? ?? ?? ?? ?? 0F 85" }
+    step "pattern_any" {
+      patterns = [
+        "0F 28 F3 4D 89 ?? 49 89 D6 48 89 CE 8B 9D ?? ?? ?? ?? 48 8B 42 ?? 48 8B B8 ?? ?? ?? ?? 80 BF ?? ?? ?? ?? ?? 0F 85",
+        "0F 28 F3 4D 89 ?? 49 89 D6 48 89 CE 48 8B 42 ?? 48 8B B8 ?? ?? ?? ?? 48 8D 05 ?? ?? ?? ?? 48 89 45 ?? 48 8D 45 ?? 48 89 45 ??",
+      ]
+    }
     step "function_start_of" {}
   }
 
   recipe {
+    step "pattern_any" {
+      patterns = [
+        "C7 84 24 ?? ?? ?? ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? 48 8D 55 ?? 4C 8D 85 ?? ?? ?? ?? E8",
+        "C7 84 24 ?? ?? ?? ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? 4C 89 ?? 48 8D 55 ?? 4C 8D 85 ?? ?? ?? ?? E8",
+      ]
+    }
     step "pattern" {
-      bytes  = "C7 84 24 ?? ?? ?? ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? 48 8D 55 ?? 4C 8D 85 ?? ?? ?? ?? E8"
-      offset = 78
+      bytes  = "48 8D 55 ?? 4C 8D 85 ?? ?? ?? ?? E8"
+      offset = 11
     }
     step "operand" {
       index = 0

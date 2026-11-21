@@ -1,4 +1,4 @@
-use amml_abi::{AMML_API_VERSION, ModId};
+use amml_abi::ModId;
 
 use crate::{Api, SdkError};
 
@@ -10,8 +10,9 @@ pub trait AmmlMod {
     /// The mod name; it must equal `name` in `amml.hcl`. With the namespace it names the mod
     /// folder and the mod log file.
     const NAME: &'static str;
-    /// The lowest loader API version the mod accepts.
-    const API_VERSION: u32 = AMML_API_VERSION;
+    /// The lowest loader API version the mod accepts. The SDK reads only v1 fields, so it stays 2
+    /// when the loader API moves on.
+    const API_VERSION: u32 = 2;
 
     /// The mod id, `@<namespace>/<name>`: the module string for `Logger` and `ModDirs`.
     fn id() -> String {

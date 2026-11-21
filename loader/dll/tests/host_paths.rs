@@ -64,3 +64,17 @@ fn mod_data_root_is_amml_mod_data_under_local_app_data() {
 fn mod_data_root_is_none_without_local_app_data() {
     assert_eq!(HostPaths::mod_data_root(None), None);
 }
+
+#[test]
+fn loader_dirs_name_the_instance_and_the_redirected_data_folder() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = HostPaths::standalone(&root.path().join("Minecraft.Windows.exe"));
+
+    assert_eq!(paths.loader_dirs().instance, Some(root.path().to_path_buf()));
+    assert_eq!(paths.loader_dirs().game_data, None);
+
+    std::fs::create_dir_all(&paths.loader).unwrap();
+    std::fs::write(&paths.instance, "data_dir = \"profile\"\n").unwrap();
+
+    assert_eq!(paths.loader_dirs().game_data, Some(root.path().join("profile")));
+}

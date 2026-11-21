@@ -21,12 +21,12 @@ entry "BaseActorRenderer.ctor" {
 
 entry "BaseActorRenderer.size" {
   kind     = "field"
-  notes    = "sizeof(BaseActorRenderer): 0xB8 (184) in 26.51 (ActorShaderManager 0x38, then eight MaterialPtr of 16 bytes). The derived renderers start their own members right after it. Recipe 0 is a derived constructor (0x55a43d0): `push rbp; push rsi; sub rsp,imm; lea rbp,[rsp+..]; movaps [rbp+..],xmm6; mov qword ptr [rbp+..],-2; mov rsi,rcx; call BaseActorRenderer::ctor; lea rax,[rip+..]; mov [rsi],rax; lea rcx,[rsi+0B8h]`; the lea takes the address of the first derived member, which sits at the end of the base. Recipe 1 is the base constructor: the last material is stored through `lea rcx,[rax+0A8h]` (the eighth MaterialPtr, 16 bytes), so the size is that displacement plus 16. They are in two functions. The 26.51 header also gives the eighth material as the last member. The size is the number the mod passes to the game heap before it calls the constructor, and the size check of the BaseActorRenderer mirror of the mod (the depth-tested materials at 0x78 and 0x98 are read from the 26.51 header layout, not from entries). In 6ad79ee4-17d51891a1119914 (26.60) the value is still 0xB8: the constructor stores the eight materials at the same offsets. Both recipes derived on the cold run. Class: survived."
+  notes    = "sizeof(BaseActorRenderer): 0xB8 (184) in 26.51 (ActorShaderManager 0x38, then eight MaterialPtr of 16 bytes). The derived renderers start their own members right after it. Recipe 0 is a derived constructor, one of the many that call the base constructor and take the same value (the pattern must match one of them): `push rbp; push rsi; sub rsp,imm; lea rbp,[rsp+..]; movaps [rbp+..],xmm6; mov qword ptr [rbp+..],-2; mov rsi,rcx; call BaseActorRenderer::ctor; lea rax,[rip+..]; mov [rsi],rax; lea rcx,[rsi+0B8h]`; the lea takes the address of the first derived member, which sits at the end of the base. Recipe 1 is the base constructor: the last material is stored through `lea rcx,[rax+0A8h]` (the eighth MaterialPtr, 16 bytes), so the size is that displacement plus 16. It is a pattern_any with one alternative per shape: on 26.63 the lea is followed by `lea rdx,[rip+..]; lea r8,[rbp+..]; call`, on 70.26 by a `mov rax,imm64` and the frame stores of the name before the same `lea rdx` (the alternatives are scanned inside the constructor, where the lea with base rax is unique on both builds). They are in two functions. The 26.51 header also gives the eighth material as the last member. The size is the number the mod passes to the game heap before it calls the constructor, and the size check of the BaseActorRenderer mirror of the mod (the depth-tested materials at 0x78 and 0x98 are read from the 26.51 header layout, not from entries). In 6ad79ee4-17d51891a1119914 (26.60) the value is still 0xB8: the constructor stores the eight materials at the same offsets. Both recipes derived on the cold run. Class: survived on 26.60. What changed in 6afa4e47-dadc375797a3d31a (70.26): the size is still 0xB8, but the code around the last material store changed (recipe 1) and the derived constructor that recipe 0 used now has a small frame (`sub rsp,imm8`, `lea rbp,[rsp+..]` with a 1-byte displacement) and no 26.63 match for the old prologue; recipe 0 now matches the constructor of another derived renderer with the 1-byte frame (the same shape exists once on 26.63, at the same place in its callers of the base constructor, so the pattern is unique on both builds); the lea sits at offset 42 from the push of rbp. Would have survived with a better recipe. Evidence on 70.26: the callers of the 26.63 base constructor include the derived constructor that the new pattern matches on 26.63, and the callers of the 70.26 base constructor include the one it matches on 70.26 (the pattern is drafted from the shape common to the derived constructors); and recipe 1, drafted from the 26.63 base constructor, finds the last-material lea in the 70.26 base constructor (the same displacement, 0A8h, as in the old build)."
 
   recipe {
     step "pattern" {
-      bytes  = "55 56 48 81 EC ?? ?? ?? ?? 48 8D AC 24 ?? ?? ?? ?? 0F 29 75 ?? 48 C7 45 ?? ?? ?? ?? ?? 48 89 CE E8 ?? ?? ?? ?? 48 8D 05 ?? ?? ?? ?? 48 89 06 48 8D 8E ?? ?? ?? ??"
-      offset = 47
+      bytes  = "55 56 48 83 EC ?? 48 8D 6C 24 ?? 0F 29 75 ?? 48 C7 45 ?? ?? ?? ?? ?? 48 89 CE E8 ?? ?? ?? ?? 48 8D 05 ?? ?? ?? ?? 48 89 06 48 8D 8E ?? ?? ?? ??"
+      offset = 42
     }
     step "operand" {
       index = 1
@@ -38,8 +38,11 @@ entry "BaseActorRenderer.size" {
     step "ref" {
       entry = "BaseActorRenderer.ctor"
     }
-    step "pattern" {
-      bytes  = "48 8D 88 ?? ?? ?? ?? 48 8D 15 ?? ?? ?? ?? 4C 8D 45 ?? E8"
+    step "pattern_any" {
+      patterns = [
+        "48 8D 88 ?? ?? ?? ?? 48 8D 15 ?? ?? ?? ?? 4C 8D 45 ?? E8",
+        "48 8D 88 ?? ?? ?? ?? 48 B8 ?? ?? ?? ?? ?? ?? ?? ?? 48 89 45 ?? 48 8D 05 ?? ?? ?? ?? 48 89 45 ??",
+      ]
     }
     step "operand" {
       index = 1

@@ -26,6 +26,10 @@ pub enum ModLoadError {
     PathNotUtf8,
     #[error("the loader already holds {0} mods")]
     TooMany(usize),
+    #[error("feature `{feature}` requires the event `{event}`, which this game build does not offer")]
+    RequiredEvent { feature: String, event: String },
+    #[error("feature `{feature}` requires the area `{area}`, which this game build does not offer")]
+    RequiredArea { feature: String, area: String },
 }
 
 impl ModLoadError {
@@ -36,6 +40,7 @@ impl ModLoadError {
                 AmmlStatus::VERSION_MISMATCH
             }
             Self::Call { status, .. } => *status,
+            Self::RequiredEvent { .. } | Self::RequiredArea { .. } => AmmlStatus::NOT_AVAILABLE,
             Self::Library { .. }
             | Self::MissingExport(_)
             | Self::IdMismatch { .. }

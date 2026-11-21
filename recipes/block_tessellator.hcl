@@ -81,10 +81,15 @@ entry "BlockTessellator.setRegion" {
 entry "BlockTessellator.tessellateInWorld" {
   kind      = "function"
   msvc_name = "?tessellateInWorld@BlockTessellator@@QEAA_NAEAVTessellator@@AEBVBlock@@AEBVBlockPos@@_N@Z"
-  notes     = "bool BlockTessellator::tessellateInWorld(Tessellator&, Block const&, BlockPos const&, bool useCalcWithCache): rcx = this, rdx = tessellator, r8 = block, r9 = pos, [rsp+20h] at the call = the bool. It calls 54 of the per-shape tessellate functions next to it and itself; the item renderers call it and then Tessellator.end. Recipe 0 is the body head (`mov rdi,r9; mov r14,r8; mov rbx,rdx; mov rsi,rcx; movzx eax,byte ptr [rcx+..]; xorps xmm6,xmm6; cmp al,..; jne`), then function_start_of; it ends at `cmp al,imm8`, before the jne (near on 26.51, short on 26.60). Recipe 1 is the call in a function that tessellates over a region (`mov rcx,[r15+..]; mov rdx,[r15+..]; mov byte ptr [rsp+20h],1; mov r9,rdi; call`). Check function_start. Recipe 1 is now a pattern_any from `mov byte ptr [rsp+20h],1; mov r9,r64; call` on to the three RIP loads after the call, one alternative per shape: alternative 1 has the nop that 26.60 adds after the call. Both have the call at offset 8. What changed in 6ad79ee4-17d51891a1119914 (26.60): the jne after the head became short, and the region function keeps its object in r12 (an extra SIB byte) and has a nop after the call. The new function was accepted on two facts from the 26.51 function: the same body head and table walk (`movzx eax,byte ptr [rcx+78h]; ..; cmp al,1`, then the 18h-step walk to 138h), and the same callers (7 on each build, including the call to itself and the call with the bool 1 in the region function that calls BlockTessellator.setRegion). Would have survived with a better recipe."
+  notes     = "bool BlockTessellator::tessellateInWorld(Tessellator&, Block const&, BlockPos const&, bool useCalcWithCache): rcx = this, rdx = tessellator, r8 = block, r9 = pos, [rsp+20h] at the call = the bool. It calls 54 of the per-shape tessellate functions next to it and itself; the item renderers call it and then Tessellator.end. Recipe 0 is the body head (`mov rdi,r9; mov r14,r8; mov rbx,rdx; mov rsi,rcx; movzx eax,byte ptr [rcx+..]; xorps xmm6,xmm6; cmp al,..; jne`), then function_start_of; it ends at `cmp al,imm8`, before the jne (near on 26.51, short on 26.60). Recipe 1 is the call in a function that tessellates over a region (`mov rcx,[r15+..]; mov rdx,[r15+..]; mov byte ptr [rsp+20h],1; mov r9,rdi; call`). Check function_start. Recipe 1 is now a pattern_any from `mov byte ptr [rsp+20h],1; mov r9,r64; call` on to the three RIP loads after the call, one alternative per shape: alternative 1 has the nop that 26.60 adds after the call. Both have the call at offset 8. What changed in 6ad79ee4-17d51891a1119914 (26.60): the jne after the head became short, and the region function keeps its object in r12 (an extra SIB byte) and has a nop after the call. The new function was accepted on two facts from the 26.51 function: the same body head and table walk (`movzx eax,byte ptr [rcx+78h]; ..; cmp al,1`, then the 18h-step walk to 138h), and the same callers (7 on each build, including the call to itself and the call with the bool 1 in the region function that calls BlockTessellator.setRegion). Would have survived with a better recipe. What changed in 6afa4e47-dadc375797a3d31a (1.26.70.26): a stack cookie (mov rax,[rip+..]; xor rax,rsp; mov [rsp+..],rax) now sits between the register moves and the head compare, and the region function passes the block in r8 from rbx (an extra mov), so recipe 0 and recipe 1 each got a second alternative. The new function has 7 direct callers (7 on 6aed1906) and the same table walk (cmp rcx,138h with the 18h step) as the old one. Class: would have survived with a better recipe."
 
   recipe {
-    step "pattern" { bytes = "4C 89 CF 4D 89 C6 48 89 D3 48 89 CE 0F B6 41 ?? 0F 57 F6 3C ??" }
+    step "pattern_any" {
+      patterns = [
+        "4C 89 CF 4D 89 C6 48 89 D3 48 89 CE 0F B6 41 ?? 0F 57 F6 3C ??",
+        "4C 89 CF 4D 89 C6 48 89 D3 48 89 CE 48 8B 05 ?? ?? ?? ?? 48 31 E0 48 89 84 24 ?? ?? ?? ?? 0F B6 41 ?? 0F 57 F6 3C ??",
+      ]
+    }
     step "function_start_of" {}
   }
 
@@ -93,6 +98,7 @@ entry "BlockTessellator.tessellateInWorld" {
       patterns = [
         "C6 44 24 ?? ?? 49 89 ?? E8 ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 8B 0D ?? ?? ?? ?? 48 8B 15",
         "C6 44 24 ?? ?? 49 89 ?? E8 ?? ?? ?? ?? 90 48 8B 05 ?? ?? ?? ?? 48 8B 0D ?? ?? ?? ?? 48 8B 15",
+        "?? ?? 49 89 ?? 49 89 ?? E8 ?? ?? ?? ?? 90 48 83 C6 ?? 48 39 FE",
       ]
       offset = 8
     }

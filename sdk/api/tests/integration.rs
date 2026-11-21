@@ -1,0 +1,32 @@
+#![allow(clippy::unwrap_used)]
+
+mod chat;
+mod chord;
+mod client;
+mod container_contents;
+mod container_screen;
+mod ctx;
+mod dirs;
+mod events;
+mod input;
+mod input_hold_parity;
+mod inventory;
+mod inventory_request;
+mod join_server_result_ext;
+mod key_code;
+mod lighting;
+mod locator_bar;
+mod macros;
+mod mod_glue;
+mod network;
+mod overlay;
+mod registry;
+mod screen;
+mod support;
+mod testing;
+mod textures;
+mod ui_batch_contract;
+mod ui_draw;
+mod ui_input;
+mod uses;
+mod window;

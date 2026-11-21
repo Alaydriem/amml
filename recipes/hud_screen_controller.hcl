@@ -38,16 +38,26 @@ entry "HudScreenController.vtable" {
 
 entry "HudScreenController.tick" {
   kind     = "vslot"
-  notes    = "Slot of ui::DirtyFlag HudScreenController::tick() in the screen controller vtable: 2 on 26.51 (IScreenController header order: dtor 0, preFrameTick 1, tick 2). The function named by the text `virtual ui::DirtyFlag __cdecl EDUPlayScreenController::tick(void)` sits in slot 2 of its table, after the shared empty preFrameTick. The HudScreenController override first ticks a member of the screen model (`mov rcx,[rcx+0BF0h]; call`), then calls MinecraftScreenController::tick. Recipe 0 is that head (`mov rsi,rcx; mov rcx,[rcx+..]; call; mov rcx,rsi; call; mov ecx,[rsi+..]`), then function_start_of and slot_of HudScreenController.vtable. Recipe 1 is a member test later in the body (`cmp dword ptr [rcx+..],..; je; xorps xmm0,xmm0; movaps [rbp+..],xmm0; mov eax,[rcx+..]; test eax,eax`), then function_start_of and slot_of. The two anchors share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. Range window 0..8 (the interface has 6 virtuals). The ModRM bytes of the compare and the load in recipe 1 are wildcards. Value 2 on both builds. What changed in 6ad79ee4-17d51891a1119914 (26.60): the weak_ptr lock in the body uses rdx for the control block (rcx on 26.51), so recipe 1 did not match; the vtable is HudScreenController.vtable on both builds and recipe 0 agrees. Would have survived with a better recipe."
+  notes    = "Slot of ui::DirtyFlag HudScreenController::tick() in the screen controller vtable: 2 on 26.51 (IScreenController header order: dtor 0, preFrameTick 1, tick 2). The function named by the text `virtual ui::DirtyFlag __cdecl EDUPlayScreenController::tick(void)` sits in slot 2 of its table, after the shared empty preFrameTick. The HudScreenController override first ticks a member of the screen model (`mov rcx,[rcx+0BF0h]; call`), then calls MinecraftScreenController::tick. Recipe 0 is that head (`mov rsi,rcx; mov rcx,[rcx+..]; call; mov rcx,rsi; call; mov ecx,[rsi+..]`), then function_start_of and slot_of HudScreenController.vtable. Recipe 1 is a member test later in the body (`cmp dword ptr [rcx+..],..; je; xorps xmm0,xmm0; movaps [rbp+..],xmm0; mov eax,[rcx+..]; test eax,eax`), then function_start_of and slot_of. The two anchors share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. Range window 0..8 (the interface has 6 virtuals). The ModRM bytes of the compare and the load in recipe 1 are wildcards. Value 2 on both builds. What changed in 6ad79ee4-17d51891a1119914 (26.60): the weak_ptr lock in the body uses rdx for the control block (rcx on 26.51), so recipe 1 did not match; the vtable is HudScreenController.vtable on both builds and recipe 0 agrees. Would have survived with a better recipe. What changed in 6afa4e47-dadc375797a3d31a (1.26.70.26): the head no longer loads the screen model member and calls it before the base tick (one call to a helper follows `mov rsi,rcx`), and the weak_ptr test is a short je; each recipe has a second alternative. Evidence: the old body pattern (the counter at +0D94h, then the loads at +0E18h and +0C0h) matches once on each build, and the vtable neighbours of slot 2 (the identical bodies in slots 3 and 7, the thunks in slots 1, 4 and 5) line up on both builds. Class: would have survived with a better recipe."
 
   recipe {
-    step "pattern" { bytes = "48 89 CE 48 8B 89 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 89 F1 E8 ?? ?? ?? ?? 8B 8E ?? ?? ?? ??" }
+    step "pattern_any" {
+      patterns = [
+        "48 89 CE 48 8B 89 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 89 F1 E8 ?? ?? ?? ?? 8B 8E ?? ?? ?? ??",
+        "48 89 CE E8 ?? ?? ?? ?? 8B 8E ?? ?? ?? ?? 85 C9 7F ?? FF C1 89 8E ?? ?? ?? ??",
+      ]
+    }
     step "function_start_of" {}
     step "slot_of" { vtable = "HudScreenController.vtable" }
   }
 
   recipe {
-    step "pattern" { bytes = "83 ?? ?? ?? 0F 84 ?? ?? ?? ?? 0F 57 C0 0F 29 85 ?? ?? ?? ?? 8B ?? ?? 85 C0" }
+    step "pattern_any" {
+      patterns = [
+        "83 ?? ?? ?? 0F 84 ?? ?? ?? ?? 0F 57 C0 0F 29 85 ?? ?? ?? ?? 8B ?? ?? 85 C0",
+        "48 85 ?? 0F 84 ?? ?? ?? ?? 83 ?? ?? ?? 74 ?? 0F 57 C0 0F 29 45 ?? 8B ?? ??",
+      ]
+    }
     step "function_start_of" {}
     step "slot_of" { vtable = "HudScreenController.vtable" }
   }

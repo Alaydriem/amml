@@ -22,16 +22,26 @@ impl ModGlue {
             let api = unsafe { Api::from_raw(api, M::API_VERSION) }?;
             ModRuntime::install(api, &M::id());
             M::load(&api)?;
-            let block = AmmlModInfo {
-                size: AmmlModInfo::SIZE_V2,
-                api_version: M::API_VERSION,
-                name: AmmlStr::from_str(M::NAME),
-                namespace: AmmlStr::from_str(M::NAMESPACE),
-            };
-            // SAFETY: the loader passes a writable AmmlModInfo; `name` and `namespace` point to static strings.
-            unsafe { info.write(block) };
+            // SAFETY: the loader passes a block of at least `SIZE_V2` bytes (an older loader has no
+            // more). Only the v2 fields are written, so `uses` and anything after offset 40 stay
+            // untouched; `name` and `namespace` point to static strings.
+            unsafe { Self::write_v2(info, M::API_VERSION, M::NAME, M::NAMESPACE) };
             Ok(())
         })
+    }
+
+    /// Writes the four v2 fields of `info` and nothing else.
+    ///
+    /// # Safety
+    /// `info` must be valid for writes of the first `AmmlModInfo::SIZE_V2` bytes, suitably aligned.
+    unsafe fn write_v2(info: *mut AmmlModInfo, api_version: u32, name: &'static str, namespace: &'static str) {
+        // SAFETY: the caller guarantees the v2 prefix is writable; each field lies within it.
+        unsafe {
+            core::ptr::addr_of_mut!((*info).size).write(AmmlModInfo::SIZE_V2);
+            core::ptr::addr_of_mut!((*info).api_version).write(api_version);
+            core::ptr::addr_of_mut!((*info).name).write(AmmlStr::from_str(name));
+            core::ptr::addr_of_mut!((*info).namespace).write(AmmlStr::from_str(namespace));
+        }
     }
 
     pub fn enable<M: AmmlMod>() -> AmmlStatus {

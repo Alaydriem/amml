@@ -130,7 +130,7 @@ impl AmmlMod for Echo {
     const NAME: &'static str = "echo";
 
     #[cfg(feature = "newer-api")]
-    const API_VERSION: u32 = 3;
+    const API_VERSION: u32 = 4;
 
     fn enable(api: &Api) -> Result<(), SdkError> {
         #[cfg(feature = "panic-enable")]

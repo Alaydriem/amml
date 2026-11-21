@@ -92,23 +92,15 @@ entry "TextureGroup.baseOffset" {
 
 entry "ScreenContext.meshContext" {
   kind  = "field"
-  notes = "Offset of the mce::MeshContext base in ScreenContext: 10h on 26.51 and 26.60, after the 12-byte UIScreenContext base, aligned to 8. Mesh.renderMesh takes the MeshContext&, so its callers load the ScreenContext and add this offset (`mov rdx,[reg+28h]; add rdx,10h`). Recipe 0 (26.60) is a call of Mesh.renderMesh with a material and a texture variant from rip-relative globals (`mov rdx,[rsi+..]; add rdx,imm8; lea rax,[rbp+..]; mov [rsp+30h],rax; mov qword ptr [rsp+38h],0; mov dword ptr [rsp+28h],0; mov dword ptr [rsp+20h],0; lea rcx,[rip+..]; lea r8,[rip+..]; lea r9,[rbp+..]; call`). Recipe 1 (26.51 and 26.60) is a call that passes a material at +600h of its object (`mov rdx,[reg+..]; lea r8,[rbx+..]; add rdx,imm8; lea rax,[rbp+..]; ...; lea r9,[rbp+..]; mov rcx,r15; call`); the first instruction's REX and ModRM bytes are wildcards (rdi on 26.51, r14 on 26.60). Both read the immediate of the add. The two sites are in two functions. Every displacement and immediate byte is a wildcard. Range window 8h..40h."
+  notes = "Offset of the mce::MeshContext base in ScreenContext: 10h on 26.51, 26.60 and later, after the 12-byte UIScreenContext base, aligned to 8. Mesh.renderMesh takes the MeshContext&, so its callers load the ScreenContext and add this offset (`mov rdx,[reg+28h]; add rdx,10h`: the ScreenContext is the MinecraftUIRenderContext member at +28h). Recipe 0 is a pattern_any with one alternative for each shape of the draw function that loads the ScreenContext from a stack slot and adds the offset to it (`mov rcx,[rbp+..]; add rcx,imm8; mov [rbp+..],rcx`): alternative 0 is followed by `mov rax,[rax+18h]; mov [rbp+..],rax` (26.63), alternative 1 by `test al,al; mov rdx,[rbp+..]` (1.26.70.26); each matches once on its own build and zero times on the other. It reads the immediate of the add. Every register, displacement and immediate byte is a wildcard. Range window 8h..40h. The entry has one recipe and a range check (the rule for a field). What changed in 6afa4e47-dadc375797a3d31a (preview 1.26.70.26): the two 26.63 call-site recipes no longer match, because the call arguments are built in another order and the texture argument is another type; the offset is the same. Class: would have survived with a better recipe. Evidence on 1.26.70.26: (1) a pattern drafted from the head of the 26.63 draw function (`mov rsi,[rdx+28h]; mov rax,[r8]; mov [rbp+..],rax; mov r14,[r8+18h]; movss xmm6,[rdx+0B0h]`) matches once on each build, and the function it finds on 1.26.70.26 holds the alternative-1 match, with the ScreenContext taken from the member at +28h as on 26.63; (2) the members of the MeshContext base that resolve on this build lie at the offsets that a base of 10h gives: camera 18h (base + 8), constantBuffers 20h (base + 10h), currentShaderColor 30h (base + 20h), each found from its own code."
 
   recipe {
-    step "pattern" {
-      bytes  = "48 8B 56 ?? 48 83 C2 ?? 48 8D 85 ?? ?? ?? ?? 48 89 44 24 ?? 48 C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? 48 8D 0D ?? ?? ?? ?? 4C 8D 05 ?? ?? ?? ?? 4C 8D 4D ?? E8"
-      offset = 4
-    }
-    step "operand" {
-      index = 1
-      kind  = "immediate"
-    }
-  }
-
-  recipe {
-    step "pattern" {
-      bytes  = "?? 8B ?? ?? 4C 8D 83 ?? ?? ?? ?? 48 83 C2 ?? 48 8D 85 ?? ?? ?? ?? 48 89 44 24 ?? 48 C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? C7 44 24 ?? ?? ?? ?? ?? 4C 8D 8D ?? ?? ?? ?? 4C 89 F9 E8"
-      offset = 11
+    step "pattern_any" {
+      patterns = [
+        "48 8B 8D ?? ?? ?? ?? 48 83 C1 ?? 48 89 8D ?? ?? ?? ?? 48 8B 40 ?? 48 89 85",
+        "48 8B 8D ?? ?? ?? ?? 48 83 C1 ?? 48 89 8D ?? ?? ?? ?? 84 C0 48 8B 95",
+      ]
+      offset = 7
     }
     step "operand" {
       index = 1
@@ -147,10 +139,15 @@ entry "ScreenContext.camera" {
 
 entry "ScreenContext.constantBuffers" {
   kind  = "field"
-  notes = "Offset in ScreenContext of the `GlobalConstantBuffers&` member of its MeshContext base, stored as a pointer: 20h on 26.51 and 26.60. The shader setup function that calls ActorShaderManager.setEntityConstants (the function of GlobalConstantBuffers.entityConstantBuffer) loads it from the ScreenContext in rcx at its head: `mov r15,[rcx+20h]; mov rax,[r8+..]; movss xmm8,[rax]`; it adds entityConstantBuffer to r15 later. The recipe reads the displacement of that load. It matches once on 26.51 and once on 26.60. Every displacement byte is a wildcard. Range window 10h..40h."
+  notes = "Offset in ScreenContext of the `GlobalConstantBuffers&` member of its MeshContext base, stored as a pointer: 20h on 26.51 and 26.60. The shader setup function that calls ActorShaderManager.setEntityConstants (the function of GlobalConstantBuffers.entityConstantBuffer) loads it from the ScreenContext in rcx at its head: `mov r15,[rcx+20h]; mov rax,[r8+..]; movss xmm8,[rax]`; it adds entityConstantBuffer to r15 later. The recipe reads the displacement of that load. It matches once on 26.51 and once on 26.60. Every displacement byte is a wildcard. Range window 10h..40h. The recipe is a pattern_any with one alternative for each shape of the load. What changed in 6afa4e47-dadc375797a3d31a (preview 1.26.70.26): the compiler folded the entityConstantBuffer offset into the load (`mov r14d,imm32; add r14,[rcx+20h]` instead of `mov r15,[rcx+20h]`), so the second alternative reads the same member from the add. Class: would have survived with a better recipe. Evidence on 1.26.70.26: (1) the second alternative, drafted from the 26.63 setup function (the load of the member and the three float reads through the pointer at +240h of the third argument), matches once; (2) the function it matches is the one that calls ActorShaderManager.setEntityConstants, as the 26.63 function does, and it adds the entityConstantBuffer offset to the member."
 
   recipe {
-    step "pattern" { bytes = "4C 8B 79 ?? 49 8B 80 ?? ?? ?? ?? F3 44 0F 10 00" }
+    step "pattern_any" {
+      patterns = [
+        "4C 8B 79 ?? 49 8B 80 ?? ?? ?? ?? F3 44 0F 10 00",
+        "4C 03 ?? ?? 49 8B 80 ?? ?? ?? ?? F3 44 0F 10 00",
+      ]
+    }
     step "operand" {
       index = 1
       kind  = "displacement"
@@ -165,10 +162,10 @@ entry "ScreenContext.constantBuffers" {
 
 entry "ScreenContext.currentShaderColor" {
   kind  = "field"
-  notes = "Offset in ScreenContext of the `mce::ShaderColor&` member of its MeshContext base, stored as a pointer: 30h on 26.51 and 26.60 (MeshContext at +10h: renderContext +0, camera +8, constantBuffers +10h, constantBufferManager +18h, currentShaderColor +20h). levels writes the colour and the dirty flag through this pointer around each world mesh draw. A flat-colour quad draw (26.60 0x24e5500, 26.51 0x15888b0; the ScreenContext in rdx) stores its colour argument into the shader colour and marks it dirty, then begins a quad on the context's tessellator: `mov rcx,[rdx+30h]; movups xmm0,[rax]; movups [rcx],xmm0; mov byte ptr [rcx+10h],1; mov rdi,[rdx+0B0h]; mov byte ptr [rsp+20h],0; mov rcx,rdi; mov r8b,1; mov r9d,4; call` (the tessellator load is +0B8h on 26.51). The recipe reads the displacement of the first load. It matches once on 26.51 and once on 26.60. Every register, displacement and immediate byte is a wildcard. Range window 18h..60h."
+  notes = "Offset in ScreenContext of the `mce::ShaderColor&` member of its MeshContext base, stored as a pointer: 30h on 26.51 and 26.60 (MeshContext at +10h: renderContext +0, camera +8, constantBuffers +10h, constantBufferManager +18h, currentShaderColor +20h). levels writes the colour and the dirty flag through this pointer around each world mesh draw. A flat-colour quad draw (26.60 0x24e5500, 26.51 0x15888b0; the ScreenContext in rdx) stores its colour argument into the shader colour and marks it dirty, then begins a quad on the context's tessellator: `mov rcx,[rdx+30h]; movups xmm0,[rax]; movups [rcx],xmm0; mov byte ptr [rcx+10h],1; mov rdi,[rdx+0B0h]; mov byte ptr [rsp+20h],0; mov rcx,rdi; mov r8b,1; mov r9d,4; call` (the tessellator load is +0B8h on 26.51). The recipe reads the displacement of the first load. It matches once on 26.51 and once on 26.60. Every register, displacement and immediate byte is a wildcard. The pattern ends at the load of the tessellator: the code after it differs between builds. Range window 18h..60h. What changed in 6afa4e47-dadc375797a3d31a (preview 1.26.70.26): the code after the tessellator load builds a std::function before the begin call, so the old tail (`mov byte ptr [rsp+20h],0; mov rcx,rdi; mov r8b,1; mov r9d,4`) is no longer adjacent; the pattern now stops after the tessellator load. Class: would have survived with a better recipe. Evidence on 1.26.70.26: (1) the shorter pattern, drafted from the 26.63 colour store, matches once on both builds; (2) the function that it matches holds the same four vertex calls after the begin call, with the same xmm sources (a run of four `xorps xmm3; mov rcx,rdi; movaps xmm1,..; movaps xmm2,..; call`) that a pattern drafted from the 26.63 vertex run finds once in this build, in this function."
 
   recipe {
-    step "pattern" { bytes = "48 8B ?? ?? 0F 10 ?? 0F 11 ?? C6 ?? ?? ?? 48 8B ?? ?? ?? ?? ?? C6 44 24 ?? ?? 48 89 ?? 41 B0 ?? 41 B9 ?? ?? ?? ?? E8" }
+    step "pattern" { bytes = "48 8B ?? ?? 0F 10 ?? 0F 11 ?? C6 ?? ?? ?? 48 8B ?? ?? ?? ?? ??" }
     step "operand" {
       index = 1
       kind  = "displacement"

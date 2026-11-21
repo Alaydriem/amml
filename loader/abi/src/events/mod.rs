@@ -1,0 +1,128 @@
+//! The event structs of API v3. Each starts with an `AmmlEventHeader` in field `header`.
+
+pub mod block_break_continue;
+pub mod block_break_start;
+pub mod camera_fov;
+pub mod chat_message_added;
+pub mod client_tick;
+pub mod container_slot_hover;
+pub mod container_slot_unhover;
+pub mod dimension_changing;
+pub mod frame_present;
+pub mod frame_presented;
+pub mod frame_update;
+pub mod game_tick;
+pub mod gamepad_poll;
+pub mod idle_screen_open;
+pub mod injected_input_released;
+pub mod input_lease_lost;
+pub mod input_lease_resumed;
+pub mod input_lease_suspended;
+pub mod inventory_request_done;
+pub mod item_hovertext;
+pub mod item_use;
+pub mod item_use_on_block;
+pub mod join_server_result;
+pub mod join_started;
+pub mod key_input;
+pub mod locator_bar_icon_draw;
+pub mod look_delta;
+pub mod mods_loaded;
+pub mod mouse_grab;
+pub mod mouse_input;
+pub mod player_attack;
+pub mod player_list_update;
+pub mod player_move_input;
+pub mod player_skin_changed;
+pub mod provider_gone;
+pub mod provider_ready;
+pub mod render_device_reset;
+pub mod screen_changed;
+pub mod screen_closing;
+pub mod screen_render;
+pub mod screenshot_taken;
+pub mod screenshot_written;
+pub mod shutdown;
+pub mod surface_lost;
+pub mod swap_chain_resize;
+pub mod swap_chain_resized;
+pub mod textures_reloaded;
+pub mod ui_pointer;
+pub mod ui_scroll;
+pub mod window_changed;
+pub mod window_char;
+pub mod window_cursor;
+pub mod window_focus;
+pub mod window_pointer;
+pub mod window_size;
+pub mod world_joined;
+pub mod world_left;
+
+pub use block_break_continue::BlockBreakContinue;
+pub use block_break_start::BlockBreakStart;
+pub use camera_fov::CameraFov;
+pub use chat_message_added::ChatMessageAdded;
+pub use client_tick::ClientTick;
+pub use container_slot_hover::ContainerSlotHover;
+pub use container_slot_unhover::ContainerSlotUnhover;
+pub use dimension_changing::DimensionChanging;
+pub use frame_present::FramePresent;
+pub use frame_presented::FramePresented;
+pub use frame_update::FrameUpdate;
+pub use game_tick::GameTick;
+pub use gamepad_poll::GamepadPoll;
+pub use idle_screen_open::IdleScreenOpen;
+pub use injected_input_released::InjectedInputReleased;
+pub use input_lease_lost::InputLeaseLost;
+pub use input_lease_resumed::InputLeaseResumed;
+pub use input_lease_suspended::InputLeaseSuspended;
+pub use inventory_request_done::InventoryRequestDone;
+pub use item_hovertext::ItemHovertext;
+pub use item_use::ItemUse;
+pub use item_use_on_block::ItemUseOnBlock;
+pub use join_server_result::JoinServerResult;
+pub use join_started::JoinStarted;
+pub use key_input::KeyInput;
+pub use locator_bar_icon_draw::LocatorBarIconDraw;
+pub use look_delta::LookDelta;
+pub use mods_loaded::ModsLoaded;
+pub use mouse_grab::MouseGrab;
+pub use mouse_input::MouseInput;
+pub use player_attack::PlayerAttack;
+pub use player_list_update::PlayerListUpdate;
+pub use player_move_input::PlayerMoveInput;
+pub use player_skin_changed::PlayerSkinChanged;
+pub use provider_gone::ProviderGone;
+pub use provider_ready::ProviderReady;
+pub use render_device_reset::RenderDeviceReset;
+pub use screen_changed::ScreenChanged;
+pub use screen_closing::ScreenClosing;
+pub use screen_render::ScreenRender;
+pub use screenshot_taken::ScreenshotTaken;
+pub use screenshot_written::ScreenshotWritten;
+pub use shutdown::Shutdown;
+pub use surface_lost::SurfaceLost;
+pub use swap_chain_resize::SwapChainResize;
+pub use swap_chain_resized::SwapChainResized;
+pub use textures_reloaded::TexturesReloaded;
+pub use ui_pointer::UiPointer;
+pub use ui_scroll::UiScroll;
+pub use window_changed::WindowChanged;
+pub use window_char::WindowChar;
+pub use window_cursor::WindowCursor;
+pub use window_focus::WindowFocus;
+pub use window_pointer::WindowPointer;
+pub use window_size::WindowSize;
+pub use world_joined::WorldJoined;
+pub use world_left::WorldLeft;
+
+/// An event struct: its id, layout version and whether a listener may cancel it.
+pub trait AmmlEvent {
+    /// The id a mod gives to `AmmlEventsTable::listen`.
+    const ID: &'static str;
+    /// The layout version of the struct.
+    const VERSION: u32 = 1;
+    /// Whether a listener may cancel the event. For an event that cannot be cancelled the loader
+    /// clears `cancelled` before every listener call and ignores it afterwards.
+    const CANCELLABLE: bool = false;
+}

@@ -1,9 +1,9 @@
 use core::ffi::c_void;
 
-use crate::{AmmlLogLevel, AmmlStatus, AmmlStr};
+use crate::{AmmlLogLevel, AmmlServices, AmmlStatus, AmmlStr};
 
 /// Version of the `AmmlApi` table this crate describes.
-pub const AMML_API_VERSION: u32 = 2;
+pub const AMML_API_VERSION: u32 = 3;
 
 /// Resolves an entry id to its value (RVA, slot index or byte offset) in `out`.
 pub type ResolveFn = unsafe extern "C" fn(id: AmmlStr, out: *mut u64) -> AmmlStatus;
@@ -39,14 +39,16 @@ pub type HeapDeleteFn = unsafe extern "C" fn(*mut u8, usize);
 /// Nothing is written on error. An unknown `kind` returns `INVALID_ARGUMENT`.
 pub type ModDirFn = unsafe extern "C" fn(module: AmmlStr, kind: u8, out: *mut AmmlStr) -> AmmlStatus;
 
-/// The function table the loader hands to a mod (v1).
+/// The function table the loader hands to a mod (v1 fields, then `services` from v3).
 ///
 /// A mod accepts a table whose `version` is at least its own and reads only fields that fit within `size`.
 ///
 /// A table from an older loader can be shorter than this struct. A mod must read `size` and
-/// `version` first through raw-pointer field reads (`AmmlApi::header`) and must never form an
-/// `&AmmlApi` unless `size >= AmmlApi::SIZE_V1`.
+/// `version` first through raw-pointer field reads (`AmmlApi::header`) and must form an
+/// `&AmmlApi` only when `size >= AmmlApi::SIZE_V3`; otherwise use `header`, `services`, `supports` or
+/// per-field raw reads.
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct AmmlApi {
     pub size: u32,
     pub version: u32,
@@ -58,11 +60,23 @@ pub struct AmmlApi {
     pub heap_new: HeapNewFn,
     pub heap_delete: HeapDeleteFn,
     pub mod_dir: ModDirFn,
+    pub services: *const AmmlServices,
 }
+
+// SAFETY: the table is read-only data; `services` points to tables the loader keeps alive and never mutates.
+#[allow(unsafe_code)]
+unsafe impl Send for AmmlApi {}
+
+// SAFETY: as for `Send`; shared reads of the table need no synchronization.
+#[allow(unsafe_code)]
+unsafe impl Sync for AmmlApi {}
 
 impl AmmlApi {
     /// `size` of a v1 table. A literal, so it keeps its meaning when a later version adds fields.
     pub const SIZE_V1: u32 = 72;
+
+    /// `size` of a v3 table: v1 plus `services`.
+    pub const SIZE_V3: u32 = 80;
 
     /// Reads `(size, version)` through a raw pointer, touching only the two leading fields.
     /// Returns `None` for a null pointer.
@@ -81,15 +95,46 @@ impl AmmlApi {
         Some((size, version))
     }
 
+    /// Reads the `services` pointer through a raw pointer. Gives `None` for a null table, a table
+    /// shorter than `SIZE_V3` or a null `services` field. A reader must check `size`, not only
+    /// `version`: an older loader can report a newer-looking version with a shorter table.
+    ///
+    /// # Safety
+    /// A non-null `api` must point to at least `size` readable bytes, suitably aligned.
+    #[allow(unsafe_code)]
+    pub unsafe fn services(api: *const AmmlApi) -> Option<*const AmmlServices> {
+        if api.is_null() {
+            return None;
+        }
+        // SAFETY: `api` is non-null and the caller guarantees the leading `size` field is readable.
+        let size = unsafe { core::ptr::addr_of!((*api).size).read() };
+        if size < Self::SIZE_V3 {
+            return None;
+        }
+        // SAFETY: `size` covers the `services` field, so it is readable.
+        let services = unsafe { core::ptr::addr_of!((*api).services).read() };
+        if services.is_null() { None } else { Some(services) }
+    }
+
     /// Whether the field at `field_offset` with `field_size` bytes lies entirely within `size`.
     ///
-    /// Valid only on a full-size table (`size >= SIZE_V1`); read `header` first on anything shorter.
-    pub fn supports(&self, field_offset: usize, field_size: usize) -> bool {
+    /// Reads only the leading `size` field, so it is valid on a table of any length of at least 4
+    /// bytes. A null `api` supports nothing.
+    ///
+    /// # Safety
+    /// A non-null `api` must point to at least 4 readable bytes, suitably aligned.
+    #[allow(unsafe_code)]
+    pub unsafe fn supports(api: *const AmmlApi, field_offset: usize, field_size: usize) -> bool {
+        if api.is_null() {
+            return false;
+        }
+        // SAFETY: `api` is non-null and the caller guarantees the leading `size` field is readable.
+        let size = unsafe { core::ptr::addr_of!((*api).size).read() };
         match field_offset.checked_add(field_size) {
-            Some(end) => end <= self.size as usize,
+            Some(end) => end <= size as usize,
             None => false,
         }
     }
 }
 
-const _: () = assert!(core::mem::size_of::<AmmlApi>() == AmmlApi::SIZE_V1 as usize);
+const _: () = assert!(core::mem::size_of::<AmmlApi>() == AmmlApi::SIZE_V3 as usize);

@@ -22,4 +22,10 @@ impl Callback {
     pub fn allows_hooks(self) -> bool {
         matches!(self, Self::Load | Self::Enable)
     }
+
+    /// Whether a mod may listen to an event or provide a table while this callback runs: only in
+    /// load and enable.
+    pub fn allows_services(self) -> bool {
+        matches!(self, Self::Load | Self::Enable)
+    }
 }

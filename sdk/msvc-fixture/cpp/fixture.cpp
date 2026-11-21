@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #define FX extern "C"
@@ -283,4 +284,24 @@ FX int fx_function_ref_call(FunctionRefShape ref, void* a, void* b) {
     trues += ref.thunk(ref.object, first, &second, nullptr) ? 1 : 0;
     trues += ref.thunk(ref.object, second, nullptr, &first) ? 1 : 0;
     return trues;
+}
+
+using CoordinatorMap = std::unordered_map<int, std::shared_ptr<int>>;
+
+FX void* fx_umap_make(int count) {
+    auto* m = new CoordinatorMap();
+    for (int i = 0; i < count; ++i) (*m)[i * 10] = std::make_shared<int>(i * 100);
+    return m;
+}
+
+FX void fx_umap_delete(void* m) { delete static_cast<CoordinatorMap*>(m); }
+
+FX void* fx_umap_head(void* m) { return static_cast<CoordinatorMap*>(m)->end()._Ptr; }
+
+FX std::size_t fx_sizeof_umap() { return sizeof(CoordinatorMap); }
+
+FX int fx_vec_int_sum(const void* v) {
+    int sum = 0;
+    for (int x : *static_cast<const std::vector<int>*>(v)) sum += x;
+    return sum;
 }

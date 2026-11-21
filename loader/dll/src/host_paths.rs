@@ -1,7 +1,7 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use crate::LoaderDirs;
+use crate::{InstanceSettings, LoaderDirs};
 
 /// Where the loader keeps its files, derived from the game executable.
 ///
@@ -83,8 +83,12 @@ impl HostPaths {
         local_app_data.map(|root| PathBuf::from(root).join(Self::MODS_FOLDER).join(Self::MOD_DATA_FOLDER))
     }
 
-    /// The folders handed to `LoaderState`.
+    /// The folders handed to `LoaderState`: the instance folder is `<game>`, and the game data folder
+    /// is the `data_dir` of `instance.hcl` when it sets one (an unreadable file sets none).
     pub fn loader_dirs(&self) -> LoaderDirs {
-        LoaderDirs::new(self.mods.clone(), self.logs.clone(), self.mod_data.clone())
+        let mut dirs = LoaderDirs::new(self.mods.clone(), self.logs.clone(), self.mod_data.clone());
+        dirs.instance = Some(self.game.clone());
+        dirs.game_data = InstanceSettings::load(&self.instance, &self.game).ok().and_then(|settings| settings.data_dir);
+        dirs
     }
 }

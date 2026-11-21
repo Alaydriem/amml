@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use amml_data::{BuildData, Check, EntryId, RecipeSet};
 
-use crate::services::Deriver;
-use crate::structs::{DeriveOutcome, FailureReason, Report};
+use crate::services::{Deriver, LayoutGuard};
+use crate::structs::{DeriveOutcome, FailureReason, LayoutRefusal, Report};
 
 pub struct ReportWriter;
 
@@ -18,7 +18,15 @@ impl ReportWriter {
         deterministic: bool,
         previous: Option<&BuildData>,
     ) -> Report {
-        let mut failures = outcome.failures.clone();
+        let value_of = |id: &EntryId| outcome.data.entries.get(id).map(|resolved| resolved.value);
+        let not_for_build: Vec<(EntryId, LayoutRefusal)> = set
+            .entries()
+            .iter()
+            .filter(|entry| !outcome.data.entries.contains_key(&entry.id))
+            .filter_map(|entry| LayoutGuard::refusal(entry, value_of).map(|refusal| (entry.id.clone(), refusal)))
+            .collect();
+        let refused = |id: &EntryId| not_for_build.iter().any(|(other, _)| other == id);
+        let mut failures: Vec<_> = outcome.failures.iter().filter(|failure| !refused(&failure.id)).cloned().collect();
         failures.sort_by(|a, b| a.id.cmp(&b.id));
         let mut degraded = outcome.degraded.clone();
         degraded.sort_by(|a, b| a.id.cmp(&b.id));
@@ -31,6 +39,7 @@ impl ReportWriter {
         let stored_failures: Vec<(EntryId, String)> = outcome
             .reused
             .iter()
+            .filter(|id| !refused(id))
             .filter_map(|id| outcome.data.failed.get(id).map(|reason| (id.clone(), reason.clone())))
             .collect();
         let mut reused_ids = outcome.reused.clone();
@@ -38,12 +47,13 @@ impl ReportWriter {
         let moved = previous.map(|old| Self::moved(old, &outcome.data)).unwrap_or_default();
         Report {
             build: outcome.data.build,
-            total: set.entries().len(),
+            total: set.entries().len() - not_for_build.len(),
             derived: outcome.data.entries.len(),
             reused: outcome.reused.len(),
             reused_ids,
             stored_failures,
             failures,
+            not_for_build,
             degraded,
             notes,
             elapsed,
@@ -57,6 +67,9 @@ impl ReportWriter {
         text.push_str("# AMML derive report\n\n");
         text.push_str(&format!("- build: {}\n", report.build.file_stem()));
         text.push_str(&format!("- derived {}/{} ({:.2}%)\n", report.derived, report.total, report.percent()));
+        if !report.not_for_build.is_empty() {
+            text.push_str(&format!("- not for this build: {}\n", report.not_for_build.len()));
+        }
         text.push_str(&format!(
             "- target: {:.0}% ({})\n",
             Report::target_percent(),
@@ -90,6 +103,24 @@ impl ReportWriter {
                     Self::cell(&id.0),
                     Self::cell(&format!("{reason} (stored)")),
                     Self::cell(note)
+                ));
+            }
+        }
+        if !report.not_for_build.is_empty() {
+            text.push_str(
+                "
+## Not for this build
+
+| id | reason |
+| --- | --- |
+",
+            );
+            for (id, refusal) in &report.not_for_build {
+                text.push_str(&format!(
+                    "| {} | {} |
+",
+                    Self::cell(&id.0),
+                    Self::cell(&refusal.to_string())
                 ));
             }
         }

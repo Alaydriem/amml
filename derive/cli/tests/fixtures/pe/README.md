@@ -14,3 +14,10 @@ cargo build --release --manifest-path add_section/Cargo.toml --target-dir <scrat
 ```
 
 Neither source project is a workspace member.
+
+`key_reader.dll` is a Rust `cdylib` that imports `GetAsyncKeyState` from `user32.dll`; the compat checker tests read its
+import table. Build it from `pe-src/key_reader` the same way as `small.dll`.
+
+`loader_imports.dll` is a Rust `cdylib` that imports `GetModuleHandleW` and `GetProcAddress` from `kernel32.dll`, as the
+Rust standard library does in every mod DLL; the compat checker must not warn about it. Build it from
+`pe-src/loader_imports` the same way as `small.dll`.

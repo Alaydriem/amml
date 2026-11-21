@@ -31,7 +31,7 @@ entry "CompoundTag.dtor" {
 
 entry "CompoundTag.nodeVariantIndex" {
   kind     = "field"
-  notes    = "Offset of the variant index byte in a node of the CompoundTag map (std::map<std::string, CompoundTagVariant>): 68h on 26.60. A node is: left +0, parent +8, right +10h, isnil byte +19h, the key std::string +20h, the value (the Tag object itself, with its vtable at +0) +40h, and this index byte at +68h (the index equals Tag::Type: Byte 1, Int 3, List 9, Compound 10; -1 is valueless). The typed accessors read it after the tree search: CompoundTag::getList `cmp byte ptr [rbx+68h],9` and the Byte accessor `cmp byte ptr [rbx+68h],1`. Together with the node layout in the amml-game mirror it lets a mod walk the map without a game call. Recipe 0 is the tail of the List accessor (`cmp rbx,r14; je; test cl,cl; jne; lea rcx,[rbx+40h]; xor eax,eax; cmp byte ptr [rbx+68h],9; cmovne..; add rsp,..; pop` seven registers; ret), read as the displacement of the compare. Recipe 1 is the same tail of the Byte accessor (`... cmp byte ptr [rbx+68h],1 ...`). The two accessors are the same code with other type indices, so the immediate is kept in each (9 and 1) to tell them apart. The recipes are in two functions. Every other displacement, immediate and branch byte is a wildcard. The check is a window around the known value. The gate (check entry_is) LevelChunk.mSubChunks = 456 (1C8h, the 26.60 layout) ties this entry to the 26.60 build: it refuses as not for this build on 26.51, and must be widened when a later build is added. Value 68h on 6ad79ee4-17d51891a1119914 (26.60)."
+  notes    = "Offset of the variant index byte in a node of the CompoundTag map (std::map<std::string, CompoundTagVariant>): 68h on 26.60. A node is: left +0, parent +8, right +10h, isnil byte +19h, the key std::string +20h, the value (the Tag object itself, with its vtable at +0) +40h, and this index byte at +68h (the index equals Tag::Type: Byte 1, Int 3, List 9, Compound 10; -1 is valueless). The typed accessors read it after the tree search: CompoundTag::getList `cmp byte ptr [rbx+68h],9` and the Byte accessor `cmp byte ptr [rbx+68h],1`. Together with the node layout in the amml-game mirror it lets a mod walk the map without a game call. Recipe 0 is the tail of the List accessor (`cmp rbx,r14; je; test cl,cl; jne; lea rcx,[rbx+40h]; xor eax,eax; cmp byte ptr [rbx+68h],9; cmovne..; add rsp,..; pop` seven registers; ret), read as the displacement of the compare. Recipe 1 is the same tail of the Byte accessor (`... cmp byte ptr [rbx+68h],1 ...`). The two accessors are the same code with other type indices, so the immediate is kept in each (9 and 1) to tell them apart. The recipes are in two functions. Every other displacement, immediate and branch byte is a wildcard. The check is a window around the known value. Value 68h on 6ad79ee4-17d51891a1119914 (26.60) and on 6afa4e47-dadc375797a3d31a (preview 1.26.70.26). Evidence on 1.26.70.26: both accessor tails (List with index 9, Byte with index 1) are drafted from the 26.63 functions, match once on each build and sit in two functions, and both read the displacement 68h. No build gate: builds before 26.63 are not supported."
 
   recipe {
     step "pattern" {
@@ -64,11 +64,6 @@ entry "CompoundTag.nodeVariantIndex" {
   check "range" {
     min = 32
     max = 256
-  }
-
-  check "entry_is" {
-    entry = "LevelChunk.mSubChunks"
-    value = 456
   }
 }
 

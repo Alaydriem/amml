@@ -78,6 +78,11 @@ description = "Lists the argument registers, stack arguments and return kind of 
 dir = "{{config_root}}"
 run = "cargo run -p amml-derive --release -- signature"
 
+[tasks.compat]
+description = "Checks which events the mods use are available on a build: --exe, --mods <root with @namespace/name/amml.hcl>, optional --data (default data); prints a table per mod, warns about forbidden imports of the mod DLLs, and exits 1 when a required event is not available"
+dir = "{{config_root}}"
+run = "cargo run -p amml-derive --release -- compat"
+
 [tasks.inspect]
 description = "Read-only views of one game executable with --exe: scan, function, disasm, vtable (--names), xrefs, callers, draft, explain, similar, fields, packets, build-id; inspect <op> --help shows the arguments"
 dir = "{{config_root}}"
@@ -183,6 +188,142 @@ cp target/release/amml_testmod.dll "$target/amml_testmod.dll"
 cp loader/testmod/packaging/amml.hcl "$target/amml.hcl"
 echo "packaged into $target"
 '''
+
+[tasks.package-apitest]
+description = "Builds release amml_apitest.dll (the test mod of the stable API) and stages it with its amml.hcl in target/apitest-mods/@amml/apitest, the --mods root for mise run compat; with --game also copies both into <game>/mods/amml/@amml/apitest"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = 'flag "--game <game>" help="The game folder that holds Minecraft.Windows.exe; when left out the mod is only staged"'
+run = '''
+set -e
+cargo build -p amml-apitest --release
+stage="target/apitest-mods/@amml/apitest"
+mkdir -p "$stage"
+cp target/release/amml_apitest.dll "$stage/amml_apitest.dll"
+cp loader/apitest/amml.hcl "$stage/amml.hcl"
+echo "staged into $stage"
+if [ -n "${usage_game:-}" ]; then
+  target="$usage_game/mods/amml/@amml/apitest"
+  mkdir -p "$target"
+  cp "$stage/amml_apitest.dll" "$stage/amml.hcl" "$target/"
+  echo "packaged into $target"
+fi
+'''
+
+[tasks.ingame-apitest]
+description = "Runs the stable-API test mod in game on a patched standalone instance under %LOCALAPPDATA%/amml/instances (--instance, required: one folder name; its Minecraft.Windows.exe must import amml.dll, see make-standalone-instance, and amml/instance.hcl must set data_dir to an existing folder, else the task refuses). Refuses the operator play instances 1.26.63.01 and 1.26.63.01-P, and a data_dir that is %LOCALAPPDATA%/amml/data (the operator's own worlds and options) or a folder in it; the test instances 1.26.63.01-test and 1.26.70.26-standalone use data_dir %LOCALAPPDATA%/amml/test-data/<instance>, each seeded with one amml-test world. Copies the release amml.dll, the recipes and the data into it and installs the apitest mod. World mode (default): picks the world folder amml-test or amml-test-<n> (or one whose levelname.txt is 'amml-test') under data_dir; when none exists, copies the most recently changed world of the release product folder of data_dir to a new folder amml-test-<n>, into each product folder of data_dir that lacks it (never outside data_dir), or the folder named by --world; restores that world from its pristine copy <minecraftWorlds>/../amml-pristine-worlds/<world> (made once from the world as it is when missing), so each run starts from the same player position; and sets AMML_TEST_WORLD for the game process only, so the loader starts that world from the title screen. --manual-world sets no variable and waits for the operator to enter a world by hand. Sets pause_menu_on_focus_lost:1 in the options.txt files under data_dir (the game opens the pause screen on focus loss, the path of open_pause_screen, only with it on). Starts the game, posts one F24 key (0x87) and a few mouse moves (scripts/post-mouse-move.ps1) 10 s after start, and the mouse moves again when the world is joined, so the 70.x key feed and the mouse feed bind, waits for 'world joined' (120 s, or 300 s with --manual-world; prints the manual prompt when it does not come), then up to 480 s for 'apitest ok' (title screen read, world joined, client reads, HUD and mouse writes, key hold with player movement, move intent, turn, wheel, left, X1 and X2 clicks, gamepad polls skipped under a FULL lease, pause screen opened, 600 frames presented, the magenta square drawn on the bound swap chain, a GameOnly and a WithOverlays screenshot written, 30 capture stream frames, a client size requested and given back, the window steps seen, the frame times with and without the drawing listener, 100 client ticks). Once the apitest logs 'overlay checks done' and the pause screen step, runs the window steps: two resizes and a minimise and restore of the game window (scripts/resize-game-window.ps1), a posted click in its lower left corner (scripts/post-click.ps1) and a posted WM_CHAR 'a' (scripts/post-char.ps1), each with a bounded wait for its apitest line, then the original window size again. With --focus-loss it then posts WM_ACTIVATEAPP 0 to the game window (scripts/post-focus-loss.ps1) and waits up to 15 s for 'injected released reason=FocusLost'. Closes the window it started (scripts/close-game-window.ps1), ends only that process and prints the loader and apitest lines of the run. Then reads the centre pixel of the square in both screenshot files (scripts/png-pixel.ps1) and warns when the apitest log has no 'shutdown game_alive' line. Passes on 'apitest ok' with no 'event not available' and no 'area not available' line in loader.log or the apitest log, and the square's centre magenta in the WithOverlays screenshot only"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--instance <name>" required=#true help="The test instance folder under %LOCALAPPDATA%/amml/instances (1.26.63.01-test, 1.26.70.26-standalone); 1.26.63.01 and 1.26.63.01-P are refused"
+flag "--world <level_id>" help="The world folder name (level id) under the instance's data_dir to start; default: the amml-test world, made when missing"
+flag "--manual-world" help="Do not start a world; wait up to 300 s for the operator to enter one by hand"
+flag "--focus-loss" help="After 'apitest ok', post WM_ACTIVATEAPP 0 to the game window and check the injected key is released with reason FocusLost"
+'''
+run = 'bash scripts/ingame-apitest.sh'
+
+[tasks.ingame-manager]
+description = "Runs modmanager and its probe mod (@amml/managerprobe) in game on a patched standalone test instance under %LOCALAPPDATA%/amml/instances (--instance, required; the same instance checks as ingame-apitest: 1.26.63.01 and 1.26.63.01-P are refused, the exe must import amml.dll, amml/instance.hcl must set a data_dir outside %LOCALAPPDATA%/amml/data). Builds the release amml.dll and copies it, the recipes and the data into the instance; runs mise run package and package-probe in the modmanager checkout (--modmanager, else AMML_MODMANAGER_DIR, else ../modmanager); moves every other mod of <instance>/mods/amml to <instance>/mods-parked/<stamp>/before for the run and installs the two dist folders (on exit the two test mods go to <stamp>/run and the parked mods come back); runs mise run compat on the dist folder and stops before the game on a failure. Picks and restores the test world as ingame-apitest (from its pristine copy beside the worlds folder, made once from the world as it is). Sets pause_menu_on_focus_lost:0 in the options.txt files under data_dir, so the posted focus loss leaves the game in play. Starts the game, posts F24 and mouse moves 10 s after start, waits for 'manager enabled', 'overlay bound' and 'probe linked', posts F8 (up to three times) for 'probe keybind fired', waits for 'probe key hold done' (the world join; 120 s, or 300 s with --manual-world), then up to 480 s after it for 'probe ok' (mouse moves once the FULL lease starts). Posts a focus loss ('probe injected released reason=FocusLost'). Panel steps: Ctrl+Shift+F10 (scripts/post-chord.ps1), 'panel opened by=keys', 'panel layout', a screenshot to target/ingame-manager/<instance>/panel.png, three WM_CHAR ('panel char received' three times), mouse moves and a WM_SETCURSOR (scripts/post-set-cursor.ps1) for 'cursor shape', 'mouse captured value=false', a click on the close button of the layout line, 'panel action action=Close' and 'mouse captured value=true'. Window steps: two resizes, minimise, restore, original size (two 'resized ok=true'). Closes the window it started and ends only that process. Prints the loader, manager and probe lines of the run and passes on every probe line up to 'probe ok' ('probe mouse waived' counts for wheel and click), the panel, resize and focus loss lines, 'probe provider gone' and 'probe call after gone result=Gone', the probe square's centre magenta in the WithOverlays screenshot only, an 'area adapter' line per adapter area the two mods use, a key feed thread line, and no 'event not available', 'area not available' or 'panic' line in loader.log or the two mod logs. World leave and rejoin are printed, not checked"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--instance <name>" required=#true help="The test instance folder under %LOCALAPPDATA%/amml/instances (1.26.63.01-test, 1.26.70.26-standalone); 1.26.63.01 and 1.26.63.01-P are refused"
+flag "--modmanager <dir>" help="The modmanager checkout to build; default: AMML_MODMANAGER_DIR, else ../modmanager"
+flag "--world <level_id>" help="The world folder name (level id) under the instance's data_dir to start; default: the amml-test world, made when missing"
+flag "--manual-world" help="Do not start a world; wait up to 300 s for the operator to enter one by hand"
+'''
+run = 'bash scripts/ingame-manager.sh'
+
+[tasks.ingame-zoom]
+description = "Runs zoom and modmanager in game on a patched standalone test instance under %LOCALAPPDATA%/amml/instances (--instance, required; the same instance checks as ingame-apitest: 1.26.63.01 and 1.26.63.01-P are refused, the exe must import amml.dll, amml/instance.hcl must set a data_dir outside %LOCALAPPDATA%/amml/data). Refuses a running game of the instance. Picks and restores the test world as ingame-apitest (--world, else the amml-test world). Sets pause_menu_on_focus_lost:0 in the options.txt files under data_dir for the run. Builds the release amml.dll and copies it, the recipes and the data into the instance; runs mise run package in the modmanager checkout (--modmanager, else AMML_MODMANAGER_DIR, else ../modmanager) and in the zoom checkout (--zoom, else AMML_ZOOM_DIR, else ../zoom); parks every mod of <instance>/mods/amml as ingame-manager does and installs @amml/modmanager and @alaydriem/zoom from the two dist folders; runs mise run compat on each dist folder and stops before the game on a failure. Starts the game with AMML_TEST_WORLD, posts F24 and mouse moves once the window is subclassed, waits 180 s for 'manager enabled' and 'zoom linked', then for a 'top screen name' line with hud_screen, then 5 s. Screenshots target/ingame-zoom/<instance>/normal.png, posts Grave (VK 192) down (up to three times) for 'zoom started', waits for 'zoom full' and screenshots zoomed.png (and zoomed-2 to zoomed-4, to look for frames with the game field of view). Posts a focus loss for 'zoom reset reason=focus_lost', then Grave up; posts Grave down for a second 'zoom started', then up for 'zoom ended'. Closes the window it started and ends only that process. Prints the loader, manager and zoom lines of the run and the screenshot paths. Passes when both compat runs exit 0 and on 'zoom linked', two 'zoom started', 'zoom full' with result * 2 < base, 'zoom reset reason=focus_lost', 'zoom ended', 'event offered' for camera.fov and world.dimension_changing and a 'camera fov thread' line in loader.log, and no 'event not available', 'area not available' or 'panic' line in loader.log, the manager log or the zoom log. The look speed and the dimension change are printed, not checked"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--instance <name>" required=#true help="The test instance folder under %LOCALAPPDATA%/amml/instances (1.26.63.01-test, 1.26.70.26-standalone); 1.26.63.01 and 1.26.63.01-P are refused"
+flag "--zoom <dir>" help="The zoom checkout to build; default: AMML_ZOOM_DIR, else ../zoom"
+flag "--modmanager <dir>" help="The modmanager checkout to build; default: AMML_MODMANAGER_DIR, else ../modmanager"
+flag "--world <level_id>" help="The world folder name (level id) under the instance's data_dir to start; default: the amml-test world, made when missing"
+'''
+run = 'bash scripts/ingame-zoom.sh'
+
+[tasks.ingame-durability-ping]
+description = "Runs durability-ping and modmanager in game on a patched standalone test instance under %LOCALAPPDATA%/amml/instances (--instance, required; the same instance checks as ingame-zoom). Refuses a running game of the instance. Plays in the world amml-test-durability-ping (copied once from amml-test, restored from its own pristine copy each run; amml-test itself is only restored). Builds the release amml.dll and copies it, the recipes and the data into the instance; packages modmanager (--modmanager, else AMML_MODMANAGER_DIR, else ../modmanager) and durability-ping (--durability-ping, else AMML_DURABILITY_PING_DIR, else ../durability-ping); parks the other mods, installs the two and writes the mod's run settings (alert and guard at 2000 uses, volume 0); runs mise run compat on each dist folder and stops before the game on a failure. Starts the game with AMML_TEST_WORLD, waits for the HUD, types `/replaceitem entity @s slot.weapon.mainhand 0 iron_pickaxe 1 245` and `/tp @s ~ ~ ~ 0 90` with posted keys, then posts left clicks at the window centre. Closes the window it started and ends only that process. Passes on: enabled, attached to the mod manager, `event offered` for the five player.* events and `area adapter` inventory.read in loader.log, `held read slot=`, `alert played ... item=minecraft:iron_pickaxe remaining=5`, `action seen kind=player.block_break_start local=true` and `guard refused kind=player.block_break_start`, with no `event not available`, `area not available` or `panic` line in the three logs"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--instance <name>" required=#true help="The test instance folder under %LOCALAPPDATA%/amml/instances (1.26.63.01-test, 1.26.70.26-standalone); 1.26.63.01 and 1.26.63.01-P are refused"
+flag "--durability-ping <dir>" help="The durability-ping checkout to build; default: AMML_DURABILITY_PING_DIR, else ../durability-ping"
+flag "--modmanager <dir>" help="The modmanager checkout to build; default: AMML_MODMANAGER_DIR, else ../modmanager"
+'''
+run = 'bash scripts/ingame-durability-ping.sh'
+
+[tasks.ingame-dynamic-lighting]
+description = "Runs dynamic-lighting and modmanager in game on a patched standalone test instance under %LOCALAPPDATA%/amml/instances (--instance, required; the instance checks of ingame-zoom). Refuses a running game of the instance. Plays in the world amml-test-dynamic-lighting (seeded once from amml-test, restored from its own pristine copy each run; amml-test itself is only restored). Builds the release amml.dll and copies it, the recipes and the data into the instance; packages modmanager (--modmanager, else AMML_MODMANAGER_DIR, else ../modmanager) and dynamic-lighting (--dynamic-lighting, else AMML_DYNAMIC_LIGHTING_DIR, else ../dynamic-lighting); parks the other mods, installs the two with the default settings; runs mise run compat on each dist folder and stops before the game on a failure. Starts the game with AMML_TEST_WORLD, waits for the HUD, then with typed /replaceitem commands: a torch in the main hand, a torch in the off hand only, a lava bucket, a torch again, then F3+D twice (post-chord.ps1). Closes the window it started and ends only that process. Passes on: enabled, manager attached, lighting adapter terrain=on, entity=on and the grid fill of the build (fillSubChunkGrid on 1.26.63, fillSubChunkGridNoMode on 1.26.70), lighting render thread game=true, entity light: on, vibrant colour: on, item names: on, light source set level=14 falloff=round block=yes (three times), lighting rebuild boxes > 0, the off-hand light (no clear with the off-hand torch, a clear after it), light source set level=15 falloff=round block=no, toggled off then on with a clear, lighting cleared for the mod at the shutdown disable, and no unavailable, withdrawn, refused or panic line in the three logs"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--instance <name>" required=#true help="The test instance folder under %LOCALAPPDATA%/amml/instances (1.26.63.01-test, 1.26.70.26-standalone); 1.26.63.01 and 1.26.63.01-P are refused"
+flag "--dynamic-lighting <dir>" help="The dynamic-lighting checkout to build; default: AMML_DYNAMIC_LIGHTING_DIR, else ../dynamic-lighting"
+flag "--modmanager <dir>" help="The modmanager checkout to build; default: AMML_MODMANAGER_DIR, else ../modmanager"
+'''
+run = 'bash scripts/ingame-dynamic-lighting.sh'
+
+[tasks.ingame-hotbar-manager]
+description = "Runs hotbar-manager and modmanager in game on a patched standalone test instance under %LOCALAPPDATA%/amml/instances (--instance, required). Builds and installs the release loader, recipes and data; packages modmanager and hotbar-manager; parks the other mods; runs mise run compat on each dist folder and stops before the game on a failure; starts the game in the background and checks the mod's and loader's lines (see the script header)"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--instance <name>" required=#true help="The test instance folder under %LOCALAPPDATA%/amml/instances (1.26.63.01-test, 1.26.70.26-standalone); 1.26.63.01 and 1.26.63.01-P are refused"
+flag "--hotbar-manager <dir>" help="The hotbar-manager checkout to build; default: AMML_HOTBAR_MANAGER_DIR, else ../hotbar-manager"
+flag "--modmanager <dir>" help="The modmanager checkout to build; default: AMML_MODMANAGER_DIR, else ../modmanager"
+'''
+run = 'bash scripts/ingame-hotbar-manager.sh'
+
+[tasks.ingame-heads]
+description = "Runs heads and modmanager in game on a patched standalone test instance (--instance, required; the instance checks of ingame-dynamic-lighting). Plays in the world amml-test-heads. Passes on: heads enabled, settings applied, player list add, face ready, face uploaded, chat icon registered, chat line edited, world left, the loader lines of the network and chat events, textures upload done, inline icon page ready, textures freed at the world leave, and no unavailable, withdrawn, refused or panic line"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--instance <name>" required=#true help="The test instance folder under %LOCALAPPDATA%/amml/instances (1.26.63.01-test, 1.26.70.26-standalone)"
+flag "--heads <dir>" help="The heads checkout to build; default: AMML_HEADS_DIR, else ../heads"
+flag "--modmanager <dir>" help="The modmanager checkout to build; default: AMML_MODMANAGER_DIR, else ../modmanager"
+'''
+run = 'bash scripts/ingame-heads.sh'
+
+[tasks.ingame-headless-input]
+description = "Runs headless-input and modmanager in game on a patched standalone test instance under %LOCALAPPDATA%/amml/instances (--instance, required; the instance checks of ingame-zoom). Refuses a running game of the instance. Seeds the per-mod world amml-test-headless-input from the instance's amml-test world (once, with its own pristine copy) and restores it from that copy; the shared amml-test world is not changed. Sets pause_menu_on_focus_lost:0 for the run. Builds the release amml.dll and copies it, the recipes and the data into the instance; runs mise run package in the modmanager checkout (--modmanager, else AMML_MODMANAGER_DIR, else ../modmanager) and builds headless-input (--headless, else AMML_HEADLESS_DIR, else ../headless-input) with the test-only feature ingame-proof (a pairing request is allowed without the switch) into target/ingame-headless-input/dist; runs mise run compat on both dist folders and stops before the game on a failure. Parks every mod, installs the two, writes the mod config with MCP on (port 28361 on 1.26.63.01-test, else 28362). Starts the game with AMML_TEST_WORLD, pairs through POST /pair and drives the MCP tools (scripts/mcp-call.ps1): press F1 before any real key, hotbar 3, the square example, walk_to 3 blocks east, turn then look_at 0/30, /say, a screenshot, /execute into the nether with walk_until_dimension, leave_world, join_world, join_server 127.0.0.1:19999; then posts F24 as the first real key. Closes the window it started and ends only that process. Prints the three logs of the run. Passes on every summary row: the link, two local ticks, client.game_tick offered, key tap sent with no real key down before it, hotbar selected, the square, walk_to and look runs done with the read look within 1 degree of 0/30, the command line, screenshot written and a PNG, the nether run done, the leave lines, the world join, the servers tab and join answer lines, actor position measured, first real key down, and no 'event not available', 'area not available' or 'panic' line"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--instance <name>" required=#true help="The test instance folder under %LOCALAPPDATA%/amml/instances (1.26.63.01-test, 1.26.70.26-standalone); 1.26.63.01 and 1.26.63.01-P are refused"
+flag "--headless <dir>" help="The headless-input checkout to build; default: AMML_HEADLESS_DIR, else ../headless-input"
+flag "--modmanager <dir>" help="The modmanager checkout to build; default: AMML_MODMANAGER_DIR, else ../modmanager"
+'''
+run = 'bash scripts/ingame-headless-input.sh'
+
+[tasks.ingame-toggles]
+description = "Runs toggles and modmanager in game on a patched standalone test instance under %LOCALAPPDATA%/amml/instances (--instance, required; the instance checks of ingame-zoom). Refuses a running game of the instance. Seeds the world amml-test-toggles once from the amml-test world and restores it from its pristine copy (seed_mod_world). Sets pause_menu_on_focus_lost:0 for the run. Builds the release amml.dll and copies it, the recipes and the data into the instance; runs mise run package in the modmanager checkout (--modmanager, else AMML_MODMANAGER_DIR, else ../modmanager) and in the toggles checkout (--toggles, else AMML_TOGGLES_DIR, else ../toggles); parks the instance's mods and installs only those two; runs mise run compat on each dist folder and stops before the game on a failure. Starts the world, then posts F3+W (auto-walk on, two screenshots), S (cancel key), F3+Shift twice (sneak on and off), F3+W then Escape twice (menu reset), F3+W then a focus loss, F3+Shift, then closes the game it started. Passes on 'toggles linked', 'death check ready alive=true', three 'toggle on kind=walk key=0x57', 'reason=cancel_key', two 'toggle on kind=sneak key=0x10', 'kind=sneak reason=chord', 'reason=menu', 'reason=focus_lost', a sneak off with reason world_left or disabled at the close, the loader's 'event offered' for input.key and client.tick and 'area adapter' for input.key_inject and actor.read, and no 'event not available', 'area not available', 'key injection not available', 'loader too old', 'key refused' or 'panic' line in the three logs"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--instance <name>" required=#true help="The test instance folder under %LOCALAPPDATA%/amml/instances (1.26.63.01-test, 1.26.70.26-standalone); 1.26.63.01 and 1.26.63.01-P are refused"
+flag "--toggles <dir>" help="The toggles checkout to build; default: AMML_TOGGLES_DIR, else ../toggles"
+flag "--modmanager <dir>" help="The modmanager checkout to build; default: AMML_MODMANAGER_DIR, else ../modmanager"
+'''
+run = 'bash scripts/ingame-toggles.sh'
+
+[tasks.ingame-quirks]
+description = "Runs quirks and modmanager in game on a patched standalone test instance under %LOCALAPPDATA%/amml/instances (--instance, required; the same instance checks as ingame-apitest). Refuses a running game of the instance. Seeds and restores the world amml-test-quirks (seed_mod_world), sets pause_menu_on_focus_lost:0 for the run, builds and copies the release amml.dll, the recipes and the data, runs mise run package in modmanager (--modmanager, else AMML_MODMANAGER_DIR, else ../modmanager) and package plus package-test-no-keep-alive in quirks (--quirks, else AMML_QUIRKS_DIR, else ../quirks), runs compat on both dist folders and stops before the game on a failure, and parks the other mods of the instance. Run A (shipped build): waits for 'attached to the mod manager', the HUD screen, then up to 120 s for 'idle keep-alive: fired' and the loader's note_activity line, closes the game. Run B (test-no-keep-alive build, skipped with --skip-idle): restores the world, starts again and waits with no input up to --idle-seconds (default 1080) for 'idle guard: refused the idle screen', then 20 s more. Ends only the processes it started. Passes on the link, the keep-alive on and first fire (count=1), the loader note_activity result=ok, area adapter client.activity and event offered client.idle_screen_open, the off line at close; in run B the refusal, the idle screen thread line, no idle top screen name and no fire; and no 'event not available', 'area not available' or 'panic' line in any log of either run"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--instance <name>" required=#true help="The test instance folder under %LOCALAPPDATA%/amml/instances (1.26.63.01-test, 1.26.70.26-standalone); 1.26.63.01 and 1.26.63.01-P are refused"
+flag "--quirks <dir>" help="The quirks checkout to build; default: AMML_QUIRKS_DIR, else ../quirks"
+flag "--modmanager <dir>" help="The modmanager checkout to build; default: AMML_MODMANAGER_DIR, else ../modmanager"
+flag "--idle-seconds <s>" help="How long run B waits with no input for the idle-screen refusal; default 1080"
+flag "--skip-idle" help="Skips run B (the run then fails: the refusal is not proven)"
+'''
+run = 'bash scripts/ingame-quirks.sh'
 
 [tasks.ingame-ll]
 description = "Builds every AMML mod in its own repo (manager, minimap, levels, freecam, zoom and stratum) and installs all of them into mods/amml, and fails on a failed build or an installed DLL older than a source file it is built from (scripts/ingame-mods.sh). Packages the loader and the test mod into the 1.26.51.01-ll test copy, starts Minecraft.Windows.exe with grade on for the run, waits up to 180 s for ticks=100, ends only the process it started, restores the loader config, removes the test mod again unless it was there before and prints the coverage, heap, grade and ticks lines"
@@ -1313,13 +1454,13 @@ flag "--instance <instance>" help="The private instance to run; only 1.26.60.05-
 run = "bash scripts/ingame-standalone-locator-heads.sh"
 
 [tasks.ingame-peek]
-description = "Runs the peek in-game gate in the private instance 1.26.60.05-peek (a copy of 1.26.60.05-standalone; no other instance is used): builds the loader and installs it with the chosen mod (--mod testmod|peek), keeps only the copied mod manager beside it and removes any other mod, copies recipes/ into its amml/recipes, starts its Minecraft.Windows.exe, records the game PID in pids.md, waits up to 180 s for the ready line (ticks=100 for the test mod, the manager registering alaydriem-peek for peek), optionally holds the game for --hold seconds for a manual check, ends only that PID and checks that it is gone, and prints the loader, manager and mod lines of the run. It does not run scripts/ingame-mods.sh. Passes when all entries resolve, the mod has no missing entry and no off, missing, error or panic line, and the game ran until it was ended"
+description = "Runs peek and modmanager in game on a patched standalone test instance under %LOCALAPPDATA%/amml/instances (--instance, required). Builds and installs the release loader, recipes and data; packages modmanager and peek; parks the other mods; runs mise run compat on each dist folder and stops before the game on a failure; starts the game in the background in the world amml-test-peek and checks the mod's and loader's lines (see the script header). The bundle step needs a box with 2 or more bundles already in that world"
 dir = "{{config_root}}"
 shell = "bash -c"
 usage = '''
-flag "--mod <mod>" help="The mod to run: testmod or peek"
-flag "--hold <seconds>" help="Keep the game running this long after the automated checks, for a manual check; default 0"
-flag "--with <mod>" help="One more mod repo beside amml to package and keep installed with peek, for a check of the two together: freecam"
+flag "--instance <name>" required=#true help="The test instance folder under %LOCALAPPDATA%/amml/instances (1.26.63.01-test, 1.26.70.26-standalone); 1.26.63.01 and 1.26.63.01-P are refused"
+flag "--peek <dir>" help="The peek checkout to build; default: AMML_PEEK_DIR, else ../peek"
+flag "--modmanager <dir>" help="The modmanager checkout to build; default: AMML_MODMANAGER_DIR, else ../modmanager"
 '''
 run = "bash scripts/ingame-peek.sh"
 
@@ -1328,7 +1469,7 @@ description = "Builds release amml.dll and amml-patch, patches Minecraft.Windows
 dir = "{{config_root}}"
 shell = "bash -c"
 usage = '''
-flag "--instance <name>" required=#true help="The instance folder under %LOCALAPPDATA%/amml/instances"
+flag "--instance <name>" required=#true help="The test instance folder under %LOCALAPPDATA%/amml/instances (1.26.63.01-test, 1.26.70.26-standalone); 1.26.63.01 and 1.26.63.01-P are refused"
 '''
 run = '''
 set -e

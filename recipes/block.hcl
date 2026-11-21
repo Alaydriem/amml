@@ -1,6 +1,6 @@
 entry "Block.canProvideFullSupport" {
   kind     = "function"
-  notes    = "bool Block::canProvideFullSupport(uchar face) const, a non-virtual member: rcx = Block this, dl = the face (1 is up), the bool is returned in al. The body fetches a support component of the block (`mov rsi,rcx; call getComponent; test rax,rax; je`), returns false when the component value is 0, calls the component support function with the face when the value is 1, and otherwise forwards to BlockType::canProvideFullSupport(Block const&, uchar) with `mov rcx,[rsi+68h]; mov rdx,rsi; mov r8d,ebx` (the block type, the block and the face) as a tail jump. Block::canProvideSupport(uchar, BlockSupportType), the function before it in the image, has the same shape but a type argument and calls the BlockType virtual at slot 18 instead. Recipe 0 is the head of the body: the face saved in ebx, the component call, the null test and the compare of the value against 1, then function_start_of. Recipe 1 is one of the two call sites, in a function that tests a flags word and then calls with `mov rcx,rsi; mov dl,1` (the face up): the target of the call is the function. They are in two functions. Every register, displacement, immediate and branch byte is a wildcard. The check is function_start, which Recipe 1 can fail. In 6ad79ee4-17d51891a1119914 (26.60) the function is at 0x31533B0 with the same body (the component fetch, the 0/1 test and the tail jump to the BlockType function); both recipes derived on the cold run, with no change. Class: survived."
+  notes    = "bool Block::canProvideFullSupport(uchar face) const, a non-virtual member: rcx = Block this, dl = the face (1 is up), the bool is returned in al. The body fetches a support component of the block (`mov rsi,rcx; call getComponent; test rax,rax; je`), returns false when the component value is 0, calls the component support function with the face when the value is 1, and otherwise forwards to BlockType::canProvideFullSupport(Block const&, uchar) with `mov rcx,[rsi+68h]; mov rdx,rsi; mov r8d,ebx` (the block type, the block and the face) as a tail jump. Block::canProvideSupport(uchar, BlockSupportType), the function before it in the image, has the same shape but a type argument and calls the BlockType virtual at slot 18 instead. Recipe 0 is the head of the body: the face saved in ebx, the component call, the null test and the compare of the value against 1, then function_start_of. Recipe 1 is one of the two call sites, in a function that tests a flags word and then calls with `mov rcx,rsi; mov dl,1` (the face up): the target of the call is the function. They are in two functions. Every register, displacement, immediate and branch byte is a wildcard. The check is function_start, which Recipe 1 can fail. In 6ad79ee4-17d51891a1119914 (26.60) the function is at 0x31533B0 with the same body (the component fetch, the 0/1 test and the tail jump to the BlockType function); both recipes derived on the cold run, with no change. Class: survived. Layout gate: 26.63 only; on 70.x the function takes a third argument (a bool in r8b; it is Block.canProvideFullSupportWithFlag with the flag 0), and the old two-argument form is gone; the replacement is Block.canProvideFullSupportWithFlag. The old call site of recipe 1 now loads `xor r8d,r8d` before the call."
 
   recipe {
     step "pattern" {
@@ -21,11 +21,44 @@ entry "Block.canProvideFullSupport" {
   }
 
   check "function_start" {}
+  check "entry_is" {
+    entry = "LevelChunk.mSubChunks"
+    value = 456
+  }
+}
+
+entry "Block.canProvideFullSupportWithFlag" {
+  kind     = "function"
+  notes    = "bool Block::canProvideFullSupport(uchar face, bool flag) const on 70.x, a non-virtual member: rcx = Block this, dl = the face (1 is up), r8b = a flag, the bool is returned in al. It replaces Block.canProvideFullSupport (26.63, two arguments), which has no out-of-line form on 70.x. Called with the flag 0 it does what the 26.63 function did: it fetches the support component of the block (two storage lookups, the block, then the block type at [block+68h] + 30h), returns false when the component value is 0, tail-jumps to the component support function with (block, face) when the value is 1, and without a component calls Block::canProvideSupport(face, type) with the type 0 and then 1 and returns the AND of both, which is the body of the 26.63 BlockType::canProvideFullSupport(Block const&, uchar) that the old function tail-jumped to (BlockType virtual canProvideSupport at 90h with r9d 0, then 1). A component value other than 0 and 1 (new on 70.x) reads an index at [component+4] and calls into a per-type table at [blocktype+368h]. With the flag set and no 0/1 component the function calls the BlockType virtual at 98h with (block type, block, face) instead. A mod that called canProvideFullSupport(face) calls this entry with (block, face, 0). Recipe 0 is the no-component fallback in the body: `mov rcx,rsi; mov edx,ebx; xor r8d,r8d; call; mov ecx,eax; xor eax,eax; test cl,cl; je; mov rcx,rsi; mov edx,ebx; mov r8d,imm; call` (the two canProvideSupport calls), then function_start_of; the type immediate and the call and branch bytes are wildcards. Recipe 1 is the call site that the 26.63 recipe 1 of Block.canProvideFullSupport used, in a function that tests a flags word and then calls with `mov rcx,rsi; mov dl,1`, now with `xor r8d,r8d` before the call: the target of the call. They are in two functions. Every displacement, immediate and branch byte is a wildcard. Check function_start, which recipe 1 can fail. Evidence from the 26.63 function: (1) its only call site of the flags-test shape (26.63 recipe 1, unique on 26.63) is found once on 70.26 with the added `xor r8d,r8d`, and it calls this function; (2) the 26.63 body (component fetch, return false on 0, tail jump with (block, face) on 1, else the BlockType full-support path that ANDs canProvideSupport with type 0 and 1) is found in this body in the same order with the same argument registers (`mov rcx,rsi; mov edx,ebx` before the tail jump; `mov rdx,rsi; mov r8d,ebx` before the BlockType call). Gate: 70.x only (entry_is LevelChunk.mSubChunks = 552). What changed in 6afa4e47-dadc375797a3d31a (70.26): a third argument, the component lookup now an EnTT storage lookup, the BlockType fallback inlined. Class: real code change."
+
+  recipe {
+    step "pattern" {
+      bytes = "48 89 F1 89 DA 45 31 C0 E8 ?? ?? ?? ?? 89 C1 31 C0 84 C9 74 ?? 48 89 F1 89 DA 41 B8 ?? ?? ?? ?? E8"
+    }
+    step "function_start_of" {}
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "F7 81 ?? ?? ?? ?? ?? ?? ?? ?? 74 ?? 31 C0 EB ?? B0 ?? EB ?? 48 89 F1 B2 ?? 45 31 C0 E8"
+      offset = 28
+    }
+    step "operand" {
+      index = 0
+      kind  = "branch_target"
+    }
+  }
+
+  check "function_start" {}
+  check "entry_is" {
+    entry = "LevelChunk.mSubChunks"
+    value = 552
+  }
 }
 
 entry "Block.tryGetComponent.BlockMapColorComponent" {
   kind     = "function"
-  notes    = "BlockMapColorComponent const* Block::tryGetComponent<BlockMapColorComponent>() const, the template instance. Signature: rcx = block, the result in rax (null when the block has no map colour component). On 26.51 the body searches the component index vectors inline; on 26.60 it calls a lookup helper twice (block, then block type) and returns the pointer + 8. Its callers are the map-colour path: call this function, test the result, read `byte ptr [result+10h]` (mTintMethod) into ecx, call BiomeColorSampling.getMapPolicy, call MapPolicy.get and multiply the colour at result+0 by the tint; without the component they call BlockType.getMapColor. Function A is a map-colour function found by its own anchor, `lea r14,[rbx+..]; mov rcx,[rbx+..]; mov rax,[rcx]; mov rax,[rax+..]; mov rdx,r14; call [guard]` (unique on 26.51 and 26.60; a byte-identical twin of A on 26.60 has the first two instructions swapped). Function B is a second map-colour function found by `mov [rbp+..],eax; mov rdi,[rdi+..]; mov rcx,rbx; call`: a pattern_any with one alternative per shape, because the store is disp32 on 26.51 and disp8 on 26.60 (the frame changed). Both anchors end at a call. The steps after the anchor scan only the function that holds it. Every displacement, immediate and branch byte is a wildcard. Recipe 0: function A, then `mov rbx,[rbx+..]; mov rcx,rax; call`, read as a branch target. Recipe 1: function B, then `mov rdi,[rdi+..]; mov rcx,rbx; call` (the end of the anchor), read as a branch target. They are in two functions. Check function_start. Evidence on 26.60: (1) the anchor of function A, drafted from the old function A, matches once on 26.60, and the call at the same place (before the getMapPolicy call) goes to the candidate; (2) the old function had 8 call sites in 6 functions, each followed by the getMapPolicy call; the candidate has 8 call sites in 7 functions, and every getMapPolicy call site on 26.60 follows a call to it, also in function B. What changed in 6ad79ee4-17d51891a1119914 (26.60): every call is followed by a nop, so each old pattern that ran past a call stopped matching; the old scripting map-colour function became a byte-identical twin of function A (same registers), so a pattern in it is no longer unique; the colour is now read with one movups/mulps instead of four movss. Class: real code change (call-site nops, register allocation, vectorised colour); patterns that end at a call would have survived the nops. Grade: two recipes in two functions plus function_start."
+  notes    = "BlockMapColorComponent const* Block::tryGetComponent<BlockMapColorComponent>() const, the template instance. Signature: rcx = block, the result in rax (null when the block has no map colour component). On 26.51 the body searches the component index vectors inline; on 26.60 it calls a lookup helper twice (block, then block type) and returns the pointer + 8. Its callers are the map-colour path: call this function, test the result, read `byte ptr [result+10h]` (mTintMethod) into ecx, call BiomeColorSampling.getMapPolicy, call MapPolicy.get and multiply the colour at result+0 by the tint; without the component they call BlockType.getMapColor. Function A is a map-colour function found by its own anchor, `lea r14,[rbx+..]; mov rcx,[rbx+..]; mov rax,[rcx]; mov rax,[rax+..]; mov rdx,r14; call [guard]` (unique on 26.51 and 26.60; a byte-identical twin of A on 26.60 has the first two instructions swapped). Function B is a second map-colour function found by `mov [rbp+..],eax; mov rdi,[rdi+..]; mov rcx,rbx; call`: a pattern_any with one alternative per shape, because the store is disp32 on 26.51 and disp8 on 26.60 (the frame changed). Both anchors end at a call. The steps after the anchor scan only the function that holds it. Every displacement, immediate and branch byte is a wildcard. Recipe 0: function A, then `mov rbx,[rbx+..]; mov rcx,rax; call`, read as a branch target. Recipe 1: function B, then `mov rdi,[rdi+..]; mov rcx,rbx; call` (the end of the anchor), read as a branch target. They are in two functions. Check function_start. Evidence on 26.60: (1) the anchor of function A, drafted from the old function A, matches once on 26.60, and the call at the same place (before the getMapPolicy call) goes to the candidate; (2) the old function had 8 call sites in 6 functions, each followed by the getMapPolicy call; the candidate has 8 call sites in 7 functions, and every getMapPolicy call site on 26.60 follows a call to it, also in function B. What changed in 6ad79ee4-17d51891a1119914 (26.60): every call is followed by a nop, so each old pattern that ran past a call stopped matching; the old scripting map-colour function became a byte-identical twin of function A (same registers), so a pattern in it is no longer unique; the colour is now read with one movups/mulps instead of four movss. Class: real code change (call-site nops, register allocation, vectorised colour); patterns that end at a call would have survived the nops. Grade: two recipes in two functions plus function_start. Layout gate: 26.63 only; on 70.x the template instance is inlined into Block::getMapColor (the only caller of getMapPolicy), which does the two storage lookups through a lookup that takes the storage pointer; the replacement is Block.getMapColor (the whole map colour) and BlockComponentStorage.tryGetComponent.BlockMapColorComponent (the lookup)."
 
   recipe {
     step "pattern" { bytes = "4C 8D 73 ?? 48 8B 4B ?? 48 8B 01 48 8B 40 ?? 4C 89 F2 FF 15" }
@@ -54,6 +87,74 @@ entry "Block.tryGetComponent.BlockMapColorComponent" {
   }
 
   check "function_start" {}
+  check "entry_is" {
+    entry = "LevelChunk.mSubChunks"
+    value = 456
+  }
+}
+
+entry "Block.getMapColor" {
+  kind     = "function"
+  notes    = "mce::Color Block::getMapColor(BlockSource const& region, BlockPos const& pos) const on 70.x, a non-virtual member: rcx = Block this, rdx = the 16-byte colour out (returned in rax), r8 = the region, r9 = the position. It is the map-colour path that 26.63 inlined at each use of Block.tryGetComponent.BlockMapColorComponent: it looks up the BlockMapColorComponent in the block's component storage (block + 8), then in the block type's (the block type at [block+68h], + 30h); with a component it calls BiomeColorSampling.getMapPolicy with the tint byte at [component+10h], calls the policy's get (vtable +8) with (policy, a local colour, region, pos) and multiplies the component colour at [component+0] by it (movups/mulps); without one it calls the BlockType virtual at 408h with (block type, out, region, pos, block) (BlockType::getMapColor). A mod that read the component and tinted the colour itself can call this one function instead: rcx = block, rdx = a 16-byte colour (four floats), r8 = region, r9 = pos. Recipe 0 is the tint call in the body, `mov rcx,[rax]; mov r10,[rcx+8]; lea rdx,[rsp+..]; mov rcx,rax; mov r8,rbx; mov r9,rdi; mov rax,r10; call [guard]`, then function_start_of; the displacements are wildcards. Recipe 1 is a call site in a map renderer function: `cvttss2si eax,xmm0; mov [rbp+..],eax; mov r8,[rbx+..]; lea rdx,[rbp+..]; lea r9,[rbp+..]; mov rcx,r14; call`, read as a branch target; every displacement and the call bytes are wildcards. They are in two functions. Check function_start, which recipe 1 can fail. Evidence from the 26.63 function Block.tryGetComponent.BlockMapColorComponent: (1) its body (the lookup on block + 8, and when that gives null the lookup on [block+68h] + 30h, each returning the entry + 8) is the head of this body with the same offsets (`add rcx,8; call L; test rax,rax; jne; mov rcx,[r14+68h]; add rcx,30h; call L`, and L returns `lea rcx,[rax+8]` or null); (2) every 26.63 call site of it is followed by `movzx ecx,byte ptr [rax+10h]; call BiomeColorSampling.getMapPolicy; mov rcx,[rax]; mov r10,[rcx+8]; lea rdx; mov rcx,rax; mov r8; mov r9; mov rax,r10; call [guard]` (old function A), and on 70.26 this function holds the same sequence and is the only caller of BiomeColorSampling.getMapPolicy (a resolved entry). Gate: 70.x only (entry_is LevelChunk.mSubChunks = 552). What changed in 6afa4e47-dadc375797a3d31a (70.26): the map-colour code is one out-of-line function and the component lookup is inlined into it. Class: real code change."
+
+  recipe {
+    step "pattern" {
+      bytes = "48 8B 08 4C 8B 51 ?? 48 8D 54 24 ?? 48 89 C1 49 89 D8 49 89 F9 4C 89 D0 FF 15"
+    }
+    step "function_start_of" {}
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "F3 0F 2C C0 89 45 ?? 4C 8B 43 ?? 48 8D 55 ?? 4C 8D 4D ?? 4C 89 F1 E8"
+      offset = 22
+    }
+    step "operand" {
+      index = 0
+      kind  = "branch_target"
+    }
+  }
+
+  check "function_start" {}
+  check "entry_is" {
+    entry = "LevelChunk.mSubChunks"
+    value = 552
+  }
+}
+
+entry "BlockComponentStorage.tryGetComponent.BlockMapColorComponent" {
+  kind     = "function"
+  notes    = "BlockMapColorComponent const* BlockComponentStorage::tryGetComponent<BlockMapColorComponent>() const on 70.x: rcx = a component storage (block + 8 for the block's own components, or the block type at [block+68h] + 30h for the type's), the component pointer or null in rax (the found entry + 8). Block::tryGetComponent<BlockMapColorComponent> of 26.63 is this lookup on block + 8 and, when it gives null, on [block+68h] + 30h; a mod that needs the component itself does the same two calls. Block.getMapColor is the simpler replacement for a colour. Recipe 0 is the first call in Block.getMapColor (`mov r14,rcx; <stack cookie>; add rcx,8; call`), recipe 1 the second (`mov rcx,[r14+68h]; add rcx,30h; call`), each read as a branch target; both scan only that function, so they share its anchor, and the check function_start is the strong check. Every displacement, immediate and branch byte is a wildcard. Evidence from the 26.63 function Block.tryGetComponent.BlockMapColorComponent: (1) its two lookups (block + 8, then [block+68h] + 30h, each `test; je` and the entry + 8) are the two calls of this function in Block.getMapColor in the same order and with the same storage offsets; (2) the body of this function ends with the same type-index load (a guarded static word passed by address) and the `lea rcx,[rax+8]; test rax,rax; cmovne` result that the 26.63 body has after each lookup call. Gate: 70.x only (entry_is LevelChunk.mSubChunks = 552). What changed in 6afa4e47-dadc375797a3d31a (70.26): the block-level template instance is inlined; the storage-level lookup is out of line. Class: real code change."
+
+  recipe {
+    step "ref" { entry = "Block.getMapColor" }
+    step "pattern" {
+      bytes  = "49 89 CE 48 8B 05 ?? ?? ?? ?? 48 31 E0 48 89 44 24 ?? 48 83 C1 ?? E8"
+      offset = 22
+    }
+    step "operand" {
+      index = 0
+      kind  = "branch_target"
+    }
+  }
+
+  recipe {
+    step "ref" { entry = "Block.getMapColor" }
+    step "pattern" {
+      bytes  = "49 8B 4E ?? 48 83 C1 ?? E8"
+      offset = 8
+    }
+    step "operand" {
+      index = 0
+      kind  = "branch_target"
+    }
+  }
+
+  check "function_start" {}
+  check "entry_is" {
+    entry = "LevelChunk.mSubChunks"
+    value = 552
+  }
 }
 
 entry "Block.mDirectData.mLightEmission" {
@@ -114,4 +215,35 @@ entry "Block.getRenderLayer" {
   }
 
   check "function_start" {}
+}
+
+entry "Block.mBlockType" {
+  kind  = "field"
+  notes = "draft"
+
+  recipe {
+    step "pattern" {
+      bytes = "48 8B ?? ?? 48 8B 01 48 8B 40 ?? 4C 89 44 24 ?? 48 C7 44 24 ?? ?? ?? ?? ?? 48 8D 54 24 ?? 4D 89 D0 FF 15"
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "48 83 EC ?? 48 8B 01 48 8B 40 ?? FF 15 ?? ?? ?? ?? 48 8B 40 ?? 48 83 C0 ?? 48 83 C4 ?? C3"
+      offset = 17
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 64
+    max = 256
+  }
 }

@@ -69,8 +69,10 @@ impl RecipeLoader {
         let kind = EntryKind::from_name(&kind_name)
             .ok_or_else(|| reader.fail(format!("unknown kind `{kind_name}` in attribute `kind`")))?;
         let hooked = reader.optional_bool("hooked")?.unwrap_or(false);
-        if hooked && kind != EntryKind::Function {
-            return Err(reader.fail(format!("attribute `hooked` is only valid on function entries, not {kind_name}")));
+        if hooked && !matches!(kind, EntryKind::Function | EntryKind::VSlot) {
+            return Err(
+                reader.fail(format!("attribute `hooked` is only valid on function and vslot entries, not {kind_name}"))
+            );
         }
         let mut recipes = Vec::new();
         let mut checks = Vec::new();

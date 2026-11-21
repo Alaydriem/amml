@@ -1,3 +1,4 @@
+pub mod adapter_catalog;
 pub(crate) mod block_reader;
 pub mod build_data_store;
 pub mod build_id_reader;
@@ -5,6 +6,7 @@ pub mod dependency_order;
 pub mod entry_fingerprints;
 pub mod recipe_loader;
 
+pub use adapter_catalog::AdapterCatalog;
 pub(crate) use block_reader::BlockReader;
 pub use build_data_store::BuildDataStore;
 pub use build_id_reader::BuildIdReader;

@@ -1,10 +1,13 @@
 entry "CameraRegistry.mCameraEntities" {
   kind     = "field"
-  notes    = "Offset of `mCameraEntities` (std::vector<OwnerPtr<EntityId>>) in CameraRegistry: 1D8h in 26.51 (LeviLamina header sum: EnableNonOwnerReferences 18h (vtable and control block), mReflectionCtx 18h (80h), mLoader 98h (110h), mComponentInitializers 1A8h, mCameras 1C0h, mCameraEntities 1D8h). Recipe 0 is the camera registry function 0x9f28e0 (it walks CameraRegistry::mCameraEntities and looks up the CameraComponent of each entity: `add r14,20h; cmp r14,r12; je; mov rcx,[r14+8]; mov eax,[r14+10h]; mov rdx,[rcx+48h]; ...`; the pattern is the whole lookup, 217 bytes, up to the call that builds the name to compare); the pattern starts at the step of the walk, and the vector is loaded just before it: the recipe reads `mov r14,[rax+1D8h]` from its own pattern (`mov r14,[rax+..]; mov r12,[rax+..]; jmp; call`). Recipe 1 is the same function taking the address of the vector (`lea rax,[rsi+1D8h]; mov [rbp+..],rax; xor eax,eax; lea rdi,[rip+..]`). The two recipes are in one function (no other function walks this vector by offset). Every other displacement, immediate and branch byte is a wildcard."
+  notes    = "Offset of `mCameraEntities` (std::vector<OwnerPtr<EntityId>>) in CameraRegistry: 1D8h in 26.51 (LeviLamina header sum: EnableNonOwnerReferences 18h (vtable and control block), mReflectionCtx 18h (80h), mLoader 98h (110h), mComponentInitializers 1A8h, mCameras 1C0h, mCameraEntities 1D8h). Recipe 0 is the camera registry function 0x9f28e0 (it walks CameraRegistry::mCameraEntities and looks up the CameraComponent of each entity: `add r14,20h; cmp r14,r12; je; mov rcx,[r14+8]; mov eax,[r14+10h]; mov rdx,[rcx+48h]; ...`; the pattern is the whole lookup, 217 bytes, up to the call that builds the name to compare); the pattern starts at the step of the walk, and the vector is loaded just before it: the recipe reads `mov r14,[rax+1D8h]` from its own pattern (`mov r14,[rax+..]; mov r12,[rax+..]; jmp; call`). Recipe 1 is the same function taking the address of the vector (`lea rax,[rsi+1D8h]; mov [rbp+..],rax; xor eax,eax; lea rdi,[rip+..]`). The two recipes are in one function (no other function walks this vector by offset). Every other displacement, immediate and branch byte is a wildcard. Recipes 0 and 1 are each a pattern_any with one alternative for each build shape: recipe 0 the loads of the vector begin and end (`mov r14,[rax+..]; mov r12,[rax+..]; jmp; call` on 26.63; `mov rbx,[rax+..]; mov rdi,[rax+..]; jmp; mov r14d,eax; call` on 70.26, registers wildcards), recipe 1 the address of the vector (`lea rax,[rsi+..]; mov [rbp+..],rax; xor eax,eax` then `lea rdi,[rip+..]` on 26.63, `xorps xmm6,xmm6; mov rsi,imm64; jmp` on 70.26). What changed in 1.26.70.26 (6afa4e47-dadc375797a3d31a): the member is still 1D8h; the registers and the code after the loads changed. Evidence from the old function: (1) the registry function is found on both builds by three strings that only it loads (`Inherited camera presets could not find cameras to inherit from.`, `No camera found with id '%s', couldn't created camera '%s'`, `Could not set up Camera Preset with name '%s'. Are you missing 'inherit_from'?`), and both alternatives match once in that function on 70.26; (2) the old function reads the vector begin at 1D8h and the end at 1E0h in one pair of loads, and the new function reads the begin and the end at 1D8h and 1E0h in the same pair and takes the address of the vector at 1D8h, as the old one does. Class: would have survived with a better recipe."
 
   recipe {
-    step "pattern" {
-      bytes  = "4C 8B B0 ?? ?? ?? ?? 4C 8B A0 ?? ?? ?? ?? EB ?? E8"
+    step "pattern_any" {
+      patterns = [
+        "4C 8B B0 ?? ?? ?? ?? 4C 8B A0 ?? ?? ?? ?? EB ?? E8",
+        "48 8B ?? ?? ?? ?? ?? 48 8B ?? ?? ?? ?? ?? EB ?? 41 89 ?? E8",
+      ]
     }
     step "operand" {
       index = 1
@@ -13,8 +16,11 @@ entry "CameraRegistry.mCameraEntities" {
   }
 
   recipe {
-    step "pattern" {
-      bytes  = "48 8D 86 ?? ?? ?? ?? 48 89 45 ?? 31 C0 48 8D 3D ?? ?? ?? ??"
+    step "pattern_any" {
+      patterns = [
+        "48 8D 86 ?? ?? ?? ?? 48 89 45 ?? 31 C0 48 8D 3D ?? ?? ?? ??",
+        "48 8D 86 ?? ?? ?? ?? 48 89 45 ?? 31 C0 0F 57 F6 48 BE ?? ?? ?? ?? ?? ?? ?? ?? EB",
+      ]
     }
     step "operand" {
       index = 1
@@ -30,11 +36,14 @@ entry "CameraRegistry.mCameraEntities" {
 
 entry "CameraRegistry.cameraEntityStride" {
   kind     = "field"
-  notes    = "The size of one element of CameraRegistry::mCameraEntities (OwnerPtr<EntityId>, a std::optional<EntityContext>): 20h in 26.51. Recipe 0 is the step of the walk in the camera registry function 0x9f28e0 (`add r14,20h; cmp r14,r12; je`, the start of the long pattern); recipe 1 is the end pointer step after an append in the same function (`add qword ptr [rax+1E0h],20h; jmp`). One function. Every other displacement, immediate and branch byte is a wildcard. Recipe 1 now anchors on the in-place push of a camera entity in the camera registry function: the engaged flag of the new optional<EntityContext> is set (`mov byte ptr [rdx+18h],1`), then the vector end moves by the stride (`mov rax,[rbp+..]; add qword ptr [rax+..],20h; jmp`). What changed in 6ad79ee4-17d51891a1119914: the alignment nop after the jmp (26.51 `nop dword ptr [rax]`, 26.60 `nop word ptr [rax+rax]`) and the frame offsets; the stride is 20h on both builds."
+  notes    = "The size of one element of CameraRegistry::mCameraEntities (OwnerPtr<EntityId>, a std::optional<EntityContext>): 20h in 26.51. Recipe 0 is the step of the walk in the camera registry function 0x9f28e0 (`add r14,20h; cmp r14,r12; je`, the start of the long pattern); recipe 1 is the end pointer step after an append in the same function (`add qword ptr [rax+1E0h],20h; jmp`). One function. Every other displacement, immediate and branch byte is a wildcard. Recipe 1 now anchors on the in-place push of a camera entity in the camera registry function: the engaged flag of the new optional<EntityContext> is set (`mov byte ptr [rdx+18h],1`), then the vector end moves by the stride (`mov rax,[rbp+..]; add qword ptr [rax+..],20h; jmp`). What changed in 6ad79ee4-17d51891a1119914: the alignment nop after the jmp (26.51 `nop dword ptr [rax]`, 26.60 `nop word ptr [rax+rax]`) and the frame offsets; the stride is 20h on both builds. Both recipes are a pattern_any with one alternative for each build shape (recipe 0 starts at the step of the walk: `add rbx,20h; cmp rbx,rdi; je rel32; mov r12,[rbx+8]; mov r14d,[rbx+10h]; ...` on 70.26, the first 38 bytes of the lookup, up to the shift of the sparse set size; recipe 1 on 70.26 has seven wildcards in front so that the add stays at offset 11, and no load of the registry from the frame: `mov byte ptr [rdx+18h],1; add qword ptr [rcx+..],20h; jmp`). What changed in 1.26.70.26 (6afa4e47-dadc375797a3d31a): the stride is still 20h; the component lookup that followed the step of the walk (an EnTT storage lookup that was inlined with the type hash) changed with the run-time type ids, so the long old pattern no longer matches; the push no longer reloads the registry from the frame. Evidence from the old function: (1) the registry function is found on both builds by three strings that only it loads (`Inherited camera presets could not find cameras to inherit from.`, `No camera found with id '%s', couldn't created camera '%s'`, `Could not set up Camera Preset with name '%s'. Are you missing 'inherit_from'?`); (2) in that function both new alternatives match once and read 20h from two different places (the step of the walk, the in-place push), the way the old recipes did. Class: would have survived with a better recipe."
 
   recipe {
-    step "pattern" {
-      bytes  = "49 83 C6 ?? 4D 39 E6 0F 84 ?? ?? ?? ?? 49 8B 4E ?? 41 8B 46 ?? 48 8B 51 ?? 4C 8B 41 ?? 49 29 D0 49 C1 E8 ?? 41 FF C8 41 81 E0 ?? ?? ?? ?? 4E 8D 0C C2 48 8B 51 ?? 66 2E 0F 1F 84 ?? ?? ?? ?? ?? 4D 8B 01 49 83 F8 ?? 74 ?? 49 C1 E0 ?? 4E 8D 0C 02 42 81 7C 02 ?? ?? ?? ?? ?? 75 ?? 4C 01 C2 48 39 51 ?? 74 ?? 48 8B 4A ?? 48 85 C9 74 ?? 89 C2 81 E2 ?? ?? ?? ?? 41 89 D0 41 C1 E8 ?? 4C 8B 49 ?? 4C 8B 51 ?? 4D 29 CA 49 C1 FA ?? 4D 39 D0 0F 83 ?? ?? ?? ?? 4F 8B 04 C1 4D 85 C0 0F 84 ?? ?? ?? ?? 81 E2 ?? ?? ?? ?? 25 ?? ?? ?? ?? 41 8B 34 90 31 F0 3D ?? ?? ?? ?? 0F 87 ?? ?? ?? ?? 89 F0 25 ?? ?? ?? ?? 48 8B 49 ?? C1 E8 ?? 4C 8B 3C 01 4D 85 FF 0F 84 ?? ?? ?? ??"
+    step "pattern_any" {
+      patterns = [
+        "49 83 C6 ?? 4D 39 E6 0F 84 ?? ?? ?? ?? 49 8B 4E ?? 41 8B 46 ?? 48 8B 51 ?? 4C 8B 41 ?? 49 29 D0 49 C1 E8 ?? 41 FF C8 41 81 E0 ?? ?? ?? ?? 4E 8D 0C C2 48 8B 51 ?? 66 2E 0F 1F 84 ?? ?? ?? ?? ?? 4D 8B 01 49 83 F8 ?? 74 ?? 49 C1 E0 ?? 4E 8D 0C 02 42 81 7C 02 ?? ?? ?? ?? ?? 75 ?? 4C 01 C2 48 39 51 ?? 74 ?? 48 8B 4A ?? 48 85 C9 74 ?? 89 C2 81 E2 ?? ?? ?? ?? 41 89 D0 41 C1 E8 ?? 4C 8B 49 ?? 4C 8B 51 ?? 4D 29 CA 49 C1 FA ?? 4D 39 D0 0F 83 ?? ?? ?? ?? 4F 8B 04 C1 4D 85 C0 0F 84 ?? ?? ?? ?? 81 E2 ?? ?? ?? ?? 25 ?? ?? ?? ?? 41 8B 34 90 31 F0 3D ?? ?? ?? ?? 0F 87 ?? ?? ?? ?? 89 F0 25 ?? ?? ?? ?? 48 8B 49 ?? C1 E8 ?? 4C 8B 3C 01 4D 85 FF 0F 84 ?? ?? ?? ??",
+        "48 83 C3 ?? 48 39 FB 0F 84 ?? ?? ?? ?? 4C 8B 63 ?? 44 8B 73 ?? 49 8B 44 24 ?? 4D 8B 7C 24 ?? 49 29 C7 49 C1 FF ??",
+      ]
     }
     step "operand" {
       index = 1
@@ -43,8 +52,11 @@ entry "CameraRegistry.cameraEntityStride" {
   }
 
   recipe {
-    step "pattern" {
-      bytes  = "C6 42 ?? ?? 48 8B 85 ?? ?? ?? ?? 48 83 80 ?? ?? ?? ?? ?? E9"
+    step "pattern_any" {
+      patterns = [
+        "C6 42 ?? ?? 48 8B 85 ?? ?? ?? ?? 48 83 80 ?? ?? ?? ?? ?? E9",
+        "?? ?? ?? ?? ?? ?? ?? C6 42 ?? ?? 48 83 81 ?? ?? ?? ?? ?? E9",
+      ]
       offset = 11
     }
     step "operand" {

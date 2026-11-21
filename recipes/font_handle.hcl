@@ -26,13 +26,21 @@ entry "FontHandle.dtor" {
 
 entry "FontHandle.size" {
   kind     = "field"
-  notes    = "sizeof(FontHandle): 0x50 (80) in 26.51 (EnableNonOwnerReferences 0x18: vtable and a shared_ptr control; mFontRepository 0x18, mDefaultFont 0x30, mFontId 0x40, mIsDummyHandle 0x48, padded to 8). It is the size of the buffer that holds a FontHandle returned by value, and the size check of the FontHandle mirror of the mod (the members and the FontRepository font vector are read from the 26.51 header layout, not from entries). The body of the ClientInstance virtual getFontHandle copies the members into the result: `mov [rsi+18h],rcx; mov [rsi+20h],rax; ...; mov [rsi+30h],rcx; mov [rsi+38h],rax; movzx eax,byte ptr [rbx+118h]; mov [rsi+48h],al; mov rax,[rbx+110h]; mov [rsi+40h],rax`. The ClientInstance has three look-alike getters in a row (slots 89 to 91) with the same stores from other source members; the source member offset 118h tells them apart, so its two bytes are kept (literal_ok). Recipe 0 reads the displacement of the byte store of mIsDummyHandle (0x48) and adds 8 (the last member is one byte, padded to 8). Recipe 1 reads the displacement of the store of mFontId (0x40) and adds 16 (8 for the id, 8 for the padded flag). They read two different stores of one function. In 6ad79ee4-17d51891a1119914 (26.60) the value is still 0x50: the member copy stores the same members at +30h, +38h, +40h and +48h. Both recipes derived on the cold run. Class: survived."
+  notes    = "sizeof(FontHandle): 0x50 (80) in 26.51 (EnableNonOwnerReferences 0x18: vtable and a shared_ptr control; mFontRepository 0x18, mDefaultFont 0x30, mFontId 0x40, mIsDummyHandle 0x48, padded to 8). It is the size of the buffer that holds a FontHandle returned by value, and the size check of the FontHandle mirror of the mod (the members and the FontRepository font vector are read from the 26.51 header layout, not from entries). The body of the ClientInstance virtual getFontHandle copies the members into the result: `mov [rsi+18h],rcx; mov [rsi+20h],rax; ...; mov [rsi+30h],rcx; mov [rsi+38h],rax; movzx eax,byte ptr [rbx+118h]; mov [rsi+48h],al; mov rax,[rbx+110h]; mov [rsi+40h],rax`. The ClientInstance has three look-alike getters in a row (slots 89 to 91) with the same stores from other source members; the source member offset 118h tells them apart, so its two bytes are kept (literal_ok). Recipe 0 reads the displacement of the byte store of mIsDummyHandle (0x48) and adds 8 (the last member is one byte, padded to 8). Recipe 1 reads the displacement of the store of mFontId (0x40) and adds 16 (8 for the id, 8 for the padded flag). They read two different stores of one function. In 6ad79ee4-17d51891a1119914 (26.60) the value is still 0x50: the member copy stores the same members at +30h, +38h, +40h and +48h. Both recipes derived on the cold run. Class: survived. What changed in 6afa4e47-dadc375797a3d31a (1.26.70.26): the member copy in the ClientInstance getter stores the font id before it loads the flag (the order of the last two stores swapped). Recipe 0 has an alternative that starts at the flag load (the byte store follows it); recipe 1 an alternative with leading wildcards so that the id store sits at the same offset. The dtor, which resets the same members, stores them at 30h, 38h, 40h and 48h on both builds. Class: would have survived with a better recipe."
 
   recipe {
-    step "pattern" {
-      bytes  = "0F B6 83 18 01 ?? ?? 88 46 ?? 48 8B 83 ?? ?? ?? ?? 48 89 46 ??"
+    step "pattern_any" {
+      patterns = [
+        "0F B6 83 18 01 ?? ?? 88 46 ?? 48 8B 83 ?? ?? ?? ?? 48 89 46 ??",
+        "0F B6 83 18 01 ?? ?? 88 46 ?? 48 8D 4D ??",
+      ]
       offset = 7
-      literal_ok = ["3: member offset 118h of the source object: the two sibling getters read other members", "4: second byte of the same member offset"]
+      literal_ok = [
+        "0.3: member offset 118h of the source object: the two sibling getters read other members",
+        "0.4: second byte of the same member offset",
+        "1.3: member offset 118h of the source object, in the shape where the member copy stores the font id before the flag",
+        "1.4: second byte of the same member offset",
+      ]
     }
     step "operand" {
       index = 0
@@ -44,10 +52,18 @@ entry "FontHandle.size" {
   }
 
   recipe {
-    step "pattern" {
-      bytes  = "0F B6 83 18 01 ?? ?? 88 46 ?? 48 8B 83 ?? ?? ?? ?? 48 89 46 ??"
+    step "pattern_any" {
+      patterns = [
+        "0F B6 83 18 01 ?? ?? 88 46 ?? 48 8B 83 ?? ?? ?? ?? 48 89 46 ??",
+        "?? ?? ?? ?? ?? ?? ?? ?? ?? ?? 48 8B 83 ?? ?? ?? ?? 48 89 46 ?? 0F B6 83 18 01 ?? ??",
+      ]
       offset = 17
-      literal_ok = ["3: member offset 118h of the source object: the two sibling getters read other members", "4: second byte of the same member offset"]
+      literal_ok = [
+        "0.3: member offset 118h of the source object: the two sibling getters read other members",
+        "0.4: second byte of the same member offset",
+        "1.24: member offset 118h of the source object, in the shape where the member copy stores the font id before the flag",
+        "1.25: second byte of the same member offset",
+      ]
     }
     step "operand" {
       index = 0
@@ -67,13 +83,21 @@ entry "FontHandle.size" {
 
 entry "FontHandle.mDefaultFont" {
   kind     = "field"
-  notes    = "The offset of FontHandle::mDefaultFont (shared_ptr<Font>: the Font at +0, the control block at +8) in FontHandle: 30h on 26.60 (mFontRepository 18h, mDefaultFont 30h, mFontId 40h, mIsDummyHandle 48h). Recipe 0 is the member copy in the body of the ClientInstance virtual getFontHandle (0x65ab760 on 26.60; the anchor of FontHandle.size): `mov rcx,[rbx+..]; mov [rsi+..],rcx; mov [rsi+..],rax; movzx eax,byte ptr [rbx+118h]`, read as the displacement of the store of the Font pointer. The source member offset 118h tells this getter from its two look-alike siblings (slots 89 to 91), so its two bytes are kept (literal_ok), as in FontHandle.size. Recipe 1 is FontHandle.dtor (0xe7f9e0 on 26.60), which first releases the control block of mDefaultFont (`nop; mov rdi,[rsi+..]; test rdi,rdi; je; lock dec dword ptr [rdi+..]; jne`, after the call that cleans up the base), read as the displacement of the load, then `add -8`. They are in two functions. Every other displacement, immediate and branch byte is a wildcard. The range check keeps the value plausible. The recipes were written on 26.60 only; 26.51 was not checked."
+  notes    = "The offset of FontHandle::mDefaultFont (shared_ptr<Font>: the Font at +0, the control block at +8) in FontHandle: 30h on 26.60 (mFontRepository 18h, mDefaultFont 30h, mFontId 40h, mIsDummyHandle 48h). Recipe 0 is the member copy in the body of the ClientInstance virtual getFontHandle (0x65ab760 on 26.60; the anchor of FontHandle.size): `mov rcx,[rbx+..]; mov [rsi+..],rcx; mov [rsi+..],rax; movzx eax,byte ptr [rbx+118h]`, read as the displacement of the store of the Font pointer. The source member offset 118h tells this getter from its two look-alike siblings (slots 89 to 91), so its two bytes are kept (literal_ok), as in FontHandle.size. Recipe 1 is FontHandle.dtor (0xe7f9e0 on 26.60), which first releases the control block of mDefaultFont (`nop; mov rdi,[rsi+..]; test rdi,rdi; je; lock dec dword ptr [rdi+..]; jne`, after the call that cleans up the base), read as the displacement of the load, then `add -8`. They are in two functions. Every other displacement, immediate and branch byte is a wildcard. The range check keeps the value plausible. The recipes were written on 26.60 only; 26.51 was not checked. What changed in 6afa4e47-dadc375797a3d31a (1.26.70.26): the getter copies the font id before the flag, so recipe 0 has an alternative with the id copy between the font store and the flag load. Recipe 1 (the destructor) now reads the control block of mDefaultFont from `mov r14,[rsi+38h]; mov [rsi+38h],rbx; test r14,r14` (a second alternative with one leading wildcard so that the offset stays 1). Class: would have survived with a better recipe."
 
   recipe {
-    step "pattern" {
-      bytes  = "48 8B 8B ?? ?? ?? ?? 48 89 4E ?? 48 89 46 ?? 0F B6 83 18 01 ?? ??"
+    step "pattern_any" {
+      patterns = [
+        "48 8B 8B ?? ?? ?? ?? 48 89 4E ?? 48 89 46 ?? 0F B6 83 18 01 ?? ??",
+        "48 8B 8B ?? ?? ?? ?? 48 89 4E ?? 48 89 46 ?? 48 8B 83 ?? ?? ?? ?? 48 89 46 ?? 0F B6 83 18 01 ?? ??",
+      ]
       offset = 7
-      literal_ok = ["18: member offset 118h of the source object: the two sibling getters read other members", "19: second byte of the same member offset"]
+      literal_ok = [
+        "0.18: member offset 118h of the source object: the two sibling getters read other members",
+        "0.19: second byte of the same member offset",
+        "1.29: member offset 118h of the source object, in the shape with the id copy before the flag",
+        "1.30: second byte of the same member offset",
+      ]
     }
     step "operand" {
       index = 0
@@ -83,8 +107,11 @@ entry "FontHandle.mDefaultFont" {
 
   recipe {
     step "ref" { entry = "FontHandle.dtor" }
-    step "pattern" {
-      bytes  = "90 48 8B 7E ?? 48 85 FF 74 ?? F0 FF 4F ?? 75"
+    step "pattern_any" {
+      patterns = [
+        "90 48 8B 7E ?? 48 85 FF 74 ?? F0 FF 4F ?? 75",
+        "?? 4C 8B 76 ?? 48 89 5E ?? 4D 85 F6 74 ?? F0 41 FF 4E ??",
+      ]
       offset = 1
     }
     step "operand" {

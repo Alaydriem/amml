@@ -683,6 +683,33 @@ fn hooked_marks_a_function_entry_and_defaults_to_false() {
 }
 
 #[test]
+fn a_hooked_vslot_keeps_the_vtables_of_its_slot_of_steps_once_each_in_order() {
+    let dir = TempDir::new().unwrap();
+    let slot_of = |vtable: &str| {
+        format!(
+            "  recipe {{\n    step \"pattern\" {{\n      bytes = \"48 89\"\n    }}\n    step \"slot_of\" {{\n      vtable = \"{vtable}\"\n    }}\n  }}\n"
+        )
+    };
+    let vslot = format!(
+        "entry \"V\" {{\n  kind = \"vslot\"\n  hooked = true\n{}{}{}}}\n",
+        slot_of("B.vtable"),
+        slot_of("A.vtable"),
+        slot_of("B.vtable")
+    );
+    let global = |id: &str| {
+        format!(
+            "entry \"{id}\" {{\n  kind = \"global\"\n  recipe {{\n    step \"pattern\" {{\n      bytes = \"48\"\n    }}\n  }}\n}}\n"
+        )
+    };
+    Fixture::write(dir.path(), "v.hcl", &format!("{}{}{vslot}", global("A.vtable"), global("B.vtable")));
+    let set = RecipeLoader::load_dir(dir.path()).unwrap();
+    let entry = set.entries().iter().find(|entry| entry.id.0 == "V").unwrap();
+    assert!(entry.hooked);
+    let vtables: Vec<_> = entry.slot_vtables().iter().map(|id| id.0.as_str()).collect();
+    assert_eq!(vtables, vec!["B.vtable", "A.vtable"]);
+}
+
+#[test]
 fn hooked_on_a_non_function_entry_or_not_a_bool_is_a_load_error() {
     let dir = TempDir::new().unwrap();
     let global = "entry \"G\" {\n  kind = \"global\"\n  hooked = true\n  recipe {\n    step \"pattern\" {\n      bytes = \"48 89\"\n    }\n  }\n}\n";

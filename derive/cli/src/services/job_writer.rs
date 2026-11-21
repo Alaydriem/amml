@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use amml_data::{BuildData, DependencyOrder, EntryId, RecipeSet};
 
-use crate::services::{Deriver, EntryExplainer, ReportWriter};
+use crate::services::{Deriver, EntryExplainer, LayoutGuard, ReportWriter};
 use crate::structs::{Degraded, DeriveOutcome, FailureReason, Image, Job};
 
 // a bound for the walk along a dependency chain; the chain of a derived set never loops
@@ -45,7 +45,7 @@ impl<'a> JobWriter<'a> {
         Ok(paths)
     }
 
-    /// One job per failure: the roots first, then the dependents, each group in recipe dependency order.
+    /// One job per failure that is not refused by a layout gate: the roots first, then the dependents, each group in recipe dependency order.
     pub fn jobs(&self) -> Result<Vec<Job>, io::Error> {
         if self.outcome.failures.is_empty() {
             return Ok(Vec::new());
@@ -60,6 +60,11 @@ impl<'a> JobWriter<'a> {
                 .set
                 .get(&failure.id)
                 .ok_or_else(|| io::Error::other(format!("failed entry {} is not in the recipe set", failure.id)))?;
+            if LayoutGuard::refusal(entry, |id| self.outcome.data.entries.get(id).map(|resolved| resolved.value))
+                .is_some()
+            {
+                continue;
+            }
             let traces = explainer
                 .trace(&failure.id, &deriver, self.outcome)
                 .map_err(|error| io::Error::other(error.to_string()))?;

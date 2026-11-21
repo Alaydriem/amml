@@ -2,7 +2,7 @@ use std::ffi::c_void;
 
 use amml_abi::{AMML_API_VERSION, AmmlApi, AmmlLogLevel, AmmlStatus, AmmlStr, KnownLogLevel};
 
-use crate::{Boundary, LoaderLog, LoaderState};
+use crate::{Boundary, LoaderLog, LoaderState, ServicesTable};
 
 /// The `extern "C"` functions of the `AmmlApi` table. Each is a thin delegator into
 /// `LoaderState` inside `Boundary::guard`, so a panic becomes `AmmlStatus::PANICKED`.
@@ -11,7 +11,7 @@ pub struct ApiTable;
 impl ApiTable {
     pub fn build(module_base: u64) -> AmmlApi {
         AmmlApi {
-            size: AmmlApi::SIZE_V1,
+            size: AmmlApi::SIZE_V3,
             version: AMML_API_VERSION,
             module_base,
             resolve: Self::resolve,
@@ -21,6 +21,7 @@ impl ApiTable {
             heap_new: Self::heap_new,
             heap_delete: Self::heap_delete,
             mod_dir: Self::mod_dir,
+            services: ServicesTable::build(),
         }
     }
 

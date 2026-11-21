@@ -112,4 +112,15 @@ unsafe extern "C" {
     /// Calls a `{ thunk, object }` function reference (passed by value, so by a pointer to a copy) with
     /// `(a, &b, null)` and `(b, null, &a)`. Returns how many calls gave true.
     pub fn fx_function_ref_call(reference: *const c_void, a: *mut c_void, b: *mut c_void) -> i32;
+
+    /// `new std::unordered_map<int, std::shared_ptr<int>>` holding `i * 10 -> make_shared(i * 100)` for `0..count`.
+    pub fn fx_umap_make(count: i32) -> *mut c_void;
+    /// `delete` of a map from `fx_umap_make`.
+    pub fn fx_umap_delete(map: *mut c_void);
+    /// The head (sentinel) node of the map's list, `end()._Ptr`.
+    pub fn fx_umap_head(map: *mut c_void) -> *mut c_void;
+    /// `sizeof(std::unordered_map<int, std::shared_ptr<int>>)`.
+    pub fn fx_sizeof_umap() -> usize;
+    /// Sums the elements of a `std::vector<int>`.
+    pub fn fx_vec_int_sum(vec: *const c_void) -> i32;
 }

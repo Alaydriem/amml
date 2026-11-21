@@ -1,5 +1,6 @@
 mod check_runner;
 mod code_xref;
+mod compat_checker;
 mod deriver;
 mod disasm;
 mod entry_explainer;

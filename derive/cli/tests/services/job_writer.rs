@@ -231,3 +231,30 @@ sub/a.hcl
         "{job}"
     );
 }
+
+#[test]
+fn an_entry_refused_by_its_layout_gate_gets_no_job() {
+    let image = image();
+    let mut guard = entry(
+        "G",
+        vec![
+            Step::PatternAny {
+                patterns: vec!["AA BB CC".to_string(), "DD EE".to_string()],
+                offset: 0,
+                literal_ok: Vec::new(),
+            },
+            Step::Alternative,
+        ],
+    );
+    guard.kind = EntryKind::Field;
+    let mut old = entry("Old", vec![pattern("DD EE FF")]);
+    old.checks = vec![Check::EntryIs { entry: id("G"), value: 1 }];
+    let set = RecipeSet::new(vec![guard, old, entry("Fail", vec![pattern("DD EE FF")])]).unwrap();
+    let outcome = derive(&image, &set);
+    let dir = TempDir::new().unwrap();
+    let paths = JobWriter::new(&image, &set, &outcome, None).write(dir.path()).unwrap();
+    let out = dir.path().join(image.build().file_stem());
+    assert_eq!(paths, vec![out.join("jobs/Fail.md"), out.join("README.md")]);
+    let index = read(&out, "README.md");
+    assert!(!index.contains("Old"), "{index}");
+}

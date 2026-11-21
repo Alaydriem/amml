@@ -5,6 +5,13 @@ build {
   text_hash = "0xb127418e74d2f2f9"
 }
 
+resolved "AbilitiesComponent.mPlayerPermissions" {
+  kind        = "field"
+  value       = "0x1"
+  recipes     = 1
+  fingerprint = "d86b8e4a3378241f"
+}
+
 resolved "ActiveCameraComponent.typeId" {
   kind        = "field"
   value       = "0x113040a1"
@@ -16,7 +23,7 @@ resolved "Actor.aabbShapeComponent" {
   kind        = "field"
   value       = "0x248"
   recipes     = 1
-  fingerprint = "2561e93fd64363a9"
+  fingerprint = "374411c8496a5841"
 }
 
 resolved "Actor.actorRotationComponent" {
@@ -30,21 +37,21 @@ resolved "Actor.getAttachPos" {
   kind        = "function"
   value       = "0xba2a30"
   recipes     = 2
-  fingerprint = "3e5e927cdb687147"
+  fingerprint = "0cb3e6828ad3d1bc"
 }
 
 resolved "Actor.getDimension" {
   kind        = "function"
   value       = "0xba1620"
   recipes     = 2
-  fingerprint = "c3000862da5cc88d"
+  fingerprint = "74b8e64d49b5ea90"
 }
 
 resolved "Actor.getDimensionBlockSource" {
   kind        = "function"
   value       = "0xb94ff0"
   recipes     = 2
-  fingerprint = "941b9d51985739f9"
+  fingerprint = "7e53ef4b68a396c6"
 }
 
 resolved "Actor.getItemInHandSlot" {
@@ -58,21 +65,21 @@ resolved "Actor.getRuntimeID" {
   kind        = "function"
   value       = "0xb9d640"
   recipes     = 2
-  fingerprint = "f08b8aa24e678b6d"
+  fingerprint = "6fe1776361174a16"
 }
 
 resolved "Actor.getViewVector" {
   kind        = "function"
   value       = "0xba30f0"
   recipes     = 2
-  fingerprint = "1a6dc3552c6fbb1b"
+  fingerprint = "c8b228f2d21165c5"
 }
 
 resolved "Actor.isAlive" {
   kind        = "vslot"
   value       = "0x2e"
   recipes     = 2
-  fingerprint = "05149d76d28c98fc"
+  fingerprint = "5b7d25df02d5446b"
 }
 
 resolved "Actor.mEntityContext" {
@@ -86,14 +93,14 @@ resolved "Actor.mLevel" {
   kind        = "field"
   value       = "0x200"
   recipes     = 2
-  fingerprint = "970fd93a51f1b1cd"
+  fingerprint = "7861611f14f5fb3f"
 }
 
 resolved "Actor.setYHeadRotations" {
   kind        = "function"
   value       = "0xbd3b60"
   recipes     = 2
-  fingerprint = "3382db6b2af49b20"
+  fingerprint = "a8ca8c4e99b536b4"
 }
 
 resolved "Actor.stateVectorComponent" {
@@ -135,28 +142,28 @@ resolved "AnimatedImageData.mImage" {
   kind        = "field"
   value       = "0x8"
   recipes     = 2
-  fingerprint = "dff9c099b83b9cdf"
+  fingerprint = "a3852648c46ac6d3"
 }
 
 resolved "AnimatedImageData.mType" {
   kind        = "field"
   value       = "0x0"
   recipes     = 1
-  fingerprint = "12e37216180fef81"
+  fingerprint = "5bd9178be003e0fa"
 }
 
 resolved "AnimatedImageData.size" {
   kind        = "field"
   value       = "0x40"
   recipes     = 1
-  fingerprint = "d852eef0dc833dbd"
+  fingerprint = "308d77ff20a843b3"
 }
 
 resolved "AnimationComponent.applyAnimationsCallback" {
   kind        = "function"
   value       = "0x61954a0"
   recipes     = 2
-  fingerprint = "7b81daca7ecd4178"
+  fingerprint = "ed402a0801ec930e"
 }
 
 resolved "BaseActorRenderContext.Impl.mCameraTargetPosition" {
@@ -170,21 +177,21 @@ resolved "BaseActorRenderContext.ctor" {
   kind        = "function"
   value       = "0x57e22c0"
   recipes     = 2
-  fingerprint = "7130ee0f23a73ad9"
+  fingerprint = "7368be889e2f7d19"
 }
 
 resolved "BaseActorRenderContext.dtor" {
   kind        = "function"
   value       = "0x57e2740"
   recipes     = 2
-  fingerprint = "1946d70770c3b467"
+  fingerprint = "1c646f0a84117f06"
 }
 
 resolved "BaseActorRenderContext.mBlockEntityRenderDispatcher" {
   kind        = "field"
   value       = "0x30"
   recipes     = 2
-  fingerprint = "f39f75c3addfcd5c"
+  fingerprint = "ca0eb09d022eb008"
 }
 
 resolved "BaseActorRenderContext.mImpl" {
@@ -198,7 +205,7 @@ resolved "BaseActorRenderContext.size" {
   kind        = "field"
   value       = "0xc0"
   recipes     = 1
-  fingerprint = "5d685e7a020c9c93"
+  fingerprint = "e44d9e4118e8ddae"
 }
 
 resolved "BaseActorRenderer._extractRenderTextObject" {
@@ -219,7 +226,21 @@ resolved "BaseActorRenderer.size" {
   kind        = "field"
   value       = "0xb8"
   recipes     = 2
-  fingerprint = "91d38d189ba9204f"
+  fingerprint = "8defc330b75ff4e9"
+}
+
+resolved "Biome.mHash" {
+  kind        = "field"
+  value       = "0x190"
+  recipes     = 2
+  fingerprint = "4e2ee77c6aca9fff"
+}
+
+resolved "Biome.mId" {
+  kind        = "field"
+  value       = "0x168"
+  recipes     = 2
+  fingerprint = "85a26ecc2e43b4d7"
 }
 
 resolved "BiomeColorSampling.getMapGrassColor" {
@@ -233,14 +254,14 @@ resolved "BiomeColorSampling.getMapPolicy" {
   kind        = "function"
   value       = "0x5d3dbc0"
   recipes     = 2
-  fingerprint = "0ee79fa47cbc06ac"
+  fingerprint = "881c88c99fa582d3"
 }
 
 resolved "BiomeColorSampling.getTessellationPolicy" {
   kind        = "function"
   value       = "0x1e9fd20"
   recipes     = 2
-  fingerprint = "d6c8add5a34b4987"
+  fingerprint = "948bba81d58bb326"
 }
 
 resolved "BiomeColorSampling.getWaterColor" {
@@ -261,7 +282,7 @@ resolved "BitmapFont._getCharWidth" {
   kind        = "function"
   value       = "0x158fee0"
   recipes     = 2
-  fingerprint = "80c242103d93c57b"
+  fingerprint = "2b7c11d9593c07d4"
 }
 
 resolved "BitmapFont.vtable" {
@@ -275,7 +296,7 @@ resolved "Block.canProvideFullSupport" {
   kind        = "function"
   value       = "0x3153070"
   recipes     = 2
-  fingerprint = "35d262682cd28a89"
+  fingerprint = "067b64906810709a"
 }
 
 resolved "Block.getRenderLayer" {
@@ -283,6 +304,13 @@ resolved "Block.getRenderLayer" {
   value       = "0x6a3a2d0"
   recipes     = 2
   fingerprint = "72671cdfcacf4ecf"
+}
+
+resolved "Block.mBlockType" {
+  kind        = "field"
+  value       = "0x68"
+  recipes     = 2
+  fingerprint = "874d4b2ec7aa3f55"
 }
 
 resolved "Block.mDirectData.mLightEmission" {
@@ -296,28 +324,28 @@ resolved "Block.tryGetComponent.BlockMapColorComponent" {
   kind        = "function"
   value       = "0x3166210"
   recipes     = 2
-  fingerprint = "69971ad027ea27d0"
+  fingerprint = "b6b2affc241f3a0b"
 }
 
 resolved "BlockActor._getRenderComponent" {
   kind        = "vslot"
   value       = "0x15"
   recipes     = 2
-  fingerprint = "285ee4673c783261"
+  fingerprint = "180ff5e2e83ce3b1"
 }
 
 resolved "BlockActor.isType" {
   kind        = "vslot"
   value       = "0x10"
   recipes     = 2
-  fingerprint = "d3eee77640128314"
+  fingerprint = "7c3a63fca6bbeb58"
 }
 
 resolved "BlockActor.loadStatic" {
   kind        = "function"
   value       = "0x3301fb0"
   recipes     = 2
-  fingerprint = "c00f86946a0f8bbd"
+  fingerprint = "05c9febe3c4a7be1"
 }
 
 resolved "BlockActor.mPosition" {
@@ -373,35 +401,35 @@ resolved "BlockSource.fetchEntities" {
   kind        = "vslot"
   value       = "0x1f"
   recipes     = 2
-  fingerprint = "30e3bcc5b853572b"
+  fingerprint = "47d5cac7bdfc8431"
 }
 
 resolved "BlockSource.getBlock" {
   kind        = "function"
   value       = "0x32ce100"
   recipes     = 2
-  fingerprint = "4685c14d4882aa16"
+  fingerprint = "67488d155fa97c2f"
 }
 
 resolved "BlockSource.getBrightnessPair" {
   kind        = "function"
   value       = "0x32d0e50"
   recipes     = 2
-  fingerprint = "3280a62a89e73158"
+  fingerprint = "e7c4640d81c9af80"
 }
 
 resolved "BlockSource.getChunk" {
   kind        = "vslot"
   value       = "0x2a"
   recipes     = 2
-  fingerprint = "4e6a1dc8f0811148"
+  fingerprint = "58c962f6f321325a"
 }
 
 resolved "BlockSource.getDimensionId" {
   kind        = "vslot"
   value       = "0x12"
   recipes     = 2
-  fingerprint = "14ac4ffeb571d96c"
+  fingerprint = "1cd541cd113728a6"
 }
 
 resolved "BlockSource.getLightColor" {
@@ -429,14 +457,14 @@ resolved "BlockSourceListener.onBlockChanged" {
   kind        = "vslot"
   value       = "0x4"
   recipes     = 2
-  fingerprint = "3a4e49e38ccc3204"
+  fingerprint = "e584586f8fea65f4"
 }
 
 resolved "BlockSourceListener.onSourceDestroyed" {
   kind        = "vslot"
   value       = "0x2"
   recipes     = 2
-  fingerprint = "d4be53a6b9cd385c"
+  fingerprint = "23238ca1c38b3b37"
 }
 
 resolved "BlockSourceListener.vtable" {
@@ -478,7 +506,7 @@ resolved "BlockTessellator.tessellateInWorld" {
   kind        = "function"
   value       = "0x681b430"
   recipes     = 2
-  fingerprint = "dd23b815f47d88b3"
+  fingerprint = "a882554c9e53c9a3"
 }
 
 resolved "BlockTessellatorCache.getBlock" {
@@ -492,7 +520,7 @@ resolved "BlockTessellatorCache.getLightColor" {
   kind        = "function"
   value       = "0x68b0820"
   recipes     = 2
-  fingerprint = "5663fb8642945c89"
+  fingerprint = "99e1ba885276ce03"
 }
 
 resolved "BlockType.asItemInstance" {
@@ -506,7 +534,7 @@ resolved "BlockType.canBeBuiltOver" {
   kind        = "vslot"
   value       = "0x54"
   recipes     = 2
-  fingerprint = "79a8a06c8956dfa2"
+  fingerprint = "dcef022ee0b20451"
 }
 
 resolved "BlockType.getCollisionShape" {
@@ -520,21 +548,21 @@ resolved "BlockType.getExtraRenderLayers" {
   kind        = "vslot"
   value       = "0x7c"
   recipes     = 2
-  fingerprint = "fb63cf4fb0e3f5a7"
+  fingerprint = "6abfb3b82c5b3b26"
 }
 
 resolved "BlockType.getMapColor" {
   kind        = "vslot"
   value       = "0x81"
   recipes     = 2
-  fingerprint = "0de6b0b64b16ce8c"
+  fingerprint = "73153b599dfb9b52"
 }
 
 resolved "BlockType.isInteractiveBlock" {
   kind        = "vslot"
   value       = "0x78"
   recipes     = 2
-  fingerprint = "4b277ad7b28721c8"
+  fingerprint = "d7e81d2a131d6179"
 }
 
 resolved "BlockType.mMaterialInline" {
@@ -548,7 +576,7 @@ resolved "BlockType.mNameInfo.mFullName" {
   kind        = "field"
   value       = "0xe0"
   recipes     = 2
-  fingerprint = "e8c1e9e80f10afa4"
+  fingerprint = "d9f07ca56a3d1cd7"
 }
 
 resolved "BlockType.mTintMethod" {
@@ -597,21 +625,21 @@ resolved "CameraComponent.sizeFactor" {
   kind        = "field"
   value       = "0x9"
   recipes     = 2
-  fingerprint = "657d9a0aaaa31afd"
+  fingerprint = "9f8f0912460950a4"
 }
 
 resolved "CameraComponent.sizeShift" {
   kind        = "field"
   value       = "0x5"
   recipes     = 2
-  fingerprint = "68c32570c0152502"
+  fingerprint = "43f4e895bca2b8ba"
 }
 
 resolved "CameraComponent.typeId" {
   kind        = "field"
   value       = "0x4f6047c7"
   recipes     = 2
-  fingerprint = "7ea65fce729970d6"
+  fingerprint = "6f1d46c06137692c"
 }
 
 resolved "CameraInstruction.mSpline" {
@@ -639,21 +667,21 @@ resolved "CameraPreset.size" {
   kind        = "field"
   value       = "0x130"
   recipes     = 1
-  fingerprint = "c915cb1fd39628a0"
+  fingerprint = "4e0a2fd209f5aa54"
 }
 
 resolved "CameraRegistry.cameraEntityStride" {
   kind        = "field"
   value       = "0x20"
   recipes     = 2
-  fingerprint = "22c0d622855194dd"
+  fingerprint = "61709f589773fe3d"
 }
 
 resolved "CameraRegistry.mCameraEntities" {
   kind        = "field"
   value       = "0x1d8"
   recipes     = 2
-  fingerprint = "fccb11fbd66a8b1d"
+  fingerprint = "c728efbeec06033e"
 }
 
 resolved "ChestBlockActor.mLargeChestPaired" {
@@ -716,7 +744,7 @@ resolved "ClientInputUpdateSystem.extractRawHIDInput" {
   kind        = "function"
   value       = "0x6d51230"
   recipes     = 2
-  fingerprint = "a6bc1bb34e44b3af"
+  fingerprint = "45d13180958448fc"
 }
 
 resolved "ClientInstance.GameCallbacks.vtable" {
@@ -730,49 +758,49 @@ resolved "ClientInstance.gameCallbacksOffset" {
   kind        = "field"
   value       = "0x88"
   recipes     = 1
-  fingerprint = "6038c7b5a556c228"
+  fingerprint = "0095122066be1940"
 }
 
 resolved "ClientInstance.getCameraRegistry" {
   kind        = "vslot"
   value       = "0xbc"
   recipes     = 2
-  fingerprint = "a5769ef524a34e13"
+  fingerprint = "2576a8fe0cf94f57"
 }
 
 resolved "ClientInstance.getCurrentUIRouter" {
   kind        = "vslot"
   value       = "0xef"
   recipes     = 2
-  fingerprint = "beb451fff04dbb24"
+  fingerprint = "008c654e117901b3"
 }
 
 resolved "ClientInstance.getFontHandle" {
   kind        = "vslot"
   value       = "0x57"
   recipes     = 2
-  fingerprint = "8d77fb2f917c4a14"
+  fingerprint = "0526f20377a1ebe3"
 }
 
 resolved "ClientInstance.getGameConnectionInfo" {
   kind        = "vslot"
   value       = "0xa"
   recipes     = 3
-  fingerprint = "debc83beac7177d9"
+  fingerprint = "894ea19dc56ae83a"
 }
 
 resolved "ClientInstance.getItemInHandRenderer" {
   kind        = "vslot"
   value       = "0x15d"
   recipes     = 2
-  fingerprint = "e6d5c96f6d09b3e2"
+  fingerprint = "7acf425ea4aa9256"
 }
 
 resolved "ClientInstance.getLevel" {
   kind        = "vslot"
   value       = "0xa6"
   recipes     = 2
-  fingerprint = "2e40ae8d17371280"
+  fingerprint = "cdac3521ed5845e7"
 }
 
 resolved "ClientInstance.getLocalPlayer" {
@@ -786,21 +814,21 @@ resolved "ClientInstance.getMinecraftGame" {
   kind        = "vslot"
   value       = "0x4e"
   recipes     = 2
-  fingerprint = "d8417392edb3accd"
+  fingerprint = "39d384ac96762534"
 }
 
 resolved "ClientInstance.getMinecraftInput" {
   kind        = "vslot"
   value       = "0x108"
   recipes     = 2
-  fingerprint = "8b5cef6464690d65"
+  fingerprint = "b92afbc0700c4097"
 }
 
 resolved "ClientInstance.getMouseGrabbed" {
   kind        = "vslot"
   value       = "0x91"
   recipes     = 3
-  fingerprint = "c6eb0db33d254505"
+  fingerprint = "f06449ed93838fba"
 }
 
 resolved "ClientInstance.getOptions" {
@@ -814,7 +842,7 @@ resolved "ClientInstance.getPacketSender" {
   kind        = "vslot"
   value       = "0x122"
   recipes     = 2
-  fingerprint = "4f0a1063124b381d"
+  fingerprint = "8e00da2ec973ed9c"
 }
 
 resolved "ClientInstance.getRegion" {
@@ -828,7 +856,7 @@ resolved "ClientInstance.getTextureGroup" {
   kind        = "vslot"
   value       = "0x67"
   recipes     = 2
-  fingerprint = "642a74a0e1dc5c39"
+  fingerprint = "2c041ac0e869a533"
 }
 
 resolved "ClientInstance.getTopScreenName" {
@@ -842,7 +870,7 @@ resolved "ClientInstance.isInRealm" {
   kind        = "vslot"
   value       = "0x9e"
   recipes     = 2
-  fingerprint = "4d0c19a34596d797"
+  fingerprint = "fd8b2db197e0e4f9"
 }
 
 resolved "ClientInstance.isShowingMenu" {
@@ -863,21 +891,21 @@ resolved "ClientInstance.mMinecraft" {
   kind        = "field"
   value       = "0x1d0"
   recipes     = 2
-  fingerprint = "8611942a1022089f"
+  fingerprint = "df1be6f77eae8131"
 }
 
 resolved "ClientInstance.mRealTimer" {
   kind        = "field"
   value       = "0xed8"
   recipes     = 2
-  fingerprint = "c38d66c680ee5e72"
+  fingerprint = "208eb6539d324402"
 }
 
 resolved "ClientInstance.mSimTimer" {
   kind        = "field"
   value       = "0xe58"
   recipes     = 2
-  fingerprint = "81b58d28f8b76c30"
+  fingerprint = "3b0c14312a05ee20"
 }
 
 resolved "ClientInstance.onPlayerLoaded" {
@@ -891,28 +919,28 @@ resolved "ClientInstance.onStartJoinGame" {
   kind        = "vslot"
   value       = "0xb"
   recipes     = 2
-  fingerprint = "a091638bc935d842"
+  fingerprint = "0f241c61a86f24f4"
 }
 
 resolved "ClientInstance.onTick" {
   kind        = "function"
   value       = "0x65a09f0"
   recipes     = 2
-  fingerprint = "41f5946da70c5b4d"
+  fingerprint = "72945bb8250e08f6"
 }
 
 resolved "ClientInstance.requestLeaveGame" {
   kind        = "vslot"
   value       = "0xe"
   recipes     = 2
-  fingerprint = "f98377f8e68432c6"
+  fingerprint = "e4189e4fc5e691ea"
 }
 
 resolved "ClientInstance.startExternalNetworkWorld" {
   kind        = "vslot"
   value       = "0x148"
   recipes     = 2
-  fingerprint = "2db5d68a06c5411c"
+  fingerprint = "199a3e30d132d719"
 }
 
 resolved "ClientInstance.update" {
@@ -933,28 +961,28 @@ resolved "ClientLevel.getLevelData" {
   kind        = "vslot"
   value       = "0xac"
   recipes     = 2
-  fingerprint = "26884c6df5ed776c"
+  fingerprint = "5d03494ed07f53c3"
 }
 
 resolved "ClientLocatorBar.listHead" {
   kind        = "field"
   value       = "0x10"
   recipes     = 1
-  fingerprint = "33a3bd0dd1258968"
+  fingerprint = "ed4321ff226d4ac0"
 }
 
 resolved "ClientLocatorBar.nodeWaypoint" {
   kind        = "field"
   value       = "0x20"
   recipes     = 2
-  fingerprint = "490f77f23dd3a977"
+  fingerprint = "1c77d8d4b73429c3"
 }
 
 resolved "ClientNetworkHandler.handle.CameraInstructionPacket" {
   kind        = "vslot"
   value       = "0x9a"
   recipes     = 2
-  fingerprint = "a8f3c025c3663ea8"
+  fingerprint = "3990cb56b4e90bac"
 }
 
 resolved "ClientNetworkHandler.handle.CameraPresetsPacket" {
@@ -968,63 +996,63 @@ resolved "ClientNetworkHandler.handle.ContainerClosePacket" {
   kind        = "vslot"
   value       = "0xc8"
   recipes     = 2
-  fingerprint = "b27e324b7c213ef2"
+  fingerprint = "f05e1e064120a86b"
 }
 
 resolved "ClientNetworkHandler.handle.ContainerOpenPacket" {
   kind        = "vslot"
   value       = "0xc9"
   recipes     = 2
-  fingerprint = "82d4fa100119a4dd"
+  fingerprint = "d9cb103e3a627dbd"
 }
 
 resolved "ClientNetworkHandler.handle.ItemStackResponsePacket" {
   kind        = "vslot"
   value       = "0xca"
   recipes     = 2
-  fingerprint = "54239e8cba79839a"
+  fingerprint = "91de37f2b9b5ded6"
 }
 
 resolved "ClientNetworkHandler.handle.MovePlayerPacket" {
   kind        = "vslot"
   value       = "0xe9"
   recipes     = 2
-  fingerprint = "04153b7d4d72736f"
+  fingerprint = "29c2f6da7491bd38"
 }
 
 resolved "ClientNetworkHandler.handle.NetworkChunkPublisherUpdatePacket" {
   kind        = "vslot"
   value       = "0x8e"
   recipes     = 2
-  fingerprint = "ae0018512411a4a6"
+  fingerprint = "cb66f4bbcabb0fdf"
 }
 
 resolved "ClientNetworkHandler.handle.NetworkStackLatencyPacket" {
   kind        = "vslot"
   value       = "0x5d"
   recipes     = 2
-  fingerprint = "42716485daade630"
+  fingerprint = "c6913d5f3bf5f96f"
 }
 
 resolved "ClientNetworkHandler.handle.PlayerListPacket" {
   kind        = "vslot"
   value       = "0xb3"
   recipes     = 2
-  fingerprint = "51585fc051a08fe3"
+  fingerprint = "2d8856df9df8f616"
 }
 
 resolved "ClientNetworkHandler.handle.PlayerSkinPacket" {
   kind        = "vslot"
   value       = "0x6b"
   recipes     = 2
-  fingerprint = "3465e2e1cf447cea"
+  fingerprint = "7f0f0c1f82accdb2"
 }
 
 resolved "ClientNetworkHandler.handle.PrimitiveShapesPacket" {
   kind        = "vslot"
   value       = "0x27"
   recipes     = 2
-  fingerprint = "441e164c4dc505f8"
+  fingerprint = "33f599af8b5fdebe"
 }
 
 resolved "ClientNetworkHandler.vtable" {
@@ -1038,21 +1066,21 @@ resolved "ClientWaypoint.mColor" {
   kind        = "field"
   value       = "0x18"
   recipes     = 1
-  fingerprint = "18d4d0575b66bd18"
+  fingerprint = "a6aae35cb8073804"
 }
 
 resolved "ClientWaypoint.mColorEngaged" {
   kind        = "field"
   value       = "0x28"
   recipes     = 1
-  fingerprint = "b50181a6c9c007de"
+  fingerprint = "f5396ac6bc440242"
 }
 
 resolved "ClientWaypoint.mVisible" {
   kind        = "field"
   value       = "0x60"
   recipes     = 1
-  fingerprint = "fec1798d97712a38"
+  fingerprint = "deb34f0d928f7b1f"
 }
 
 resolved "CommandRequestPacket.mCommand" {
@@ -1080,7 +1108,7 @@ resolved "CompoundTag.nodeVariantIndex" {
   kind        = "field"
   value       = "0x68"
   recipes     = 2
-  fingerprint = "7d916f7faafb1f85"
+  fingerprint = "111e58872b69f2f6"
 }
 
 resolved "CompoundTag.vtable" {
@@ -1115,7 +1143,7 @@ resolved "ContainerScreenController._handleAutoPlace" {
   kind        = "function"
   value       = "0x500b080"
   recipes     = 2
-  fingerprint = "ac7eed0455364178"
+  fingerprint = "7653243efd1b2b1b"
 }
 
 resolved "ContainerScreenController._handleDropItem" {
@@ -1136,7 +1164,7 @@ resolved "ContainerScreenController._handlePlaceAll" {
   kind        = "vslot"
   value       = "0x36"
   recipes     = 2
-  fingerprint = "d164e24ebd6cbd43"
+  fingerprint = "4d3a0880e0f1c457"
 }
 
 resolved "ContainerScreenController._handleTakeAll" {
@@ -1150,7 +1178,7 @@ resolved "ContainerScreenController.getVisualItemStackImpl" {
   kind        = "vslot"
   value       = "0x47"
   recipes     = 2
-  fingerprint = "100c3a1fd47be39f"
+  fingerprint = "834576972c96bfba"
 }
 
 resolved "ContainerScreenController.mContainerManagerController" {
@@ -1164,28 +1192,28 @@ resolved "ContainerScreenController.onContainerSlotHovered" {
   kind        = "function"
   value       = "0x500d530"
   recipes     = 2
-  fingerprint = "72420feacdad4fa3"
+  fingerprint = "a4141ec0d5620031"
 }
 
 resolved "ContainerScreenController.onContainerSlotUnhovered" {
   kind        = "function"
   value       = "0x500d780"
   recipes     = 2
-  fingerprint = "cb6ce5fb25dcce33"
+  fingerprint = "266474bf7b57116b"
 }
 
 resolved "ContainerScreenController.vtable" {
   kind        = "global"
   value       = "0xf222ed0"
   recipes     = 2
-  fingerprint = "70fda17f29eb4598"
+  fingerprint = "06ba876350f32ed4"
 }
 
 resolved "CreativeItemRegistry.mCreativeItems" {
   kind        = "field"
   value       = "0x18"
   recipes     = 1
-  fingerprint = "5a1d33cb81090a04"
+  fingerprint = "b47a92b4d7f74f85"
 }
 
 resolved "DBStorage.checkShutdownDone" {
@@ -1202,6 +1230,13 @@ resolved "DBStorage.ctor" {
   fingerprint = "4dfc43e40b2cac18"
 }
 
+resolved "DBStorage.mFullPath" {
+  kind        = "field"
+  value       = "0x98"
+  recipes     = 2
+  fingerprint = "01b854c7b07869f4"
+}
+
 resolved "DBStorage.vtable" {
   kind        = "global"
   value       = "0xf08b380"
@@ -1213,21 +1248,28 @@ resolved "DefaultDataLoadHelper.vtable" {
   kind        = "global"
   value       = "0xf0c7d50"
   recipes     = 2
-  fingerprint = "37cc819f44e86dc5"
+  fingerprint = "7b97132ffb479e3e"
 }
 
 resolved "Dimension.getBlockSourceFromMainChunkSource" {
   kind        = "vslot"
   value       = "0xd"
-  recipes     = 3
-  fingerprint = "375a3efb388163cd"
+  recipes     = 2
+  fingerprint = "20aeb38697e9aae0"
 }
 
 resolved "Dimension.getDimensionId" {
   kind        = "vslot"
   value       = "0x3"
   recipes     = 2
-  fingerprint = "3c814dbc06cc5ee7"
+  fingerprint = "e5cbe0bdf941445c"
+}
+
+resolved "Dimension.mSkyDarken" {
+  kind        = "field"
+  value       = "0x1a9"
+  recipes     = 2
+  fingerprint = "2b857b63c2e53b3e"
 }
 
 resolved "Dimension.vtable" {
@@ -1248,21 +1290,21 @@ resolved "FillingContainer.setItem" {
   kind        = "vslot"
   value       = "0xc"
   recipes     = 2
-  fingerprint = "3aa43140ac1a6079"
+  fingerprint = "54f88e39c71626c0"
 }
 
 resolved "FillingContainer.swapSlots" {
   kind        = "vslot"
   value       = "0x2d"
   recipes     = 2
-  fingerprint = "89ed5ea1d368feea"
+  fingerprint = "0e94774db443b500"
 }
 
 resolved "Font.getLineLength" {
   kind        = "vslot"
   value       = "0x6"
   recipes     = 2
-  fingerprint = "4e45c3a846cf2e29"
+  fingerprint = "0a1c18545cc43688"
 }
 
 resolved "FontHandle.dtor" {
@@ -1276,14 +1318,21 @@ resolved "FontHandle.mDefaultFont" {
   kind        = "field"
   value       = "0x30"
   recipes     = 2
-  fingerprint = "2f918bd9beaa44fe"
+  fingerprint = "4317798ea5b4a248"
 }
 
 resolved "FontHandle.size" {
   kind        = "field"
   value       = "0x50"
   recipes     = 2
-  fingerprint = "45cfb124cebc0f4d"
+  fingerprint = "1a90fd023657a0e0"
+}
+
+resolved "FontRepository.mLoadedFonts" {
+  kind        = "field"
+  value       = "0x40"
+  recipes     = 1
+  fingerprint = "2c3b3f611d26bf1b"
 }
 
 resolved "FrameRenderObject.mViews" {
@@ -1297,21 +1346,21 @@ resolved "FriendWorldListProperty.toBinder" {
   kind        = "function"
   value       = "0xa002b80"
   recipes     = 1
-  fingerprint = "33d36a536da0eb24"
+  fingerprint = "109a3298f540b0b5"
 }
 
 resolved "FriendWorldListProperty.toBinderNamed" {
   kind        = "function"
   value       = "0xa002a60"
   recipes     = 1
-  fingerprint = "8027f16012112744"
+  fingerprint = "e02baefdefaa11a3"
 }
 
 resolved "FriendWorldListProperty.vtable" {
   kind        = "global"
   value       = "0xf3c8cd0"
   recipes     = 1
-  fingerprint = "ff845ae1039926cb"
+  fingerprint = "1a51bbd910bacc98"
 }
 
 resolved "GameConnectionInfo.ctor" {
@@ -1332,21 +1381,21 @@ resolved "GameConnectionInfo.mExternalServerName" {
   kind        = "field"
   value       = "0x68"
   recipes     = 2
-  fingerprint = "bbf553f81924177f"
+  fingerprint = "3e4457cb84392db2"
 }
 
 resolved "GameConnectionInfo.mUnresolvedUrl" {
   kind        = "field"
   value       = "0x28"
   recipes     = 2
-  fingerprint = "36034e67fc839977"
+  fingerprint = "c50dba67bb7ac479"
 }
 
 resolved "GameConnectionInfo.size" {
   kind        = "field"
   value       = "0x2f0"
   recipes     = 2
-  fingerprint = "458a70cbfea2a67b"
+  fingerprint = "9e972cd0f288fd85"
 }
 
 resolved "GameControllerHandler_GameCore.refresh" {
@@ -1381,35 +1430,42 @@ resolved "GameMode.continueDestroyBlock" {
   kind        = "vslot"
   value       = "0x3"
   recipes     = 2
-  fingerprint = "21bfa664fc721fc8"
+  fingerprint = "59e97b15bf069c9d"
 }
 
 resolved "GameMode.getMaxPickRange" {
   kind        = "function"
   value       = "0x376efa0"
   recipes     = 2
-  fingerprint = "48380ad6c2a05d98"
+  fingerprint = "6c0132d6e3c704c8"
 }
 
 resolved "GameMode.mPlayer" {
   kind        = "field"
   value       = "0x8"
   recipes     = 2
-  fingerprint = "84e9f9d7be46e82b"
+  fingerprint = "5ac9d3cf3ab83235"
 }
 
 resolved "GameMode.startDestroyBlock" {
   kind        = "vslot"
   value       = "0x1"
   recipes     = 2
-  fingerprint = "193037e42591e528"
+  fingerprint = "c3d54d1c670277b5"
 }
 
 resolved "GameMode.useItem" {
   kind        = "vslot"
   value       = "0xb"
   recipes     = 2
-  fingerprint = "6b25391ef4a15f04"
+  fingerprint = "e49ca7f3488be1e5"
+}
+
+resolved "GameMode.useItemResult" {
+  kind        = "field"
+  value       = "0x0"
+  recipes     = 2
+  fingerprint = "16d36bcac5492265"
 }
 
 resolved "GameMode.vtable" {
@@ -1423,63 +1479,133 @@ resolved "GlobalConstantBuffers.entityConstantBuffer" {
   kind        = "field"
   value       = "0xc0"
   recipes     = 1
-  fingerprint = "d874908b0ef4d5d2"
+  fingerprint = "e03a467c47434fee"
 }
 
 resolved "GuiData.getGuiScale" {
   kind        = "function"
   value       = "0xe7deb0"
   recipes     = 2
-  fingerprint = "64a00725e49fb2fc"
+  fingerprint = "7a891f96514952dd"
 }
 
 resolved "GuiMessage.ctor" {
   kind        = "function"
   value       = "0xe8d040"
   recipes     = 2
-  fingerprint = "62014d1e5e56911c"
+  fingerprint = "26358e988270ec5b"
+}
+
+resolved "GuiMessage.ctorShape" {
+  kind        = "field"
+  value       = "0x0"
+  recipes     = 2
+  fingerprint = "cc81b5dfc8020c75"
+}
+
+resolved "GuiMessage.mAuthorXuid" {
+  kind        = "field"
+  value       = "0xd8"
+  recipes     = 2
+  fingerprint = "b46e2e3cc5d234a7"
+}
+
+resolved "GuiMessage.mFilteredFullString" {
+  kind        = "field"
+  value       = "0xb0"
+  recipes     = 2
+  fingerprint = "d1c3fb9ca479767c"
+}
+
+resolved "GuiMessage.mFilteredFullStringEngaged" {
+  kind        = "field"
+  value       = "0xd0"
+  recipes     = 2
+  fingerprint = "3e165cd709a491fd"
+}
+
+resolved "GuiMessage.mFullString" {
+  kind        = "field"
+  value       = "0x90"
+  recipes     = 2
+  fingerprint = "ab5f3319c3080842"
+}
+
+resolved "GuiMessage.mType" {
+  kind        = "field"
+  value       = "0x0"
+  recipes     = 1
+  fingerprint = "1fa60e89eb84e069"
+}
+
+resolved "GuiMessage.mUsername" {
+  kind        = "field"
+  value       = "0x70"
+  recipes     = 2
+  fingerprint = "86008efea51d759e"
+}
+
+resolved "GuiMessage.size" {
+  kind        = "field"
+  value       = "0x110"
+  recipes     = 2
+  fingerprint = "4609fce4d3fa7518"
+}
+
+resolved "HIDController.resetKeys" {
+  kind        = "function"
+  value       = "0x4188d0"
+  recipes     = 2
+  fingerprint = "df227b3b6fed2f65"
 }
 
 resolved "HIDControllerGameCoreDesktop.onKeyDown" {
   kind        = "function"
   value       = "0x7cc2a0"
   recipes     = 2
-  fingerprint = "f02449dbb6f7f38f"
+  fingerprint = "a39dcd784d3ecd7e"
 }
 
 resolved "HIDControllerGameCoreDesktop.onKeyUp" {
   kind        = "function"
   value       = "0x7cc420"
   recipes     = 1
-  fingerprint = "caa2edbd4d538455"
+  fingerprint = "9e4b5fdc5549aad9"
 }
 
 resolved "HIDControllerGameCoreDesktop.update" {
   kind        = "function"
   value       = "0x7cbe00"
   recipes     = 2
-  fingerprint = "a91894b331b3c432"
+  fingerprint = "641282aa2a848943"
 }
 
 resolved "HIDControllerGameCoreDesktop.vtable" {
   kind        = "global"
   value       = "0xf090f40"
   recipes     = 1
-  fingerprint = "8dd31a50f2873803"
+  fingerprint = "415e1f784bbcfcd8"
+}
+
+resolved "HashedString.layout" {
+  kind        = "field"
+  value       = "0x0"
+  recipes     = 2
+  fingerprint = "3eb4c460bee4ee22"
 }
 
 resolved "HudLocatorBarRenderer.drawIcon" {
   kind        = "function"
   value       = "0x598aef0"
   recipes     = 2
-  fingerprint = "8ad8a7f85183ca92"
+  fingerprint = "d453657a8a9d47cc"
 }
 
 resolved "HudLocatorBarRenderer.render" {
   kind        = "vslot"
   value       = "0x10"
   recipes     = 2
-  fingerprint = "35dd550c8d17ace9"
+  fingerprint = "bf0e789b32f24be6"
 }
 
 resolved "HudLocatorBarRenderer.vtable" {
@@ -1500,7 +1626,7 @@ resolved "HudScreenController.tick" {
   kind        = "vslot"
   value       = "0x2"
   recipes     = 2
-  fingerprint = "b36aff9c06347de0"
+  fingerprint = "cef53fbc1d47d98d"
 }
 
 resolved "HudScreenController.vtable" {
@@ -1535,7 +1661,7 @@ resolved "IOptionRegistry.getUIProfile" {
   kind        = "vslot"
   value       = "0xe"
   recipes     = 2
-  fingerprint = "6eee7b1c9a798201"
+  fingerprint = "9a441bdd11bc4a23"
 }
 
 resolved "IOptionRegistry.getViewDistanceChunks" {
@@ -1549,14 +1675,14 @@ resolved "IOptionRegistry.isDeferredRenderingEnabled" {
   kind        = "vslot"
   value       = "0x4c"
   recipes     = 2
-  fingerprint = "7e6680ff581c1cb5"
+  fingerprint = "21c71feb818f1a0f"
 }
 
 resolved "IOptionRegistry.isGraphicsModeDeferred" {
   kind        = "vslot"
   value       = "0x4b"
   recipes     = 2
-  fingerprint = "41b49c47934d8667"
+  fingerprint = "c8f3fc8b61e6d683"
 }
 
 resolved "IOptionRegistry.setHideGUI" {
@@ -1605,7 +1731,7 @@ resolved "ImageBuffer.size" {
   kind        = "field"
   value       = "0x30"
   recipes     = 1
-  fingerprint = "c0a65fdfdf27b90e"
+  fingerprint = "e8798ac9deea6f37"
 }
 
 resolved "ImageDescription.depth" {
@@ -1613,6 +1739,13 @@ resolved "ImageDescription.depth" {
   value       = "0x10"
   recipes     = 1
   fingerprint = "68b33542a8f5addb"
+}
+
+resolved "InputHandler.mAnyInputHandler" {
+  kind        = "field"
+  value       = "0xc0"
+  recipes     = 1
+  fingerprint = "5f57723f955f30dd"
 }
 
 resolved "InputModeBoolOption.set" {
@@ -1633,35 +1766,35 @@ resolved "Item.appendFormattedHovertext" {
   kind        = "function"
   value       = "0x1a4e780"
   recipes     = 2
-  fingerprint = "4d9af556c03647e4"
+  fingerprint = "7dca2d8451222dab"
 }
 
 resolved "Item.getAnimationFrameFor" {
   kind        = "vslot"
   value       = "0x77"
   recipes     = 2
-  fingerprint = "44f3ad7873c8efad"
+  fingerprint = "2a682de98a0f3e12"
 }
 
 resolved "Item.getMaxDamage" {
   kind        = "vslot"
   value       = "0x24"
   recipes     = 2
-  fingerprint = "2e266affb50050d8"
+  fingerprint = "a0702eb6eec500df"
 }
 
 resolved "Item.isGlint" {
   kind        = "vslot"
   value       = "0x28"
   recipes     = 2
-  fingerprint = "9dad86806da9745a"
+  fingerprint = "cf1459e40478b228"
 }
 
 resolved "Item.mFullName" {
   kind        = "field"
   value       = "0x120"
   recipes     = 2
-  fingerprint = "12af0771914274f5"
+  fingerprint = "bfd24d3b2d9384a9"
 }
 
 resolved "Item.useOn" {
@@ -1675,21 +1808,21 @@ resolved "ItemInHandRenderer.mMatBlendBlock" {
   kind        = "field"
   value       = "0x1e0"
   recipes     = 1
-  fingerprint = "ba9ab60f3a30a623"
+  fingerprint = "13f47abddab2059f"
 }
 
 resolved "ItemRegistryRef.getCreativeItemRegistry" {
   kind        = "function"
   value       = "0x18dc130"
   recipes     = 2
-  fingerprint = "c84730989a8d10d5"
+  fingerprint = "8a7a7c2a9742d232"
 }
 
 resolved "ItemRenderer.renderGuiItemNew" {
   kind        = "function"
   value       = "0x6e73b60"
   recipes     = 2
-  fingerprint = "7e3f8e5d82f6c2c1"
+  fingerprint = "4c458a409d428c80"
 }
 
 resolved "ItemStack.copyCtor" {
@@ -1710,7 +1843,7 @@ resolved "ItemStack.fromTag" {
   kind        = "function"
   value       = "0x1a7d180"
   recipes     = 3
-  fingerprint = "a3b2ed3d0d4fe447"
+  fingerprint = "89c61c9bbe92b80b"
 }
 
 resolved "ItemStack.mNetIdVariant" {
@@ -1724,7 +1857,14 @@ resolved "ItemStack.reinit" {
   kind        = "vslot"
   value       = "0x3"
   recipes     = 2
-  fingerprint = "8a5cec2ec4371e4f"
+  fingerprint = "062e968e373f7a5b"
+}
+
+resolved "ItemStack.size" {
+  kind        = "field"
+  value       = "0x98"
+  recipes     = 1
+  fingerprint = "ca0a7beaecda9220"
 }
 
 resolved "ItemStack.vtable" {
@@ -1745,7 +1885,7 @@ resolved "ItemStackBase.getDamageValue" {
   kind        = "function"
   value       = "0x1acf130"
   recipes     = 3
-  fingerprint = "799cda56f25026ee"
+  fingerprint = "dca0560145e475b0"
 }
 
 resolved "ItemStackBase.getMaxStackSize" {
@@ -1759,7 +1899,7 @@ resolved "ItemStackBase.isDamaged" {
   kind        = "function"
   value       = "0x1ad0c70"
   recipes     = 3
-  fingerprint = "f8e0420bfc527200"
+  fingerprint = "0e4b2fbe239e4f25"
 }
 
 resolved "ItemStackBase.mBlock" {
@@ -1769,11 +1909,25 @@ resolved "ItemStackBase.mBlock" {
   fingerprint = "4dce6f31241f8673"
 }
 
+resolved "ItemStackBase.mCount" {
+  kind        = "field"
+  value       = "0x22"
+  recipes     = 1
+  fingerprint = "4cf9cedee2e54d71"
+}
+
+resolved "ItemStackBase.mItem" {
+  kind        = "field"
+  value       = "0x8"
+  recipes     = 2
+  fingerprint = "a1ad6d2c5a426c6f"
+}
+
 resolved "JsonValue.toStyledString" {
   kind        = "function"
   value       = "0xe9339b0"
   recipes     = 2
-  fingerprint = "5b741398dac30343"
+  fingerprint = "e4ae637fb7daf6a6"
 }
 
 resolved "LegacyClientNetworkHandler.vtable" {
@@ -1801,28 +1955,28 @@ resolved "Level.getHitResult" {
   kind        = "vslot"
   value       = "0x14f"
   recipes     = 2
-  fingerprint = "680b453b0624efcc"
+  fingerprint = "4aac559337b40d77"
 }
 
 resolved "Level.getItemRegistry" {
   kind        = "vslot"
   value       = "0x188"
   recipes     = 2
-  fingerprint = "702152b19483c632"
+  fingerprint = "6b5d9a5b72bd94e4"
 }
 
 resolved "Level.getLevelSeed64" {
   kind        = "vslot"
   value       = "0x87"
   recipes     = 2
-  fingerprint = "8cd2ef81e8894186"
+  fingerprint = "b86d1863cd3dc913"
 }
 
 resolved "Level.getSeed" {
   kind        = "vslot"
   value       = "0x86"
   recipes     = 2
-  fingerprint = "ad4edab22f41b87c"
+  fingerprint = "8339040dffac57c6"
 }
 
 resolved "LevelChunk.getBiome" {
@@ -1836,7 +1990,7 @@ resolved "LevelChunk.getBlock" {
   kind        = "function"
   value       = "0x384fcb0"
   recipes     = 2
-  fingerprint = "535a649156bacc35"
+  fingerprint = "930e93b0fc25b0f1"
 }
 
 resolved "LevelChunk.mSubChunks" {
@@ -1844,6 +1998,20 @@ resolved "LevelChunk.mSubChunks" {
   value       = "0x1c8"
   recipes     = 3
   fingerprint = "f2fb83559b1a36d7"
+}
+
+resolved "LevelData.mCheatsEnabled" {
+  kind        = "field"
+  value       = "0x4c8"
+  recipes     = 2
+  fingerprint = "1e2dab39e4c6ba0e"
+}
+
+resolved "LevelData.mCommandsEnabled" {
+  kind        = "field"
+  value       = "0x4c9"
+  recipes     = 2
+  fingerprint = "8d9d78e52df5d03d"
 }
 
 resolved "LevelData.mLevelName" {
@@ -1864,7 +2032,7 @@ resolved "LevelRenderer.mLevelRendererPlayer" {
   kind        = "field"
   value       = "0x480"
   recipes     = 1
-  fingerprint = "5d44ab83c7600732"
+  fingerprint = "36f62ca917647468"
 }
 
 resolved "LevelRenderer.mPointLightCoordinator" {
@@ -1899,7 +2067,7 @@ resolved "LevelRendererCamera.mCameraPos" {
   kind        = "field"
   value       = "0x64c"
   recipes     = 2
-  fingerprint = "794f596cdbb1f73e"
+  fingerprint = "fa7f1c8c343c6f13"
 }
 
 resolved "LevelRendererCamera.mCameraTargetPos" {
@@ -1920,21 +2088,21 @@ resolved "LevelRendererCamera.preRenderUpdate" {
   kind        = "function"
   value       = "0x5375190"
   recipes     = 2
-  fingerprint = "496f671a325cc6b7"
+  fingerprint = "12f4b6ef5e0b0f75"
 }
 
 resolved "LevelRendererCamera.renderBlockEntities" {
   kind        = "vslot"
   value       = "0x10"
   recipes     = 2
-  fingerprint = "11ae0338bbf5ef2b"
+  fingerprint = "2ca9ec346b53d897"
 }
 
 resolved "LevelRendererCamera.renderBlockEntitiesBody" {
   kind        = "function"
   value       = "0x5369340"
   recipes     = 2
-  fingerprint = "8ea045dbd32da4cd"
+  fingerprint = "c4aa0db1cb6965df"
 }
 
 resolved "LevelRendererPlayer.PlayerListener.vtable" {
@@ -1948,49 +2116,49 @@ resolved "LevelRendererPlayer.createViewRenderObject" {
   kind        = "function"
   value       = "0x53918e0"
   recipes     = 2
-  fingerprint = "732838ea566ad30a"
+  fingerprint = "530934f411c330ed"
 }
 
 resolved "LevelRendererPlayer.extractNameTags" {
   kind        = "vslot"
   value       = "0xc"
   recipes     = 2
-  fingerprint = "3626a77da92a92fa"
+  fingerprint = "000c0989fdcca8f4"
 }
 
 resolved "LevelRendererPlayer.getFov" {
   kind        = "function"
   value       = "0x5309c10"
   recipes     = 3
-  fingerprint = "536a30a3132bc76d"
+  fingerprint = "cc231e1c7e42013f"
 }
 
 resolved "LevelRendererPlayer.onWillChangeDimension" {
   kind        = "function"
   value       = "0x538f940"
   recipes     = 1
-  fingerprint = "539a03bdea9b3363"
+  fingerprint = "dab08de50fe47a67"
 }
 
 resolved "LevelRendererPlayer.queueRenderEntities" {
   kind        = "vslot"
   value       = "0x1b"
   recipes     = 2
-  fingerprint = "f8605db2cb408c55"
+  fingerprint = "fc5f63058839c66a"
 }
 
 resolved "LevelRendererPlayer.renderBlockEntities" {
   kind        = "function"
   value       = "0x539e030"
   recipes     = 1
-  fingerprint = "2cd8ec974b1fee7f"
+  fingerprint = "fc45b3b30a92b6d5"
 }
 
 resolved "LevelRendererPlayer.setupCamera" {
   kind        = "function"
   value       = "0x53b3360"
   recipes     = 3
-  fingerprint = "d0c81abfa458343b"
+  fingerprint = "fcb0b67aa0ce8cf7"
 }
 
 resolved "LevelRendererPlayer.vtable" {
@@ -2004,14 +2172,14 @@ resolved "LightPropagation.fillSubChunkGrid" {
   kind        = "function"
   value       = "0x5af2540"
   recipes     = 2
-  fingerprint = "78de33cf27e0538d"
+  fingerprint = "9fa8f4a7006dc2fd"
 }
 
 resolved "LightPropagation.tlsEmitterVector" {
   kind        = "field"
   value       = "0x18f0"
   recipes     = 2
-  fingerprint = "57b0d2dca8a2fa44"
+  fingerprint = "616828c408a99262"
 }
 
 resolved "LightPropagationCoordinator.propagateForMesh" {
@@ -2046,7 +2214,7 @@ resolved "MapPolicy.get" {
   kind        = "vslot"
   value       = "0x1"
   recipes     = 2
-  fingerprint = "2db44c2a8e577c94"
+  fingerprint = "7337d2a96bb87b6f"
 }
 
 resolved "MatrixStack.push" {
@@ -2088,7 +2256,14 @@ resolved "Mesh.renderMesh" {
   kind        = "function"
   value       = "0x4defc30"
   recipes     = 2
-  fingerprint = "97056081b22d1133"
+  fingerprint = "0a4e82a0e6b603c9"
+}
+
+resolved "Mesh.renderMeshTextureList" {
+  kind        = "function"
+  value       = "0x4def1e0"
+  recipes     = 2
+  fingerprint = "42b7a0b9464ac319"
 }
 
 resolved "Mesh.size" {
@@ -2123,14 +2298,14 @@ resolved "Minecraft.mRealTimer" {
   kind        = "field"
   value       = "0xf0"
   recipes     = 1
-  fingerprint = "91fef2f0e062941a"
+  fingerprint = "b23d978016e92a4b"
 }
 
 resolved "Minecraft.mSimTimer" {
   kind        = "field"
   value       = "0xe8"
   recipes     = 2
-  fingerprint = "800b33bfef3208e4"
+  fingerprint = "8e64b4338387cc07"
 }
 
 resolved "MinecraftGame.AppPlatformListener.vtable" {
@@ -2140,18 +2315,32 @@ resolved "MinecraftGame.AppPlatformListener.vtable" {
   fingerprint = "eb718ed08a4a10b1"
 }
 
+resolved "MinecraftGame.appPlatformListenerOffset" {
+  kind        = "field"
+  value       = "0x88"
+  recipes     = 2
+  fingerprint = "c1ea03b789ac858f"
+}
+
+resolved "MinecraftGame.applyActiveResourcePacks" {
+  kind        = "function"
+  value       = "0x873930"
+  recipes     = 2
+  fingerprint = "d4c922e76a89eb4c"
+}
+
 resolved "MinecraftGame.endFrame" {
   kind        = "function"
   value       = "0x887790"
   recipes     = 2
-  fingerprint = "aaf0531ce4d844e6"
+  fingerprint = "2effa60b84d59f31"
 }
 
 resolved "MinecraftGame.getWorldSystem" {
   kind        = "vslot"
   value       = "0x98"
-  recipes     = 3
-  fingerprint = "b1d2ebf0c645f6a7"
+  recipes     = 2
+  fingerprint = "3e1044612391b1aa"
 }
 
 resolved "MinecraftGame.grabMouse" {
@@ -2165,7 +2354,7 @@ resolved "MinecraftGame.isInGame" {
   kind        = "vslot"
   value       = "0x18"
   recipes     = 2
-  fingerprint = "1bad8e27d442baf9"
+  fingerprint = "c361f2c61a304f98"
 }
 
 resolved "MinecraftGame.isPrimaryClientInstanceReady" {
@@ -2179,7 +2368,7 @@ resolved "MinecraftGame.joinMultiplayerWithAddress" {
   kind        = "vslot"
   value       = "0x27"
   recipes     = 2
-  fingerprint = "d420e7fee52d0027"
+  fingerprint = "16b72d3270f7d977"
 }
 
 resolved "MinecraftGame.mRealTimer" {
@@ -2224,6 +2413,13 @@ resolved "MinecraftGame.vtable" {
   fingerprint = "f9bd30231e5cdcff"
 }
 
+resolved "MinecraftInputHandler.mInputHandler" {
+  kind        = "field"
+  value       = "0x20"
+  recipes     = 1
+  fingerprint = "0476c6db49370efa"
+}
+
 resolved "MinecraftPackets.createPacket" {
   kind        = "function"
   value       = "0x23764e0"
@@ -2242,84 +2438,84 @@ resolved "MinecraftUIRenderContext.drawImage" {
   kind        = "vslot"
   value       = "0x8"
   recipes     = 2
-  fingerprint = "e44609628313cbf5"
+  fingerprint = "dc1cd069c62418f0"
 }
 
 resolved "MinecraftUIRenderContext.drawRectangle" {
   kind        = "vslot"
   value       = "0xf"
   recipes     = 2
-  fingerprint = "3845f8da0ce23d41"
+  fingerprint = "f155e5ce45b60d69"
 }
 
 resolved "MinecraftUIRenderContext.drawText" {
   kind        = "vslot"
   value       = "0x5"
   recipes     = 2
-  fingerprint = "73cd4eb5f1d2d935"
+  fingerprint = "3aba7cb96ed634a0"
 }
 
 resolved "MinecraftUIRenderContext.fillRectangle" {
   kind        = "vslot"
   value       = "0x10"
   recipes     = 2
-  fingerprint = "2f7d63cc847027c3"
+  fingerprint = "d1f1e05298480559"
 }
 
 resolved "MinecraftUIRenderContext.flushImages" {
   kind        = "vslot"
   value       = "0xa"
   recipes     = 2
-  fingerprint = "29b92c0f729783a9"
+  fingerprint = "27c37bb19ff7c651"
 }
 
 resolved "MinecraftUIRenderContext.flushText" {
   kind        = "vslot"
   value       = "0x7"
   recipes     = 2
-  fingerprint = "ce180aa26ff4b4ef"
+  fingerprint = "1cf3bd416c5936a6"
 }
 
 resolved "MinecraftUIRenderContext.getTexture" {
   kind        = "vslot"
   value       = "0x20"
   recipes     = 2
-  fingerprint = "f6583753ac93b786"
+  fingerprint = "a9c2ad47fab58b3d"
 }
 
 resolved "MinecraftUIRenderContext.mQueuedImages" {
   kind        = "field"
   value       = "0x98"
   recipes     = 2
-  fingerprint = "f74ead96211f6ff3"
+  fingerprint = "834a36e945e6cfe6"
 }
 
 resolved "MinecraftUIRenderContext.mScreenContext" {
   kind        = "field"
   value       = "0x10"
   recipes     = 2
-  fingerprint = "f8c73394b460cc46"
+  fingerprint = "4775345689e65deb"
 }
 
 resolved "MinecraftUIRenderContext.vtable" {
   kind        = "global"
   value       = "0xf2d28a0"
   recipes     = 2
-  fingerprint = "205dad87e53a4ece"
+  fingerprint = "d7d4a2eadd09e987"
 }
 
 resolved "MouseDevice.feed" {
   kind        = "function"
   value       = "0x427530"
   recipes     = 3
-  fingerprint = "e533de036a9c2a13"
+  fingerprint = "88e913607b514173"
 }
 
 resolved "MouseDevice.instance" {
   kind        = "global"
   value       = "0x128d0010"
   recipes     = 3
-  fingerprint = "0a81afba03ac4100"
+  fingerprint = "0d71d48aeec3d2ae"
 }
 
 resolved "MoveInputState.bitDown" {
@@ -2347,7 +2543,7 @@ resolved "MoveInputState.bitSprintDown" {
   kind        = "field"
   value       = "0x8"
   recipes     = 1
-  fingerprint = "1c35b7b0845a2e40"
+  fingerprint = "ee287d1129010fc8"
 }
 
 resolved "MoveInputState.bitUp" {
@@ -2361,21 +2557,21 @@ resolved "MoveInputState.mAnalogMoveVector" {
   kind        = "field"
   value       = "0x4"
   recipes     = 2
-  fingerprint = "9bf89c9e2724c18b"
+  fingerprint = "20faeae2971eb3cd"
 }
 
 resolved "MoveInputState.maskJumpDown" {
   kind        = "field"
   value       = "0x80"
   recipes     = 1
-  fingerprint = "389f86a9017dfb10"
+  fingerprint = "1706be9da4923c01"
 }
 
 resolved "MoveInputState.maskSneakTest" {
   kind        = "field"
   value       = "0x40001"
   recipes     = 2
-  fingerprint = "714345bf836588b4"
+  fingerprint = "ce994577c2e118c1"
 }
 
 resolved "NameTagRenderObject.size" {
@@ -2403,7 +2599,7 @@ resolved "NetworkPeer.receivePacket" {
   kind        = "vslot"
   value       = "0x8"
   recipes     = 2
-  fingerprint = "b854b42c04c97418"
+  fingerprint = "4deeab66b54ccfbf"
 }
 
 resolved "NetworkSystem.isServer" {
@@ -2438,21 +2634,21 @@ resolved "NetworkWorldJoiner.mServerWorldJoiner" {
   kind        = "field"
   value       = "0x268"
   recipes     = 2
-  fingerprint = "f2dc8861e6b236ff"
+  fingerprint = "047c7e0e97b60d43"
 }
 
 resolved "OptionRegistry.getEffectiveMaxFramerateOption" {
   kind        = "vslot"
   value       = "0x153"
   recipes     = 2
-  fingerprint = "c54c54824cab34b8"
+  fingerprint = "ec04b1ec2a33cc6f"
 }
 
 resolved "OptionRegistry.getIfValid" {
   kind        = "vslot"
   value       = "0x1d"
   recipes     = 2
-  fingerprint = "8075238d88b067b4"
+  fingerprint = "00920e2953932f93"
 }
 
 resolved "OptionRegistry.vtable" {
@@ -2473,21 +2669,21 @@ resolved "OreUIRouter.replaceRoute" {
   kind        = "function"
   value       = "0xf3cc20"
   recipes     = 2
-  fingerprint = "cf8798930087aba3"
+  fingerprint = "5fdbb12f105130c8"
 }
 
 resolved "Packet.read" {
   kind        = "vslot"
   value       = "0x8"
   recipes     = 2
-  fingerprint = "256b2648f5e401c1"
+  fingerprint = "b85752ee8ee38700"
 }
 
 resolved "PacketSender.send" {
   kind        = "vslot"
   value       = "0x2"
   recipes     = 2
-  fingerprint = "ee6b6e7dfda9ceca"
+  fingerprint = "0e90d1fe65032ede"
 }
 
 resolved "PacketTraceNetworkPeer.receivePacket" {
@@ -2508,7 +2704,21 @@ resolved "Player.getPlayerGameType" {
   kind        = "function"
   value       = "0x2e1fe0"
   recipes     = 2
-  fingerprint = "78f381179070f11b"
+  fingerprint = "3f6978d291fafcec"
+}
+
+resolved "Player.getPlayerPermissionLevel" {
+  kind        = "function"
+  value       = "0x2c9b50"
+  recipes     = 2
+  fingerprint = "236bf165defccb12"
+}
+
+resolved "Player.isCreative" {
+  kind        = "function"
+  value       = "0xbd3f70"
+  recipes     = 2
+  fingerprint = "2ed37c9afc5efe77"
 }
 
 resolved "Player.playerInventory" {
@@ -2550,7 +2760,7 @@ resolved "PlayerListAddEntry.mSkin" {
   kind        = "field"
   value       = "0xa8"
   recipes     = 1
-  fingerprint = "799cec67329a6d70"
+  fingerprint = "f268872d6ceb3e31"
 }
 
 resolved "PlayerListAddEntry.mUUID" {
@@ -2571,21 +2781,21 @@ resolved "PlayerListAddEntry.size" {
   kind        = "field"
   value       = "0xd8"
   recipes     = 1
-  fingerprint = "2216e868f1fc952c"
+  fingerprint = "f7c6c0d37fa35636"
 }
 
 resolved "PlayerListPacket.mEntries" {
   kind        = "field"
   value       = "0x30"
   recipes     = 2
-  fingerprint = "cc45c261009492c0"
+  fingerprint = "f059b407168e8e6e"
 }
 
 resolved "PlayerListPacket.variantIndex" {
   kind        = "field"
   value       = "0xd0"
   recipes     = 1
-  fingerprint = "9874a8eb6fca9d41"
+  fingerprint = "7e798f290d0d5ece"
 }
 
 resolved "PlayerSkinPacket.mSkin" {
@@ -2613,35 +2823,35 @@ resolved "PredictedMovementSystem.tickPredictedMovement" {
   kind        = "function"
   value       = "0x7b04a90"
   recipes     = 2
-  fingerprint = "6eb19713985e59ae"
+  fingerprint = "6b995666a0feba0c"
 }
 
 resolved "PrimitiveShapeDataPayload.size" {
   kind        = "field"
   value       = "0xb8"
   recipes     = 1
-  fingerprint = "6b15a76edccfc2c3"
+  fingerprint = "f25aea6e181807dc"
 }
 
 resolved "PrimitiveShapesPacket.mShapes" {
   kind        = "field"
   value       = "0x30"
   recipes     = 1
-  fingerprint = "1af7ba255a2e0ad2"
+  fingerprint = "b62573a53e0c5901"
 }
 
 resolved "RawMoveInputComponent.mInputState" {
   kind        = "field"
   value       = "0x0"
   recipes     = 2
-  fingerprint = "1f59290a2fdebe14"
+  fingerprint = "b1b35acd55524553"
 }
 
 resolved "RawMoveInputComponent.mRawMove" {
   kind        = "field"
   value       = "0x10"
   recipes     = 2
-  fingerprint = "1a90843f499ef777"
+  fingerprint = "326bceee1b491960"
 }
 
 resolved "ReadOnlyBinaryStream.dtor" {
@@ -2676,14 +2886,14 @@ resolved "RenderMaterial.mBlendDestination" {
   kind        = "field"
   value       = "0x181"
   recipes     = 2
-  fingerprint = "7d7003580cd10c76"
+  fingerprint = "d5f3effa5c998ce4"
 }
 
 resolved "RenderMaterial.mBlendSource" {
   kind        = "field"
   value       = "0x180"
   recipes     = 2
-  fingerprint = "65d5a66a2354a47b"
+  fingerprint = "520456818b28b1b5"
 }
 
 resolved "RenderMaterial.mDepthWriteMask" {
@@ -2697,14 +2907,14 @@ resolved "RenderMaterial.mEnableBlend" {
   kind        = "field"
   value       = "0x185"
   recipes     = 2
-  fingerprint = "023bdf844f92540b"
+  fingerprint = "74aba22fa047d1a6"
 }
 
 resolved "RenderMaterialInfo.mMaterial" {
   kind        = "field"
   value       = "0x40"
   recipes     = 1
-  fingerprint = "1f40fc880d20d4b4"
+  fingerprint = "3bb2383416c6b815"
 }
 
 resolved "ResourceLocation.ctor" {
@@ -2739,28 +2949,28 @@ resolved "ScreenContext.constantBuffers" {
   kind        = "field"
   value       = "0x20"
   recipes     = 1
-  fingerprint = "c747bd23fd76543a"
+  fingerprint = "5b7fda0379143e4b"
 }
 
 resolved "ScreenContext.currentShaderColor" {
   kind        = "field"
   value       = "0x30"
   recipes     = 1
-  fingerprint = "970bb5615639a346"
+  fingerprint = "007fce1be5f9e43c"
 }
 
 resolved "ScreenContext.guiData" {
   kind        = "field"
   value       = "0xa0"
   recipes     = 2
-  fingerprint = "58dbde20ba826c97"
+  fingerprint = "e516cc6d84f59589"
 }
 
 resolved "ScreenContext.meshContext" {
   kind        = "field"
   value       = "0x10"
-  recipes     = 2
-  fingerprint = "f532b4413750abe0"
+  recipes     = 1
+  fingerprint = "5aa577cd623bbcd7"
 }
 
 resolved "ScreenContext.tessellator" {
@@ -2781,98 +2991,112 @@ resolved "ScreenController.isContainerScreen" {
   kind        = "vslot"
   value       = "0x26"
   recipes     = 2
-  fingerprint = "ce0ff5e2e6b5cb6d"
+  fingerprint = "d07fe2444cf1ec86"
 }
 
 resolved "ScreenView.handleButtonEvent" {
   kind        = "function"
   value       = "0x4cbc0d0"
   recipes     = 2
-  fingerprint = "fbd44c45275f9f8b"
+  fingerprint = "793502268a80d982"
+}
+
+resolved "ScreenView.mController" {
+  kind        = "field"
+  value       = "0x40"
+  recipes     = 2
+  fingerprint = "5b245add38edf24a"
 }
 
 resolved "ScreenView.mInputMode" {
   kind        = "field"
   value       = "0x200"
   recipes     = 2
-  fingerprint = "9366821a44922903"
+  fingerprint = "8c2d61f9bef32359"
 }
 
 resolved "ScreenView.mPointerButtonIds" {
   kind        = "field"
   value       = "0x38"
   recipes     = 1
-  fingerprint = "9a488d78bea9fa94"
+  fingerprint = "26b21c95bd5026f6"
 }
 
 resolved "ScreenView.mPointerLocationPrevious" {
   kind        = "field"
   value       = "0x33c"
   recipes     = 2
-  fingerprint = "7cf05ac2898bdc0b"
+  fingerprint = "a546d61030feb7ac"
+}
+
+resolved "ScreenView.mSize" {
+  kind        = "field"
+  value       = "0x18"
+  recipes     = 2
+  fingerprint = "0f3b3ca68e48f6c5"
 }
 
 resolved "ScreenView.mVisualTree" {
   kind        = "field"
   value       = "0x50"
   recipes     = 2
-  fingerprint = "4133a979fd8687a6"
+  fingerprint = "466ff9fcad1b4222"
 }
 
 resolved "ScreenView.render" {
   kind        = "function"
   value       = "0x4cb3190"
   recipes     = 2
-  fingerprint = "d3ddd3e0ab7d8248"
+  fingerprint = "76a7d2bd24a7b518"
 }
 
 resolved "SerializedSkinImpl.mDefaultGeometryName" {
   kind        = "field"
   value       = "0x60"
   recipes     = 1
-  fingerprint = "29f58565c72900ce"
+  fingerprint = "d75ff28c1c9967df"
 }
 
 resolved "SerializedSkinImpl.mGeometryData" {
   kind        = "field"
   value       = "0xf8"
   recipes     = 1
-  fingerprint = "6cbdca2203bcf6d1"
+  fingerprint = "c557bc7468bf41fd"
 }
 
 resolved "SerializedSkinImpl.mIsPersona" {
   kind        = "field"
   value       = "0x1ea"
   recipes     = 1
-  fingerprint = "713f222eb8709495"
+  fingerprint = "d21a05a129b40df9"
 }
 
 resolved "SerializedSkinImpl.mIsPremium" {
   kind        = "field"
   value       = "0x1e9"
   recipes     = 1
-  fingerprint = "419b30d4e62a90f3"
+  fingerprint = "68dc1f7835cbec96"
 }
 
 resolved "SerializedSkinImpl.mResourcePatch" {
   kind        = "field"
   value       = "0x40"
   recipes     = 1
-  fingerprint = "8811f62122a7d0e2"
+  fingerprint = "f9312701fbe48c37"
 }
 
 resolved "SerializedSkinImpl.mSkinAnimatedImages" {
   kind        = "field"
   value       = "0xe0"
   recipes     = 2
-  fingerprint = "448d8ee91d01daa0"
+  fingerprint = "708843874dd5f9a1"
 }
 
 resolved "SerializedSkinImpl.mSkinImage" {
   kind        = "field"
   value       = "0x80"
   recipes     = 1
-  fingerprint = "57812b4af9ab58f9"
+  fingerprint = "e2b2424125692d44"
 }
 
 resolved "ServerWorldJoiner.joinExternalServer" {
@@ -2893,21 +3117,35 @@ resolved "ShulkerBoxBlockItem.appendFormattedHovertext" {
   kind        = "function"
   value       = "0x357ffa0"
   recipes     = 2
-  fingerprint = "daf9912b10422efc"
+  fingerprint = "e1ddf80bf84206eb"
 }
 
 resolved "ShulkerBoxBlockItem.vtable" {
   kind        = "global"
   value       = "0xf1993b0"
   recipes     = 2
-  fingerprint = "e1b0f6e6bb00cd9b"
+  fingerprint = "7efed87845f94bca"
+}
+
+resolved "SkullBlockRenderer.render" {
+  kind        = "function"
+  value       = "0x6a90c50"
+  recipes     = 1
+  fingerprint = "4cf9bae80541e4d9"
 }
 
 resolved "SkullBlockRenderer.renderSkull" {
   kind        = "function"
   value       = "0x6a5ea50"
   recipes     = 2
-  fingerprint = "6ccd651a403e9e93"
+  fingerprint = "46b56177918ff279"
+}
+
+resolved "SkullBlockRenderer.vtable" {
+  kind        = "global"
+  value       = "0xf2cb540"
+  recipes     = 1
+  fingerprint = "660d0bdd83b55dcd"
 }
 
 resolved "StateVectorComponent.mPos" {
@@ -2935,7 +3173,7 @@ resolved "SubChunk.size" {
   kind        = "field"
   value       = "0x68"
   recipes     = 3
-  fingerprint = "25df359e24fa7f55"
+  fingerprint = "05a1c0bdc10e546c"
 }
 
 resolved "SurvivalMode.vtable" {
@@ -2949,7 +3187,7 @@ resolved "TessellationPolicy.get" {
   kind        = "vslot"
   value       = "0x2"
   recipes     = 2
-  fingerprint = "45fd1d327b024176"
+  fingerprint = "2e91e5b5323f087a"
 }
 
 resolved "Tessellator.begin" {
@@ -2977,7 +3215,7 @@ resolved "Tessellator.mTessellating" {
   kind        = "field"
   value       = "0x2a0"
   recipes     = 1
-  fingerprint = "69c27f00e470cb9a"
+  fingerprint = "3c793230d6e0cd56"
 }
 
 resolved "TextureGroup.baseOffset" {
@@ -3026,105 +3264,105 @@ resolved "UIControl._setCachedPosition" {
   kind        = "function"
   value       = "0x1c67f80"
   recipes     = 2
-  fingerprint = "27a3ecf8aea29d5d"
+  fingerprint = "1551cd03efa3dfc3"
 }
 
 resolved "UIControl.mCachedPosition" {
   kind        = "field"
   value       = "0x10"
   recipes     = 2
-  fingerprint = "d3a49e8cd8b2adf0"
+  fingerprint = "a7b285251fd5d888"
 }
 
 resolved "UIControl.mCachedPositionDirty" {
   kind        = "field"
   value       = "0x18"
   recipes     = 2
-  fingerprint = "0c08ad3fc2cf1e25"
+  fingerprint = "ef4d387599b14960"
 }
 
 resolved "UIControl.mCachedPositionDirtyMask" {
   kind        = "field"
   value       = "0x1"
   recipes     = 2
-  fingerprint = "db73c64477741198"
+  fingerprint = "83dc94ae9e639193"
 }
 
 resolved "UIControl.mChildren" {
   kind        = "field"
   value       = "0x98"
   recipes     = 1
-  fingerprint = "f83acd32a540b532"
+  fingerprint = "14ed7bb6d64c73ff"
 }
 
 resolved "UIControl.mIsVisibleInTree" {
   kind        = "field"
   value       = "0x18"
   recipes     = 1
-  fingerprint = "207948e369e6325d"
+  fingerprint = "3e27bf71976db3c9"
 }
 
 resolved "UIControl.mIsVisibleInTreeMask" {
   kind        = "field"
   value       = "0x10"
   recipes     = 1
-  fingerprint = "f7893955be1be0c4"
+  fingerprint = "df4a7face11da929"
 }
 
 resolved "UIControl.mName" {
   kind        = "field"
   value       = "0x20"
   recipes     = 2
-  fingerprint = "0370b59f38a80c29"
+  fingerprint = "d8d5f4274753ec0f"
 }
 
 resolved "UIControl.mSize" {
   kind        = "field"
   value       = "0x48"
   recipes     = 2
-  fingerprint = "cefbfd35d7652170"
+  fingerprint = "4e40e53e842ce189"
 }
 
 resolved "UIScene.handleDirection" {
   kind        = "function"
   value       = "0x4cd04a0"
   recipes     = 2
-  fingerprint = "2c30815be42de0a0"
+  fingerprint = "751458bc3cb15721"
 }
 
 resolved "UIScene.mScreenView" {
   kind        = "field"
   value       = "0x40"
   recipes     = 2
-  fingerprint = "efcf635acc441189"
+  fingerprint = "882f14832f5a71a7"
 }
 
 resolved "UIScene.vtable" {
   kind        = "global"
   value       = "0xf20fc40"
   recipes     = 1
-  fingerprint = "c682d59392df2600"
+  fingerprint = "46e1768280898b64"
 }
 
 resolved "VanillaBlockActorFactory.createBlockActor" {
   kind        = "function"
   value       = "0x7150f90"
   recipes     = 2
-  fingerprint = "e4e34c09299a936c"
+  fingerprint = "11b0cc9069511f1f"
 }
 
 resolved "VanillaBlockStateTransformUtils.hasTransformableConnectionStates" {
   kind        = "function"
   value       = "0x5e93650"
   recipes     = 2
-  fingerprint = "b965b8110bf5e270"
+  fingerprint = "a820c9fd4caed4b0"
 }
 
 resolved "VanillaBlockStateTransformUtils.hasTransformableWallStates" {
   kind        = "function"
   value       = "0x5e934f0"
   recipes     = 2
-  fingerprint = "b767fe75dcbea367"
+  fingerprint = "41e1bae91b3dfd57"
 }
 
 resolved "VanillaBlockStateTransformUtils.transformBlock" {
@@ -3138,14 +3376,14 @@ resolved "VanillaBlockStateTransformUtils.transformConnectionStates" {
   kind        = "function"
   value       = "0x5e93ca0"
   recipes     = 2
-  fingerprint = "d0784ac7d663597f"
+  fingerprint = "bf9974a0e2224437"
 }
 
 resolved "VanillaBlockStateTransformUtils.transformWallConnectionTypes" {
   kind        = "function"
   value       = "0x5e937b0"
   recipes     = 2
-  fingerprint = "13879767654087be"
+  fingerprint = "65c28b7512215b5d"
 }
 
 resolved "ViewRenderData.mCameraPos" {
@@ -3166,21 +3404,21 @@ resolved "VisualTree.mRootControl" {
   kind        = "field"
   value       = "0x8"
   recipes     = 2
-  fingerprint = "cea4a25ff8ce8530"
+  fingerprint = "439da99e501af2b0"
 }
 
 resolved "WorldSystem.mLocalWorldStarter" {
   kind        = "field"
   value       = "0x78"
   recipes     = 1
-  fingerprint = "870a234de9dfc49f"
+  fingerprint = "589ffd2a80ef9dd4"
 }
 
 resolved "WorldSystem.mNetworkWorldJoiner" {
   kind        = "field"
   value       = "0x80"
   recipes     = 2
-  fingerprint = "1194ecb8b918920f"
+  fingerprint = "7f997700fca54fbf"
 }
 
 resolved "core.operator_delete" {
@@ -3201,5 +3439,70 @@ resolved "core.tls_index" {
   kind        = "global"
   value       = "0x128767c8"
   recipes     = 3
-  fingerprint = "c9e00a2b10bf31bf"
+  fingerprint = "e0d47f0e117aa223"
+}
+
+failed "Block.canProvideFullSupportWithFlag" {
+  fingerprint = "109fb4df8b991458"
+  reason      = "all recipes failed: no match; no match"
+}
+
+failed "Block.getMapColor" {
+  fingerprint = "72da55e2f914f294"
+  reason      = "all recipes failed: no match; no match"
+}
+
+failed "BlockComponentStorage.tryGetComponent.BlockMapColorComponent" {
+  fingerprint = "58e81e8324af0adb"
+  reason      = "dependency failed: Block.getMapColor"
+}
+
+failed "CameraComponent.size" {
+  fingerprint = "c746c7c7a7fa9595"
+  reason      = "all recipes failed: no match; no match"
+}
+
+failed "GameMode.useItemInteraction" {
+  fingerprint = "d483b2242a39dd55"
+  reason      = "check failed: entry_is GameMode.useItemResult = 0x1"
+}
+
+failed "GuiMessage.ctorWithFlagWord" {
+  fingerprint = "a5e62c8a99e2c3fc"
+  reason      = "check failed: entry_is GuiMessage.ctorShape = 0x1"
+}
+
+failed "KeyboardEventProcessor.feedKeyState" {
+  fingerprint = "22bad9222d8c04c6"
+  reason      = "all recipes failed: string `void Bedrock::Input::KeyboardEventProcessor::_feedKeyState(int, int)` not found; no match"
+}
+
+failed "LightPropagation.fillSubChunkGridNoMode" {
+  fingerprint = "081d7af334b4940e"
+  reason      = "all recipes failed: no match; no match"
+}
+
+failed "MouseDevice.feedWithControllerId" {
+  fingerprint = "7b8e95cc64a2a12e"
+  reason      = "check failed: entry_is LevelChunk.mSubChunks = 0x228"
+}
+
+failed "Player.getAbilitiesComponent" {
+  fingerprint = "3361e2917b41bca2"
+  reason      = "all recipes failed: no match; no match"
+}
+
+failed "SkullBlockRenderer.getSkullMaterials" {
+  fingerprint = "0907b45673d379a4"
+  reason      = "all recipes failed: no match; no match"
+}
+
+failed "SkullBlockRenderer.getSkullModel" {
+  fingerprint = "4cf00e04c3da698e"
+  reason      = "all recipes failed: no match; no match"
+}
+
+failed "SkullBlockRenderer.renderSkullUpright" {
+  fingerprint = "1df4462d6364ea30"
+  reason      = "all recipes failed: no match; no match"
 }

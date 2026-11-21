@@ -77,6 +77,7 @@ impl FakeLoader {
             heap_new: Self::heap_new,
             heap_delete: Self::heap_delete,
             mod_dir: Self::mod_dir,
+            services: std::ptr::null(),
         }
     }
 

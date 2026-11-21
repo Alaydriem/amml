@@ -18,12 +18,12 @@ entry "ScreenController.dtor" {
 
 entry "ScreenController.isContainerScreen" {
   kind     = "vslot"
-  notes    = "Slot of bool ScreenController::_isContainerScreen() const in the screen controller vtable: 38 on 26.60 (header order: dtor 0, preFrameTick 1, tick 2). rcx the controller, the bool in al. The base returns false (`xor eax,eax; ret`, the body HudScreenController.vtable has in slot 38) and ContainerScreenController.vtable holds `mov al,1; ret` there. Both bodies are shared by many tiny functions, so neither can be matched by its bytes; call it through the vtable and never hook it. Recipe 0 is a call site in the function that walks a vector of {controller*, flag} pairs: `mov rcx,[r12+r13]; mov rax,[rcx]; mov rax,[rax+..]; call [guard]; nop; test al,al; je; mov rax,[rdi+..]; test rax,rax; je`, read as the displacement of the virtual call and turned into a slot. Recipe 1 is the table: ContainerScreenController.vtable, the address of slot 38, the pointer in it, and the slot of that pointer in the same table (a fixed slot with a body check: the body in slot 38 is the only slot of the table with that function, so slot_of gives 38). The deriver refuses recipe 1 on its own (vtable-only rule); the entry resolves only when recipe 0 agrees. Every displacement, immediate and branch byte is a wildcard. The check is a range window around the known slot. The gate (check entry_is) LevelChunk.mSubChunks = 456 (1C8h, the 26.60 layout) ties this entry to the 26.60 build: it refuses as not for this build on 26.51, and must be widened when a later build is added. Value 38 on 6ad79ee4-17d51891a1119914 (26.60). Concern: the owner class of the call site in recipe 0 is not named; the match with the table in recipe 1 is the evidence that slot 38 is the virtual it calls."
+  notes    = "Slot of bool ScreenController::_isContainerScreen() const in the screen controller vtable: 38 on 26.60, 26.63 and 1.26.70.26 (header order: dtor 0, preFrameTick 1, tick 2). rcx the controller, the bool in al. The base returns false (`xor eax,eax; ret`) and ContainerScreenController.vtable holds `mov al,1; ret` there. Both bodies are shared by many tiny functions, so neither can be matched by its bytes; call it through the vtable and never hook it. Recipe 0 is a call site in the function that loads the string `RenderStage::render` and walks a vector of {controller*, flag} pairs: `mov [reg+..],al; mov rcx,[reg+reg]; mov rax,[rcx]; mov rax,[rax+..]; call [guard]; nop; test al,al; je`, read as the displacement of the virtual call and turned into a slot. The pattern starts at the store of the flag (`movzx eax,byte ptr [..+8]` before it is not in the pattern) and ends at the `je`; every REX, ModRM, displacement, immediate and branch byte except the fixed `8B 0C`, `48 8B 01` and `48 8B 80` of the call is a wildcard. The function after the `je` differs between builds, so the pattern stops there. Recipe 1 is the table: ContainerScreenController.vtable, the address of slot 38, the pointer in it, and the slot of that pointer in the same table (a fixed slot with a body check: the pointer in slot 38 is the only slot of the table with that function, so slot_of gives 38). The deriver refuses recipe 1 on its own (vtable-only rule); the entry resolves only when recipe 0 agrees. The check is a range window around the known slot. Concern: the owner class of the call site in recipe 0 is not named; the match with the table in recipe 1 is the evidence that slot 38 is the virtual it calls. What changed in 6afa4e47-dadc375797a3d31a (1.26.70.26): the slot did not move; the function around the call site changed (a different register set and a different test after the call), so the old pattern, which ran on into it, had no match. Class: would have survived with a better recipe. Evidence for 70.26: (1) the string `RenderStage::render` is loaded by one function on 26.63 (the one with the old call site) and by one function on 70.26; (2) the pattern of recipe 0, drafted from the 26.63 call site, matches once on 26.63 and once on 70.26, in that string's function, with the same displacement (130h, slot 38). No build gate: builds before 26.63 are not supported."
 
   recipe {
     step "pattern" {
-      bytes  = "4B 8B 0C 2C 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15 ?? ?? ?? ?? 90 84 C0 74 ?? 48 8B 87 ?? ?? ?? ?? 48 85 C0 74 ??"
-      offset = 7
+      bytes  = "88 ?? ?? ?? 8B 0C ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15 ?? ?? ?? ?? 90 84 C0 74 ??"
+      offset = 10
     }
     step "operand" {
       index = 1
@@ -42,10 +42,5 @@ entry "ScreenController.isContainerScreen" {
   check "range" {
     min = 20
     max = 60
-  }
-
-  check "entry_is" {
-    entry = "LevelChunk.mSubChunks"
-    value = 456
   }
 }

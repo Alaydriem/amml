@@ -83,3 +83,35 @@ entry "DBStorage.checkShutdownDone" {
     max_slot = 23
   }
 }
+
+entry "DBStorage.mFullPath" {
+  kind  = "field"
+  notes = "draft"
+
+  recipe {
+    step "ref" { entry = "DBStorage.ctor" }
+    step "pattern" {
+      bytes  = "48 8B ?? ?? 48 89 ?? ?? ?? ?? ?? 0F 11 ?? ?? ?? ?? ?? 0F 11 ?? ?? ?? ?? ?? 0F 10 ?? ?? 0F 10 ?? ?? 0F 11 ?? ?? ?? ?? ?? 0F 11 ?? ?? ?? ?? ??"
+      offset = 40
+    }
+    step "operand" {
+      index = 0
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "ref" { entry = "DBStorage.vtable" }
+    step "vtable_slot" { slot = 9 }
+    step "read_pointer" {}
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 96
+    max = 320
+  }
+}

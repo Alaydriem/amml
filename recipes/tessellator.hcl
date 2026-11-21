@@ -76,13 +76,16 @@ entry "Tessellator.clear" {
 
 entry "Tessellator.mTessellating" {
   kind     = "field"
-  notes    = "Offset of bool Tessellator::mTessellating: 2A0h on 26.51 (header 672; Tessellator has no vtable, mMeshData at 8, mCount at 298h), the anchor of TessellatorLayout. Tessellator.begin returns at once when it is set (`cmp byte ptr [rcx+2A0h],0; jne`) and clear and begin set it to 0. The recipe reads the third zero store in Tessellator.begin (`movzx r32,byte ptr [rsp+..]; mov dword ptr [this+298h],0; mov byte ptr [this+255h],0; mov byte ptr [this+2A0h],0`, offset 25 to the 2A0h store); registers, displacements and immediates are wildcards. Range window 290h..2B0h. Value 2A0h on 26.51 and 26.60. What changed in 6ad79ee4-17d51891a1119914 (26.60): begin moves `this` to rsi between its two guards, so the old pattern on the two guard compares did not match; the member did not move (the mirror check passed: the guard and the store both use 2A0h on 26.60). Would have survived with a better recipe."
+  notes    = "Offset of bool Tessellator::mTessellating: 2A0h on 26.51 (header 672; Tessellator has no vtable, mMeshData at 8, mCount at 298h), the anchor of TessellatorLayout. Tessellator.begin returns at once when it is set (`cmp byte ptr [rcx+2A0h],0; jne`) and clear and begin set it to 0. The recipe reads the third zero store in Tessellator.begin (`movzx r32,byte ptr [rsp+..]; mov dword ptr [this+298h],0; mov byte ptr [this+255h],0; mov byte ptr [this+2A0h],0`, offset 25 to the 2A0h store); registers, displacements and immediates are wildcards. Range window 290h..2B0h. Value 2A0h on 26.51 and 26.60. What changed in 6ad79ee4-17d51891a1119914 (26.60): begin moves `this` to rsi between its two guards, so the old pattern on the two guard compares did not match; the member did not move (the mirror check passed: the guard and the store both use 2A0h on 26.60). Would have survived with a better recipe. What changed in 6afa4e47-dadc375797a3d31a (70.26): the `movzx` of the stack argument no longer sits directly before the three stores (the compiler moved it, and the stores follow a jump), so the recipe is a pattern_any with one alternative per shape: the old shape (the movzx, then the stores) and the new shape (the four stores, then `lea r15,[rsi+8]`; eight wildcard bytes in front keep the offset 25 of the 2A0h store); the member did not move. Would have survived with a better recipe. Evidence on 70.26: the three-store run (dword 298h, byte 255h, byte 2A0h) drafted from the 26.63 begin matches once in begin; and begin reads the same displacement for its guard (a load of the byte at 2A0h) and sets it to 1 at the end, as the 26.63 function does."
 
   recipe {
     step "ref" { entry = "Tessellator.begin" }
-    step "pattern" {
-      bytes  = "0F B6 ?? 24 ?? ?? ?? ?? C7 ?? ?? ?? ?? ?? ?? ?? ?? ?? C6 ?? ?? ?? ?? ?? ?? C6 ?? ?? ?? ?? ?? ??"
-      offset = 25
+    step "pattern_any" {
+      patterns = [
+        "0F B6 ?? 24 ?? ?? ?? ?? C7 ?? ?? ?? ?? ?? ?? ?? ?? ?? C6 ?? ?? ?? ?? ?? ?? C6 ?? ?? ?? ?? ?? ??",
+        "?? ?? ?? ?? ?? ?? ?? ?? C7 ?? ?? ?? ?? ?? ?? ?? ?? ?? C6 ?? ?? ?? ?? ?? ?? C6 ?? ?? ?? ?? ?? ?? C6 ?? ?? ?? ?? ?? ?? 4C 8D ?? ??",
+      ]
+      offset   = 25
     }
     step "operand" {
       index = 0

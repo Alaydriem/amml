@@ -106,6 +106,49 @@ entry "MinecraftGame.AppPlatformListener.vtable" {
   }
 }
 
+entry "MinecraftGame.appPlatformListenerOffset" {
+  kind  = "field"
+  notes = "Offset of the AppPlatformListener subobject in MinecraftGame: 88h on 6aed1906-b127418e74d2f2f9 (26.63), 90h on 6afa4e47-dadc375797a3d31a (1.26.70.26); the older recipe notes give 90h on 26.51 and 88h on 26.60. It is the displacement of the store that puts the MinecraftGame.AppPlatformListener.vtable pointer into the object: the `this` that an AppPlatformListener override (MinecraftGame.onAppFocusLost, the onAppFocusGained slot) receives in rcx is MinecraftGame + this value, and a caller that has the MinecraftGame passes MinecraftGame + this value to call an AppPlatformListener slot. Recipe 0 is the MinecraftGame constructor: step 1 is the constructor anchor of MinecraftGame.vtable and MinecraftGame.AppPlatformListener.vtable (the allocation call, the control block and three stores, with the same three kept bytes and reasons), step 2 is the place in the final store run where the 8-bit-displacement stores end, the pattern of MinecraftGame.AppPlatformListener.vtable step 2, with offset 11: the `mov [reg+disp32],rax` right after the `lea` of the listener vtable, read as the displacement of operand 0. Recipe 1 shares no bytes with recipe 0 and runs in another function, the MinecraftGame destructor, which stores the same vtables again in the same order: step 1 is its head (`mov qword ptr [rbp+..],imm32; mov reg,rcx`, then the run `lea rax,[rip+..]; mov [reg],rax` and eight `lea rax,[rip+..]; mov [reg+disp8],rax`, up to the next `lea`), step 2 the same end-of-disp8-run pattern inside the destructor (once in it on both builds), offset 11, the displacement of operand 0. Every ModRM, displacement and immediate byte of the new patterns is a wildcard (the REX and opcode bytes of `mov`, `lea` and `mov qword ptr` stay). Both recipes rely on AppPlatformListener being the first base stored with a 32-bit displacement in the run, as MinecraftGame.AppPlatformListener.vtable does. Because of that shared assumption the two recipes are one fact about the store run: a build that stores another base or member with a 32-bit displacement before the listener, or the listener with an 8-bit one, gives the same wrong value from both and the range check does not catch it. A consumer must check that the qword at MinecraftGame + this value is MinecraftGame.AppPlatformListener.vtable before it calls a slot through it. A recipe of another shape is not possible with the current steps: the onAppFocusLost and onAppFocusGained adjusts (`lea rsi,[rcx-88h]` / `-90h`) are negative displacements that no step negates (`operand displacement` and `member_displacement` refuse a negative value), and the positive uses in the destructor (`lea rcx,[rsi+88h]; call` to the AppPlatformListener base destructor) have no shape that is unique on both builds without running past a call. Check: range 8..512. No build gate: the member means the same on every build, only its offset moves. Evidence, both from the 26.63 functions: (1) on 26.63 the `lea` of the first disp32 store of the constructor run loads MinecraftGame.AppPlatformListener.vtable (the vtable that holds MinecraftGame.onAppFocusLost in slot 6) and the store goes to +88h; on 70.26 the constructor and the destructor (the two functions that load that vtable, `inspect xrefs` of the resolved global) store it to +90h; (2) MinecraftGame.onAppFocusLost moves `this` back by the same amount on each build: `lea rsi,[rcx-88h]` on 26.63, `lea rsi,[rcx-90h]` on 70.26, and its first virtual call reads the MinecraftGame vtable through [rcx-88h] / [rcx-90h]. Needed by the loader's pause-screen call (an AppPlatformListener slot called on the MinecraftGame). What changed in 6afa4e47-dadc375797a3d31a: the members before the subobject grew by 8 bytes (the disp8 store run ends at +78h instead of +70h), so the subobject moved from +88h to +90h. Class: new entry."
+
+  recipe {
+    step "pattern" {
+      bytes      = "FF 15 ?? ?? ?? ?? ?? 85 ?? 0F 84 ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? 89 ?? ?? ?? 8D ?? ?? ?? ?? ?? ?? 89 ?? ?? 89 ?? ?? 83 ?? ?? C6 ?? ?? 01 ?? 89 ?? ?? ?? 89 ?? ?? ?? C7 ?? ?? ?? ?? ?? ?? ?? 8D ?? ?? ?? ?? ?? ?? 89 ?? ?? 8D ?? ?? ?? ?? ?? ?? 89 ?? 18 ?? 8D ?? ?? ?? ?? ?? ?? 89 ?? 20"
+      literal_ok = [
+        "49: kept for margin (Plan 5b review): the control block flag is set to 1 (`mov byte ptr [reg+10h],1`); unchanged from 26.51 to 26.60",
+        "86: kept for margin (Plan 5b review): the second vtable store goes to this+18h; unchanged from 26.51 to 26.60",
+        "97: kept for margin (Plan 5b review): the third vtable store goes to this+20h; unchanged from 26.51 to 26.60",
+      ]
+    }
+    step "pattern" {
+      bytes  = "48 89 ?? ?? 48 8D 05 ?? ?? ?? ?? 48 89 ?? ?? ?? ?? ?? 48 8D 05 ?? ?? ?? ?? 48 89 ?? ?? ?? ?? ?? 48 8D 05"
+      offset = 11
+    }
+    step "operand" {
+      index = 0
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes = "48 C7 45 ?? ?? ?? ?? ?? 48 89 ?? 48 8D 05 ?? ?? ?? ?? 48 89 ?? 48 8D 05 ?? ?? ?? ?? 48 89 ?? ?? 48 8D 05 ?? ?? ?? ?? 48 89 ?? ?? 48 8D 05 ?? ?? ?? ?? 48 89 ?? ?? 48 8D 05 ?? ?? ?? ?? 48 89 ?? ?? 48 8D 05 ?? ?? ?? ?? 48 89 ?? ?? 48 8D 05 ?? ?? ?? ?? 48 89 ?? ?? 48 8D 05 ?? ?? ?? ?? 48 89 ?? ?? 48 8D 05"
+    }
+    step "pattern" {
+      bytes  = "48 89 ?? ?? 48 8D 05 ?? ?? ?? ?? 48 89 ?? ?? ?? ?? ?? 48 8D 05 ?? ?? ?? ?? 48 89 ?? ?? ?? ?? ?? 48 8D 05"
+      offset = 11
+    }
+    step "operand" {
+      index = 0
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 8
+    max = 512
+  }
+}
+
 entry "MinecraftGame.update" {
   kind      = "vslot"
   msvc_name = "?$update@MinecraftGame@@QEAAXXZ"
@@ -162,12 +205,12 @@ entry "MinecraftGame.onAppFocusGained" {
 
 entry "MinecraftGame.isInGame" {
   kind     = "vslot"
-  notes    = "Slot of bool IMinecraftGame::isInGame() const in the MinecraftGame.vtable global: 24 in both builds (the header order minus 2 at this point). The body is a 10-byte leaf with no .pdata entry: `movzx eax,byte ptr [rcx+528h]; and al,1; ret` (538h in 26.60). Slot 31 (setIsInGame) tests and writes the same bit. `this` in rcx is the MinecraftGame; the result is in al. That body shape has 12 matches in each exe, so the entry is the fixed slot with a body check. Recipe 0 finds the body by its neighbours: the end of the function before it (`call [guard]; nop; add rsp,imm; ret`), the leaf, six int3 and the head of the function after it (`push rsi; sub rsp,imm; mov rax,[rcx+member]`); offset 12 is the leaf start. Then `slot_of` MinecraftGame.vtable. It relies on this link order, which is the same in both builds. Recipe 1 is the fixed slot: `vtable_slot 24` of MinecraftGame.vtable, `read_pointer`, then `slot_of`. It cannot carry the entry alone (the vtable-only rule). The two recipes must agree, so the entry resolves only when the body that recipe 0 finds sits in slot 24; a moved slot or a changed body makes them disagree, and the entry fails. Every immediate, displacement and branch byte of the pattern is a wildcard. The range check is a window around slot 24. Values: slot 24 in 26.51 (0x7f4620) and 26.60 (0x896430). What changed in 26.60: only the member offset."
+  notes    = "Slot of bool IMinecraftGame::isInGame() const in the MinecraftGame.vtable global: 24 in both builds (the header order minus 2 at this point). The body is a 10-byte leaf with no .pdata entry: `movzx eax,byte ptr [rcx+528h]; and al,1; ret` (538h in 26.60). Slot 31 (setIsInGame) tests and writes the same bit. `this` in rcx is the MinecraftGame; the result is in al. That body shape has 12 matches in each exe, so the entry is the fixed slot with a body check. Recipe 0 finds the body by its neighbours: the leaf, six int3 and the head of the function after it (`push rsi; sub rsp,imm; mov rax,[rcx+member]`); offset 0 is the leaf start. Then `slot_of` MinecraftGame.vtable. It relies on this link order. Recipe 1 is the fixed slot: `vtable_slot 24` of MinecraftGame.vtable, `read_pointer`, then `slot_of`. It cannot carry the entry alone (the vtable-only rule). The two recipes must agree, so the entry resolves only when the body that recipe 0 finds sits in slot 24; a moved slot or a changed body makes them disagree, and the entry fails. Every immediate, displacement and branch byte of the pattern is a wildcard. The range check is a window around slot 24. Values: slot 24 in 26.51 (0x7f4620) and 26.60 (0x896430). What changed in 26.60: only the member offset. What changed in 1.26.70.26 (6afa4e47-dadc375797a3d31a): the function before the leaf no longer ends with `call [guard]; nop; add rsp,imm; ret` (the old recipe 0 started 12 bytes before the leaf and failed), so recipe 0 now starts at the leaf and keeps the head of the next function as its only anchor; it matches once on 26.63 and on 70.26. Evidence from the old function: (1) the leaf plus the head of the function after it, drafted from the old leaf, matches once on 70.26 and that match sits in slot 24 of MinecraftGame.vtable; (2) slot 31 (setIsInGame) has the same prologue and reads and writes the same member (538h) on both builds, and the member read by the leaf is the same (538h), so the slot order around 24 is unchanged. Class: would have survived with a better recipe."
 
   recipe {
     step "pattern" {
-      bytes  = "FF 15 ?? ?? ?? ?? 90 48 83 C4 ?? C3 0F B6 81 ?? ?? ?? ?? 24 ?? C3 CC CC CC CC CC CC 56 48 83 EC ?? 48 8B 81"
-      offset = 12
+      bytes  = "0F B6 81 ?? ?? ?? ?? 24 ?? C3 CC CC CC CC CC CC 56 48 83 EC ?? 48 8B 81"
+      offset = 0
     }
     step "slot_of" { vtable = "MinecraftGame.vtable" }
   }
@@ -271,11 +314,11 @@ entry "MinecraftGame.endFrame" {
   kind      = "function"
   hooked    = true
   msvc_name = "?endFrame@MinecraftGame@@QEAAXXZ"
-  notes     = "Address of void MinecraftGame::endFrame(): 0x7e3550 in 26.51, 0x887880 in 26.60. `this` in rcx is the MinecraftGame; it returns void. It hands the drawn frame to Render Dragon (one Present for each call), so a count of its calls is the frame number of a video render. It has one direct caller, MinecraftGame::_update (0x7d31e0 / 0x8794a0), at 0x7d60ab / 0x87bd2f, after startFrame, _clientUpdate, onTick and updateGraphics. Recipe 0 is the start of the body, after the prologue: `cmp dword ptr [rdi+member],imm; je rel32; cmp qword ptr [rip+..],imm; je rel32; mov eax,[rip+..]; mov ecx,[rip+..]; mov rdx,gs:[58h]; mov rcx,[rdx+rcx*8]; cmp eax,[rcx+4]; mov [rbp+..],rdi` (a thread-local static guard), then `function_start_of`. Recipe 1 is the call in _update: `mov rcx,rdi; call; mov rcx,[rdi+member]; test rcx,rcx; je rel32; mov rax,[rcx]; mov rax,[rax+disp]; lea rdx,[rbp+..]; call [guard]`. 26.60 has a `nop` after the call, so the recipe is a `pattern_any` with one alternative for each form; each alternative matches once on its own build and not on the other. It reads the branch target at offset 3. The two recipes are in two functions. Every immediate, displacement and branch byte is a wildcard, except the eight bytes of `gs:[58h]` and `[rcx+4]` in recipe 0, which the ABI fixes (literal_ok). Both are unique in both exes and agree. Check: function_start. What changed in 26.60: the member offsets and the first checks before recipe 0 (26.51 reads two dwords, 26.60 one)."
+  notes     = "Address of void MinecraftGame::endFrame(): 0x7e3550 in 26.51, 0x887880 in 26.60. `this` in rcx is the MinecraftGame; it returns void. It hands the drawn frame to Render Dragon (one Present for each call), so a count of its calls is the frame number of a video render. It has one direct caller, MinecraftGame::_update (0x7d31e0 / 0x8794a0), at 0x7d60ab / 0x87bd2f, after startFrame, _clientUpdate, onTick and updateGraphics. Recipe 0 is the start of the body, after the prologue: `cmp dword ptr [rdi+member],imm; je rel32; cmp qword ptr [rip+..],imm; je rel32; mov eax,[rip+..]; mov ecx,[rip+..]; mov rdx,gs:[58h]; mov rcx,[rdx+rcx*8]; cmp eax,[rcx+4]; mov [rbp+..],rdi` (a thread-local static guard), then `function_start_of`. Recipe 1 is the call in _update: `mov rcx,rdi; call; mov rcx,[rdi+member]; test rcx,rcx; je rel32; mov rax,[rcx]; mov rax,[rax+disp]; lea rdx,[rbp+..]; call [guard]`. 26.60 has a `nop` after the call, so the recipe is a `pattern_any` with one alternative for each form; each alternative matches once on its own build and not on the other. It reads the branch target at offset 3. The two recipes are in two functions. Every immediate, displacement and branch byte is a wildcard, except the eight bytes of `gs:[58h]` and `[rcx+4]` in recipe 0, which the ABI fixes (literal_ok). Both are unique in both exes and agree. Check: function_start. What changed in 26.60: the member offsets and the first checks before recipe 0 (26.51 reads two dwords, 26.60 one). What changed in 1.26.70.26 (6afa4e47-dadc375797a3d31a): the function kept its body, but the compiler now keeps `this` in rsi, not rdi, so the register byte of the first `cmp dword ptr [reg+member],imm` and the ModRM byte of the `mov [rbp+..],reg` after the guard are wildcards (these two bytes were the only fixed register bytes); and the caller _update no longer holds `this` in rdi: it reloads it from the frame, so the call is `call; nop; mov rax,[rbp+..]; mov rcx,[rax+member]; test rcx,rcx; je rel32; mov rax,[rcx]; mov rax,[rax+disp]; lea rdx,[rbp+..]; call [guard]` and the pattern_any has a third alternative for that form, with three wildcards before the call so that the call stays at offset 3. Recipe 0 is unique on every build: the sibling functions of the same prologue (updateGraphics and others) have no `mov [rbp+..],reg` between the epoch compare and the branch. Evidence on 70.26 from the old function: (1) the recipe 0 body drafted from the old endFrame (movaps xmm saves, thread-local guard) matches once in the new exe, in the function that _update calls after the same pre-frame call chain; (2) the old call site in _update (call, nop, load of an object member, test, vcall through the CFG guard) matches once in the new exe in the same function with the new frame-based form, and its call target is the same function. Class: would have survived with a better recipe."
 
   recipe {
     step "pattern" {
-      bytes      = "83 BF ?? ?? ?? ?? ?? 0F 84 ?? ?? ?? ?? 48 83 3D ?? ?? ?? ?? ?? 0F 84 ?? ?? ?? ?? 8B 05 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? 65 48 8B 14 25 58 00 00 00 48 8B 0C CA 3B 81 04 00 00 00 48 89 BD"
+      bytes      = "83 ?? ?? ?? ?? ?? ?? 0F 84 ?? ?? ?? ?? 48 83 3D ?? ?? ?? ?? ?? 0F 84 ?? ?? ?? ?? 8B 05 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? 65 48 8B 14 25 58 00 00 00 48 8B 0C CA 3B 81 04 00 00 00 48 89 ??"
       literal_ok = ["44: gs:[58h] is the TEB slot that holds the thread-local storage array, fixed by the Windows x64 ABI", "45: gs:[58h] is the TEB slot that holds the thread-local storage array, fixed by the Windows x64 ABI", "46: gs:[58h] is the TEB slot that holds the thread-local storage array, fixed by the Windows x64 ABI", "47: gs:[58h] is the TEB slot that holds the thread-local storage array, fixed by the Windows x64 ABI", "54: [rcx+4] is the thread-local init epoch of the MSVC thread-safe static guard, fixed by the MSVC runtime", "55: [rcx+4] is the thread-local init epoch of the MSVC thread-safe static guard, fixed by the MSVC runtime", "56: [rcx+4] is the thread-local init epoch of the MSVC thread-safe static guard, fixed by the MSVC runtime", "57: [rcx+4] is the thread-local init epoch of the MSVC thread-safe static guard, fixed by the MSVC runtime"]
     }
     step "function_start_of" {}
@@ -286,6 +329,7 @@ entry "MinecraftGame.endFrame" {
       patterns = [
         "48 89 F9 E8 ?? ?? ?? ?? 48 8B 8F ?? ?? ?? ?? 48 85 C9 0F 84 ?? ?? ?? ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8D 95 ?? ?? ?? ?? FF 15",
         "48 89 F9 E8 ?? ?? ?? ?? 90 48 8B 8F ?? ?? ?? ?? 48 85 C9 0F 84 ?? ?? ?? ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8D 95 ?? ?? ?? ?? FF 15",
+        "?? ?? ?? E8 ?? ?? ?? ?? 90 48 8B 85 ?? ?? ?? ?? 48 8B 88 ?? ?? ?? ?? 48 85 C9 0F 84 ?? ?? ?? ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8D 95 ?? ?? ?? ?? FF 15",
       ]
       offset = 3
     }
@@ -300,11 +344,11 @@ entry "MinecraftGame.endFrame" {
 
 entry "MinecraftGame.joinMultiplayerWithAddress" {
   kind      = "vslot"
-  notes     = "Slot of virtual void MinecraftGame::joinMultiplayerWithAddress(Social::GameConnectionInfo, bool isLocal, const std::string&, const std::string&, NetworkType, std::shared_ptr<bool>, PlayerJoinWorldContext) in the MinecraftGame.vtable global: 39 on 26.63 (0x8b1970). The Play > Servers join handler and the localhost join call it through `mov rax,[rax+138h]` and the CFG guard; both reach ClientInstance::onStartJoinGame, not ClientInstance::startExternalNetworkWorld. Arguments: rcx = MinecraftGame, rdx = pointer to the by-value GameConnectionInfo, r8b = isLocal, r9 = first std::string, then stack arguments at entry+28h (second std::string), +30h (NetworkType), +38h (pointer to a shared_ptr<bool> block) and +40h (pointer to the PlayerJoinWorldContext). Recipe 0 is the head after the frame set-up: `mov rbx,r9; mov r14b,r8b; mov [rbp+..],rdx; mov r15,rcx; call; nop; test al,al; jne rel32; mov r13d,[rbp+..]; mov rdi,[rbp+..]; test r14b,r14b; jne rel32`, then `function_start_of` and `slot_of` MinecraftGame.vtable. Recipe 1 shares no bytes with it: the function loads its own __FUNCSIG__ text, so `string_xref` finds it, then `slot_of`. Every displacement, immediate and branch byte of the pattern is a wildcard. The range check is a window around slot 39. Value slot 39 (0x8b1970) on 6aed1906-b127418e74d2f2f9 (26.63)."
+  notes     = "Slot of virtual void MinecraftGame::joinMultiplayerWithAddress(Social::GameConnectionInfo, bool isLocal, const std::string&, const std::string&, NetworkType, std::shared_ptr<bool>, PlayerJoinWorldContext) in the MinecraftGame.vtable global: 39 on 26.63 (0x8b1970). The Play > Servers join handler and the localhost join call it through `mov rax,[rax+138h]` and the CFG guard; both reach ClientInstance::onStartJoinGame, not ClientInstance::startExternalNetworkWorld. Arguments: rcx = MinecraftGame, rdx = pointer to the by-value GameConnectionInfo, r8b = isLocal, r9 = first std::string, then stack arguments at entry+28h (second std::string), +30h (NetworkType), +38h (pointer to a shared_ptr<bool> block) and +40h (pointer to the PlayerJoinWorldContext). Recipe 0 is the head after the frame set-up: `mov r14b,r8b; mov [rbp+..],rdx; mov r15,rcx; call; nop; test al,al; jne rel32`, then `function_start_of` and `slot_of` MinecraftGame.vtable. Recipe 1 shares no bytes with it: the function loads its own __FUNCSIG__ text, so `string_xref` finds it, then `slot_of`. Every displacement, immediate and branch byte of the pattern is a wildcard. The range check is a window around slot 39. Value slot 39 (0x8b1970) on 6aed1906-b127418e74d2f2f9 (26.63). Slot 39 on 1.26.70.26 (6afa4e47-dadc375797a3d31a) as well (function 0x1316340 there). What changed in 1.26.70.26: the frame set-up grew (`mov eax,imm; call chkstk; sub rsp,rax` replaces `sub rsp,imm`), the by-value argument r9 is saved to the frame (`mov [rbp+..],r9`) instead of `mov rbx,r9`, and the registers loaded after the first branch changed, so recipe 0 lost its first bytes (`mov rbx,r9`) and its tail (the `mov r13d` / `mov rdi` loads) and keeps the middle that did not change; the ModRM of `mov r14b,r8b` and of `mov r15,rcx` are wildcards. It matches once on 26.63 and on 70.26. Evidence from the old function: (1) the shortened body pattern from the old function matches once on 70.26, at the function whose address sits in slot 39 of MinecraftGame.vtable, the same slot as on 26.63; (2) recipe 1, the function's own __FUNCSIG__ string (the old function loads it, and exactly one function on 70.26 loads it), gives slot 39 in the same vtable. The two recipes share no bytes. Class: would have survived with a better recipe."
 
   recipe {
     step "pattern" {
-      bytes = "4C 89 CB 45 88 C6 48 89 95 ?? ?? ?? ?? 49 89 CF E8 ?? ?? ?? ?? 90 84 C0 0F 85 ?? ?? ?? ?? 44 8B AD ?? ?? ?? ?? 48 8B BD ?? ?? ?? ?? 45 84 F6 0F 85"
+      bytes = "45 88 ?? 48 89 95 ?? ?? ?? ?? 49 89 ?? E8 ?? ?? ?? ?? 90 84 C0 0F 85 ?? ?? ?? ??"
     }
     step "function_start_of" {}
     step "slot_of" { vtable = "MinecraftGame.vtable" }
@@ -323,13 +367,11 @@ entry "MinecraftGame.joinMultiplayerWithAddress" {
 
 entry "MinecraftGame.getWorldSystem" {
   kind  = "vslot"
-  notes = "Slot of virtual World::WorldSystem& IMinecraftGame::getWorldSystem() const in the MinecraftGame.vtable global: 152 (byte offset 4C0h) on 26.51, 26.60, 26.62 and 26.63 (the LeviLamina header order minus 6 at this point). `this` in rcx is the MinecraftGame; rax returns the World::WorldSystem*. The body is an 8-byte leaf with no .pdata entry, `mov rax,[rcx+member]; ret` (1538h on 26.51, 1598h on 26.60 to 26.63), and the next leaf, slot 153, is isWorldSystemReady: `cmp qword ptr [rcx+member],0; setne al; ret` on the same member, the header pair getWorldSystem / isWorldSystemReady. Found from the join chain: MinecraftGame::_handleMultiplayerServiceJoinResult (it loads its own __FUNCSIG__) calls this slot on its own `this` and adds [result+WorldSystem.mNetworkWorldJoiner] to NetworkWorldJoiner.mServerWorldJoiner, the same sum that Parties::PartyTravelManager::_travelToDestination passes as `this` to ServerWorldJoiner::joinExternalServer. Recipe 0: `string_xref` on that __FUNCSIG__ text (one function on every build), then, inside it, the call site `add r14,imm; mov rax,[rdi]; mov rax,[rax+disp]; mov rcx,rdi; call [guard]` (rdi is the MinecraftGame in that case branch), offset 10, the displacement of operand 1, `displacement_to_slot`. Recipe 1: a second caller (0xa243c0 on 26.63, 0x978420 on 26.51) found by its prologue and the chain `mov rdi,[rcx+..]; mov rax,[rdi]; mov rcx,[rax+..]; mov rax,[rcx]; mov rax,[rax+disp]; call [guard]`, offset 43, the displacement, `displacement_to_slot`; the pattern ends at the call. Recipe 2: the two leaves, getter, eight int3, isWorldSystemReady, at offset 0, then `slot_of` MinecraftGame.vtable; it relies on the link order of the two leaves, the same on all four builds. Every immediate, displacement and branch byte is a wildcard (the immediate 0 of the `cmp` too). The three recipes share no bytes, and all three agree on every build. The range check is a window around slot 152 (144 to 160), well inside the IMinecraftGame interface; a range check alone is weak, so the entry relies on its agreeing recipes. Values: slot 152 (0x98) on 6aa482fd-2658118eba0dbac5 (26.51, leaf 0x81d9c0), 6ad79ee4-17d51891a1119914 (26.60, 0x8bc6c0), 6aea437e-7eff13daabb430da (26.62, 0x8bc6a0) and 6aed1906-b127418e74d2f2f9 (26.63, 0x8bc5d0). What changed: only the member offset (1538h to 1598h on 26.60); the slot did not move."
-
+  notes = "Slot of virtual World::WorldSystem& IMinecraftGame::getWorldSystem() const in the MinecraftGame.vtable global: 152 (byte offset 4C0h) on 26.51, 26.60, 26.62 and 26.63 (the LeviLamina header order minus 6 at this point). `this` in rcx is the MinecraftGame; rax returns the World::WorldSystem*. The body is an 8-byte leaf with no .pdata entry, `mov rax,[rcx+member]; ret` (1538h on 26.51, 1598h on 26.60 to 26.63), and the next leaf, slot 153, is isWorldSystemReady: `cmp qword ptr [rcx+member],0; setne al; ret` on the same member, the header pair getWorldSystem / isWorldSystemReady. Recipe 0: a caller (0xa243c0 on 26.63, 0x978420 on 26.51) found by the chain `mov rdi,[rcx+..]; mov rax,[rdi]; mov rcx,[rax+..]; mov rax,[rcx]; mov rax,[rax+disp]; call [guard]`, offset 14, the displacement of operand 1, `displacement_to_slot`; the pattern starts at the first load of the chain and ends at the call. Recipe 1: a `pattern_any` at offset 0 then `slot_of` MinecraftGame.vtable. Alternative 0 is the two leaves (the getter, eight int3, isWorldSystemReady), which relies on the link order of the two leaves and matches on 26.51 to 26.63. Alternative 1 is the body of the getter when it is a function (70.26): the stack-cookie prologue, the null test of the member, the assert strings with their lengths, ending at the call of the assert function. Every immediate, displacement and branch byte is a wildcard (the immediate 0 of the `cmp` too), except the two lengths kept with literal_ok in alternative 1. The two recipes share no bytes, and agree on every build. The range check is a window around slot 152 (144 to 160), well inside the IMinecraftGame interface; a range check alone is weak, so the entry relies on its agreeing recipes. Values: slot 152 (0x98) on 6aa482fd-2658118eba0dbac5 (26.51, leaf 0x81d9c0), 6ad79ee4-17d51891a1119914 (26.60, 0x8bc6c0), 6aea437e-7eff13daabb430da (26.62, 0x8bc6a0) and 6aed1906-b127418e74d2f2f9 (26.63, 0x8bc5d0). What changed: only the member offset (1538h to 1598h on 26.60); the slot did not move. What changed in 1.26.70.26 (6afa4e47-dadc375797a3d31a): slot 152 again (the member is 15E0h); the accessor is no longer a leaf: it is a function with a stack cookie and an assert that the member is not null (it loads its own __FUNCSIG__ text), so the old recipe 2 does not match, and the join-result function is no longer found by its __FUNCSIG__ text (old recipe 0, removed because it cannot run on this build; the recipes must run on both builds). Recipe 0 is the old recipe 1 without its prologue (the caller changed its pushes) and recipe 1 gained alternative 1. Evidence from the old function: (1) the caller found from the old build (the chain with the displacement of slot 152 at 4C0h) matches once in the new exe, in a function whose call reads the same displacement; (2) isWorldSystemReady, the old getter pair partner (`cmp qword ptr [rcx+member],0; setne al; ret`, the leaf after the getter), sits at slot 153 on 70.26, reads the same member (15E0h) as the function in slot 152, and slot 157 follows it at the same distance in the code as on 26.63. The accessor in slot 152 loads the text `virtual World::WorldSystem &MinecraftGame::getWorldSystem() const` (inspect vtable --names). Class: real code change (the leaf became a function), repaired by a second code shape."
   recipe {
-    step "string_xref" { text = "Bedrock::Threading::Async<void> __cdecl MinecraftGame::_handleMultiplayerServiceJoinResult(const Social::MultiplayerServiceIdentifier, Social::JoinGameStatus, const Social::MultiplayerGameInfo &, bool)" }
     step "pattern" {
-      bytes  = "49 81 C6 ?? ?? ?? ?? 48 8B 07 48 8B 80 ?? ?? ?? ?? 48 89 F9 FF 15"
-      offset = 10
+      bytes  = "48 8B 79 ?? 48 8B 07 48 8B 48 ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15"
+      offset = 14
     }
     step "operand" {
       index = 1
@@ -339,20 +381,15 @@ entry "MinecraftGame.getWorldSystem" {
   }
 
   recipe {
-    step "pattern" {
-      bytes  = "55 56 57 48 81 EC ?? ?? ?? ?? 48 8D AC 24 ?? ?? ?? ?? 48 C7 85 ?? ?? ?? ?? ?? ?? ?? ?? 48 8B 79 ?? 48 8B 07 48 8B 48 ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15"
-      offset = 43
-    }
-    step "operand" {
-      index = 1
-      kind  = "displacement"
-    }
-    step "displacement_to_slot" {}
-  }
-
-  recipe {
-    step "pattern" {
-      bytes = "48 8B 81 ?? ?? ?? ?? C3 CC CC CC CC CC CC CC CC 48 83 B9 ?? ?? ?? ?? ?? 0F 95 C0 C3"
+    step "pattern_any" {
+      patterns = [
+        "48 8B 81 ?? ?? ?? ?? C3 CC CC CC CC CC CC CC CC 48 83 B9 ?? ?? ?? ?? ?? 0F 95 C0 C3",
+        "56 48 83 EC ?? 48 8B 05 ?? ?? ?? ?? 48 31 E0 48 89 44 24 ?? 48 8B 81 ?? ?? ?? ?? 48 85 C0 75 ?? 48 89 CE 48 8D 05 ?? ?? ?? ?? 48 89 44 24 ?? 48 C7 44 24 ?? 41 ?? ?? ?? 48 8D 05 ?? ?? ?? ?? 48 89 44 24 ?? 48 C7 44 24 ?? ?? ?? ?? ?? 48 8D 05 ?? ?? ?? ?? 48 89 44 24 ?? 48 C7 44 24 ?? 0C ?? ?? ?? 48 8D 44 24 ?? 48 89 44 24 ?? 48 8D 0D ?? ?? ?? ?? 48 8D 54 24 ?? 4C 8D 4C 24 ?? 41 B8 ?? ?? ?? ?? E8",
+      ]
+      literal_ok = [
+        "1.52: length 41h of the function's own __FUNCSIG__ text (the accessor template of 46 siblings differs only in this length and the next one)",
+        "1.94: length 0Ch of the member name text mWorldSystem in the same assert, the second byte that tells the accessor apart from its siblings",
+      ]
     }
     step "slot_of" { vtable = "MinecraftGame.vtable" }
   }
@@ -361,4 +398,34 @@ entry "MinecraftGame.getWorldSystem" {
     min = 144
     max = 160
   }
+}
+
+entry "MinecraftGame.applyActiveResourcePacks" {
+  kind   = "function"
+  hooked = true
+  notes  = "The MinecraftGame function that applies the active resource pack stack: `void (MinecraftGame*, ResourcePackManager&, bool changed)`. rcx the MinecraftGame, rdx the ResourcePackManager, r8b the bool (passed on as the whole register by a hook); it returns void. There is no symbol: the name says what its two callers do. Caller 1 is the MinecraftGame override of `ResourcePackListener::onActiveResourcePacksChanged(ResourcePackManager&)`, slot 1 of the ResourcePackListener vtable that the MinecraftGame constructor stores at this+B8h on 26.63 and this+C0h on 70.26 (the third store after the AppPlatformListener vtable at +88h / +90h, the five-slot table: destructor, onActiveResourcePacksChanged, onFullPackStackInvalid, onLanguageSubpacksChanged, onResourceManagerDestroyed): on 26.63 it is a full function (a profiler zone, then `add rdi,-0B8h; mov rcx,rdi; mov rdx,rsi; mov r8b,1; call`), on 70.26 a thunk without .pdata (`add rcx,-0C0h; mov r8b,1; jmp`). Caller 2 is the startup work-list step whose label is `initNotifyOnActiveResourcePacksChanged`: it asks the MinecraftGame for its ResourcePackManager through a virtual call and calls this function with r8b = 0. So it runs once at startup with false and once for every change of the active pack stack with true. The body clears per-pack state in the pack list of the ResourcePackManager (`[rdx+58h]`, a loop over 128h-byte (26.63) / 120h-byte (70.26) elements that zeroes two members of each), reloads the pack resources and queues the follow-up tasks. The loader hooks it to bind the mod textures again after a pack change. Recipe 0 is that loop (`mov rdx,[rax+disp32]; mov r8,[rdx]; mov qword ptr [r8+disp32],imm32; mov rdx,[rdx]; mov qword ptr [rdx+disp32],imm32; add rax,imm32; cmp rax,rcx; jne`), then `function_start_of`; every ModRM, displacement, immediate and branch byte is a wildcard, the REX and opcode bytes stay; it is unique on both builds. Recipe 1 is the call in the startup step: step 1 is the label test at the start of the step (`cmp qword ptr [reg+disp8],26h; jne; mov reg,[reg]; lea rdx,[rip+..]; mov r8d,imm32; call`), with one kept byte, the 26h of the compare, the length of the label `initNotifyOnActiveResourcePacksChanged`: the other steps of the work list compare labels of other lengths, and without it the shape matches the other steps; step 2 is the end of the same function (`mov rdx,rax; xor r8d,r8d; call`), once in it, offset 6, read as the branch target. The two recipes are in two functions and share no pattern bytes; they agree on both builds. Check: function_start. Values: 26.63 (6aed1906-b127418e74d2f2f9) and 70.26 (6afa4e47-dadc375797a3d31a) both derive it with both recipes. What changed in 6afa4e47-dadc375797a3d31a: the pack element shrank from 128h to 120h bytes and the listener override became a thunk; the body and the step kept their shape. Evidence, from the 26.63 functions: (1) the label string `initNotifyOnActiveResourcePacksChanged` is loaded by two functions on each build, the work-list builder and the step, and the step ends with the `xor r8d,r8d; call` of this function on both builds; (2) the ResourcePackListener vtable of each build (found from the constructor store run, the third store after the AppPlatformListener vtable) holds in slot 1 the override that calls (26.63) or jumps to (70.26) this function with r8b = 1. Class: new entry."
+
+  recipe {
+    step "pattern" {
+      bytes = "48 8B ?? ?? ?? ?? ?? 4C 8B ?? 49 C7 ?? ?? ?? ?? ?? ?? ?? ?? ?? 48 8B ?? 48 C7 ?? ?? ?? ?? ?? ?? ?? ?? ?? 48 05 ?? ?? ?? ?? 48 39 ?? 75 ??"
+    }
+    step "function_start_of" {}
+  }
+
+  recipe {
+    step "pattern" {
+      bytes      = "48 83 ?? ?? 26 75 ?? 48 8B ?? 48 8D 15 ?? ?? ?? ?? 41 B8 ?? ?? ?? ?? E8"
+      literal_ok = ["4: 26h is the length of the step label initNotifyOnActiveResourcePacksChanged; the other work-list steps compare labels of other lengths"]
+    }
+    step "pattern" {
+      bytes  = "48 89 C2 45 31 C0 E8"
+      offset = 6
+    }
+    step "operand" {
+      index = 0
+      kind  = "branch_target"
+    }
+  }
+
+  check "function_start" {}
 }

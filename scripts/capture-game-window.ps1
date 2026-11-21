@@ -6,10 +6,13 @@
 # cannot open the manager panel: the manager reads Ctrl and Shift with GetAsyncKeyState, which posted messages do not
 # change, so it sees F10 alone.
 #
+# With -ShotOnly it writes one screenshot, <Out>.png, and posts no key.
+#
 # Only call it for the PID the ingame-* task recorded and re-checked. Exit 1 when the PID has no visible window.
 param(
   [Parameter(Mandatory = $true)][int]$ProcessId,
-  [Parameter(Mandatory = $true)][string]$Out
+  [Parameter(Mandatory = $true)][string]$Out,
+  [switch]$ShotOnly
 )
 Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
 using System;
@@ -89,6 +92,10 @@ public static class GameWindow {
 $hwnd = [GameWindow]::Find([uint32]$ProcessId)
 if ($hwnd -eq [IntPtr]::Zero) { "no visible window for pid $ProcessId"; exit 1 }
 "window 0x{0:x} of pid {1}" -f $hwnd.ToInt64(), $ProcessId
+if ($ShotOnly) {
+  "screenshot: " + [GameWindow]::Shot($hwnd, "$Out.png")
+  exit 0
+}
 "screenshot: " + [GameWindow]::Shot($hwnd, "$Out-before.png")
 [GameWindow]::Hotkey($hwnd)
 "posted Ctrl+Shift+F10 to the window"

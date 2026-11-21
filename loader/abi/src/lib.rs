@@ -1,20 +1,227 @@
 //! The versioned `#[repr(C)]` contract between the AMML loader and AMML mods.
 #![deny(unsafe_code)]
 
+pub mod amml_actor_table;
+pub mod amml_amount;
 pub mod amml_api;
+pub mod amml_band;
+pub mod amml_block_handle;
+pub mod amml_block_pos;
+pub mod amml_capture_frame;
+pub mod amml_capture_request;
+pub mod amml_chat_field;
+pub mod amml_client_flag;
+pub mod amml_client_table;
+pub mod amml_color;
+pub mod amml_container_action;
+pub mod amml_container_entry;
+pub mod amml_core_table;
+pub mod amml_cursor_shape;
+pub mod amml_dir_kind;
+pub mod amml_draw_surface;
+pub mod amml_event_context;
+pub mod amml_event_header;
+pub mod amml_events_table;
 pub mod amml_exports;
+pub mod amml_face;
+pub mod amml_hand;
+pub mod amml_image_view;
+pub mod amml_inline_icon;
+pub mod amml_input_blocks;
+pub mod amml_input_mode;
+pub mod amml_input_table;
+pub mod amml_inventory_move;
+pub mod amml_inventory_table;
+pub mod amml_item_draw;
+pub mod amml_item_draw_flags;
+pub mod amml_item_snapshot;
+pub mod amml_join_outcome;
+pub mod amml_lease_mode;
+pub mod amml_lease_request;
+pub mod amml_lease_state;
+pub mod amml_light_falloff;
+pub mod amml_light_source;
+pub mod amml_lighting_table;
 pub mod amml_log_level;
+pub mod amml_lost_reason;
+pub mod amml_menu;
 pub mod amml_mod_info;
+pub mod amml_modifiers;
+pub mod amml_mouse_action;
+pub mod amml_mouse_button;
+pub mod amml_move_intent;
+pub mod amml_network_table;
+pub mod amml_origin;
+pub mod amml_overlay_table;
+pub mod amml_phase;
+pub mod amml_player_list_entry;
+pub mod amml_point;
+pub mod amml_pointer_kind;
+pub mod amml_rect;
+pub mod amml_registry_table;
+pub mod amml_release_reason;
+pub mod amml_request_options;
+pub mod amml_request_outcome;
+pub mod amml_rgba;
+pub mod amml_rotation;
+pub mod amml_route_via;
+pub mod amml_screen;
+pub mod amml_screen_kind;
+pub mod amml_services;
+pub mod amml_shot_layers;
+pub mod amml_size;
+pub mod amml_slot_at;
+pub mod amml_start_world_outcome;
 pub mod amml_status;
 pub mod amml_str;
+pub mod amml_surface_loss;
+pub mod amml_text_align;
+pub mod amml_texture_id;
+pub mod amml_texture_reload;
+pub mod amml_texture_source;
+pub mod amml_thread;
+pub mod amml_ui_profile;
+pub mod amml_ui_table;
+pub mod amml_use_row;
+pub mod amml_uses;
+pub mod amml_uv;
+pub mod amml_vec3;
+pub mod amml_window_change;
+pub mod amml_window_table;
+pub mod events;
 pub mod known_log_level;
 pub mod mod_id;
+pub mod world_epoch;
 
+pub use amml_actor_table::{
+    ActorDimensionFn, ActorIsAliveFn, ActorPointFn, ActorRotationFn, AmmlActorTable, DimensionIdFn,
+};
+pub use amml_amount::AmmlAmount;
 pub use amml_api::{AMML_API_VERSION, AmmlApi, HeapDeleteFn, HeapNewFn, HookFn, LogFn, ModDirFn, ResolveFn, UnhookFn};
+pub use amml_band::AmmlBand;
+pub use amml_block_handle::AmmlBlockHandle;
+pub use amml_block_pos::AmmlBlockPos;
+pub use amml_capture_frame::AmmlCaptureFrame;
+pub use amml_capture_request::AmmlCaptureRequest;
+pub use amml_chat_field::AmmlChatField;
+pub use amml_client_flag::AmmlClientFlag;
+pub use amml_client_table::{
+    AmmlClientTable, ClientCanJoinFn, ClientCurrentFn, ClientFlagFn, ClientJoinServerFn, ClientLeaveWorldFn,
+    ClientLocalPlayerFn, ClientNoteActivityFn, ClientOpenMenuFn, ClientOpenPauseFn, ClientSelectHotbarSlotFn,
+    ClientSendCommandFn, ClientSetFlagFn, ClientStartLocalWorldFn, ClientTopScreenFn,
+};
+pub use amml_color::AmmlColor;
+pub use amml_container_action::AmmlContainerAction;
+pub use amml_container_entry::AmmlContainerEntry;
+pub use amml_core_table::{AmmlCoreTable, AvailableFn, DirFn, GameAliveFn, LogFieldsFn};
+pub use amml_cursor_shape::AmmlCursorShape;
+pub use amml_dir_kind::AmmlDirKind;
+pub use amml_draw_surface::AmmlDrawSurface;
+pub use amml_event_context::AmmlEventContext;
+pub use amml_event_header::AmmlEventHeader;
+pub use amml_events_table::{AmmlEventsTable, EventCallbackFn, ListenFn, UnlistenFn};
 pub use amml_exports::{AmmlExports, ModDisableFn, ModEnableFn, ModLoadFn, ModUnloadFn};
+pub use amml_face::AmmlFace;
+pub use amml_hand::AmmlHand;
+pub use amml_image_view::AmmlImageView;
+pub use amml_inline_icon::AmmlInlineIcon;
+pub use amml_input_blocks::AmmlInputBlocks;
+pub use amml_input_mode::AmmlInputMode;
+pub use amml_input_table::{
+    AmmlInputTable, InputAcquireFn, InputButtonDownFn, InputEndLeaseFn, InputIsDownFn, InputKeyDownFn,
+    InputLeaseStateFn, InputModifiersFn, InputReleaseAllFn, InputReleaseHoldFn, InputSetCoexistFn, InputSetMoveFn,
+    InputSetRankingFn, InputTurnFn, InputWheelFn,
+};
+pub use amml_inventory_move::AmmlInventoryMove;
+pub use amml_inventory_table::{
+    AmmlInventoryTable, InventoryContentsCloseFn, InventoryContentsEntryFn, InventoryContentsNameFn,
+    InventoryContentsOpenFn, InventoryHeldItemFn, InventoryItemBlockFn, InventoryItemChangeStampFn,
+    InventoryItemDrawReleaseFn, InventoryItemNameFn, InventoryItemReadFn, InventoryRequestMovesFn,
+    InventorySelectedSlotFn, InventorySlotItemFn,
+};
+pub use amml_item_draw::AmmlItemDraw;
+pub use amml_item_draw_flags::AmmlItemDrawFlags;
+pub use amml_item_snapshot::AmmlItemSnapshot;
+pub use amml_join_outcome::AmmlJoinOutcome;
+pub use amml_lease_mode::AmmlLeaseMode;
+pub use amml_lease_request::AmmlLeaseRequest;
+pub use amml_lease_state::AmmlLeaseState;
+pub use amml_light_falloff::AmmlLightFalloff;
+pub use amml_light_source::AmmlLightSource;
+pub use amml_lighting_table::{AmmlLightingTable, LightingSetSourceFn};
 pub use amml_log_level::AmmlLogLevel;
+pub use amml_lost_reason::AmmlLostReason;
+pub use amml_menu::AmmlMenu;
 pub use amml_mod_info::AmmlModInfo;
+pub use amml_modifiers::AmmlModifiers;
+pub use amml_mouse_action::AmmlMouseAction;
+pub use amml_mouse_button::AmmlMouseButton;
+pub use amml_move_intent::AmmlMoveIntent;
+pub use amml_network_table::{
+    AmmlNetworkTable, NETWORK_TEXT_NAME, NETWORK_TEXT_XUID, NetworkPlayerListEntryFn, NetworkPlayerListTextFn,
+    NetworkPlayerSkinFn, NetworkSkinAnimatedCountFn, NetworkSkinAnimatedFn, NetworkSkinFlagFn, NetworkSkinImageFn,
+    NetworkSkinTextFn,
+};
+pub use amml_origin::AmmlOrigin;
+pub use amml_overlay_table::{
+    AmmlOverlayTable, OverlayCaptureFreeSlotsFn, OverlayCaptureGiveBackFn, OverlayCaptureTakeFn, OverlayCloseCaptureFn,
+    OverlayCopyBackBufferFn, OverlayOpenCaptureFn, OverlayPresentCountFn, OverlayScreenshotFn,
+};
+pub use amml_phase::AmmlPhase;
+pub use amml_player_list_entry::AmmlPlayerListEntry;
+pub use amml_point::AmmlPoint;
+pub use amml_pointer_kind::AmmlPointerKind;
+pub use amml_rect::AmmlRect;
+pub use amml_registry_table::{AmmlRegistryTable, ProvideFn, RequireFn};
+pub use amml_release_reason::AmmlReleaseReason;
+pub use amml_request_options::AmmlRequestOptions;
+pub use amml_request_outcome::AmmlRequestOutcome;
+pub use amml_rgba::AmmlRgba;
+pub use amml_rotation::AmmlRotation;
+pub use amml_route_via::AmmlRouteVia;
+pub use amml_screen::AmmlScreen;
+pub use amml_screen_kind::AmmlScreenKind;
+pub use amml_services::AmmlServices;
+pub use amml_shot_layers::AmmlShotLayers;
+pub use amml_size::AmmlSize;
+pub use amml_slot_at::AmmlSlotAt;
+pub use amml_start_world_outcome::AmmlStartWorldOutcome;
 pub use amml_status::AmmlStatus;
 pub use amml_str::AmmlStr;
+pub use amml_surface_loss::AmmlSurfaceLoss;
+pub use amml_text_align::AmmlTextAlign;
+pub use amml_texture_id::AmmlTextureId;
+pub use amml_texture_reload::AmmlTextureReload;
+pub use amml_texture_source::AmmlTextureSource;
+pub use amml_thread::AmmlThread;
+pub use amml_ui_profile::AmmlUiProfile;
+pub use amml_ui_table::{
+    AmmlUiTable, UiCanDrawFn, UiChatIconsActiveFn, UiChatSetTextFn, UiChatTextFn, UiContainerActionFn,
+    UiContainerCursorFn, UiContainerItemFn, UiContainerSlotCountFn, UiContainerSwapFn, UiDrawFillFn, UiDrawImageFn,
+    UiDrawItemFn, UiDrawOutlineFn, UiGuiScaleFn, UiIconRegisterFn, UiIconReleaseFn, UiIconUpdateFn, UiTextureLoadFn,
+    UiTextureReadyFn, UiTextureUnloadFn, UiTextureUploadRgbaFn, UiViewContainerFn, UiViewContentRectFn,
+    UiViewInputModeFn, UiViewKindFn, UiViewPointerFn, UiViewSizeFn, UiViewUiProfileFn,
+};
+pub use amml_use_row::AmmlUseRow;
+pub use amml_uses::AmmlUses;
+pub use amml_uv::AmmlUv;
+pub use amml_vec3::AmmlVec3;
+pub use amml_window_change::AmmlWindowChange;
+pub use amml_window_table::{
+    AmmlWindowTable, WindowBufferSizeFn, WindowClientSizeFn, WindowCursorPosFn, WindowDpiFn, WindowHasFocusFn,
+    WindowIsForegroundFn, WindowReplayFocusLossFn, WindowRequestSizeFn, WindowToBufferFn,
+};
+pub use events::{
+    AmmlEvent, BlockBreakContinue, BlockBreakStart, CameraFov, ChatMessageAdded, ClientTick, ContainerSlotHover,
+    ContainerSlotUnhover, DimensionChanging, FramePresent, FramePresented, FrameUpdate, GameTick, GamepadPoll,
+    IdleScreenOpen, InjectedInputReleased, InputLeaseLost, InputLeaseResumed, InputLeaseSuspended,
+    InventoryRequestDone, ItemHovertext, ItemUse, ItemUseOnBlock, JoinServerResult, JoinStarted, KeyInput,
+    LocatorBarIconDraw, LookDelta, ModsLoaded, MouseGrab, MouseInput, PlayerAttack, PlayerListUpdate, PlayerMoveInput,
+    PlayerSkinChanged, ProviderGone, ProviderReady, RenderDeviceReset, ScreenChanged, ScreenClosing, ScreenRender,
+    ScreenshotTaken, ScreenshotWritten, Shutdown, SurfaceLost, SwapChainResize, SwapChainResized, TexturesReloaded,
+    UiPointer, UiScroll, WindowChanged, WindowChar, WindowCursor, WindowFocus, WindowPointer, WindowSize, WorldJoined,
+    WorldLeft,
+};
 pub use known_log_level::KnownLogLevel;
 pub use mod_id::ModId;
+pub use world_epoch::WorldEpoch;

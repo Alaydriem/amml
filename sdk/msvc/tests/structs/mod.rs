@@ -2,6 +2,7 @@ mod deque;
 mod function_ref;
 mod heap;
 mod msvc_function;
+mod msvc_list_node;
 mod msvc_map;
 mod optional;
 mod shared_ptr;

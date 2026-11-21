@@ -4,6 +4,8 @@ pub enum ModPhase {
     /// `amml_mod_load` succeeded.
     Loaded,
     Enabled,
+    /// `amml_mod_disable` and the release of what the mod holds are running; a second disable is refused.
+    Disabling,
     /// `amml_mod_disable` ran.
     Disabled,
     /// `amml_mod_unload` ran. The DLL stays mapped.

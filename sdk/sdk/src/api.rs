@@ -40,18 +40,21 @@ impl Api {
         if version < required_version {
             return Err(SdkError::LoaderTooOld(version));
         }
-        // SAFETY: `size` covers the whole v1 table, so a reference to it is valid.
-        let table = unsafe { &*api };
-        Ok(Self {
-            module_base: table.module_base,
-            resolve: table.resolve,
-            hook: table.hook,
-            unhook: table.unhook,
-            log: table.log,
-            heap_new: table.heap_new,
-            heap_delete: table.heap_delete,
-            mod_dir: table.mod_dir,
-        })
+        // SAFETY: `size` covers every v1 field, so each is readable through a raw pointer. No
+        // reference to `AmmlApi` is formed: a v1 or v2 table is shorter than the struct.
+        let read = unsafe {
+            Self {
+                module_base: core::ptr::addr_of!((*api).module_base).read(),
+                resolve: core::ptr::addr_of!((*api).resolve).read(),
+                hook: core::ptr::addr_of!((*api).hook).read(),
+                unhook: core::ptr::addr_of!((*api).unhook).read(),
+                log: core::ptr::addr_of!((*api).log).read(),
+                heap_new: core::ptr::addr_of!((*api).heap_new).read(),
+                heap_delete: core::ptr::addr_of!((*api).heap_delete).read(),
+                mod_dir: core::ptr::addr_of!((*api).mod_dir).read(),
+            }
+        };
+        Ok(read)
     }
 
     /// Base address of the game module the entries are relative to.
