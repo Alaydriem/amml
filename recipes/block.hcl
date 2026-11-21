@@ -219,7 +219,7 @@ entry "Block.getRenderLayer" {
 
 entry "Block.mBlockType" {
   kind  = "field"
-  notes = "draft"
+  notes = "Offset in Block of mBlockType, the pointer to the BlockType of the block state: 68h on 6aed1906-b127418e74d2f2f9 (26.63) and on 6afa4e47-dadc375797a3d31a (70.26), the value of the amml-game BlockLayout mirror. Recipe 0 is the call site of BlockType.getCollisionShape recipe 0: `mov rcx,[reg+disp8]` (the block type of the block) `; mov rax,[rcx]; mov rax,[rax+..]; mov [rsp+..],r8; mov qword ptr [rsp+..],0; lea rdx,[rsp+..]; mov r8,r10; call [guard]`, offset 0, the displacement of operand 1. Recipe 1 is BlockSource::getMaterial(BlockPos const&) (BlockType.mMaterialInline recipe 0, the by-value shape that both builds have): `sub rsp,..; mov rax,[rcx]; mov rax,[rax+..]; call [guard]` (getBlock) `; mov rax,[rax+disp8]; add rax,..; add rsp,..; ret`, offset 17, the displacement of operand 1. The two recipes are in two functions and share no bytes. Every displacement, immediate and branch byte is a wildcard. Range window 40h..100h. Evidence on both builds: Block.getRenderLayer, Block.canProvideFullSupport (26.63), Block.canProvideFullSupportWithFlag and Block.getMapColor (70.26) all load the block type from Block+68h before a BlockType member or virtual. Class: new entry."
 
   recipe {
     step "pattern" {

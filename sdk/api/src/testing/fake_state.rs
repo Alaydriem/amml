@@ -7,8 +7,9 @@ use amml_runtime::{EventBus, ListenError, ListenerId, ProviderRegistry};
 
 use crate::Area;
 use crate::testing::{
-    FakeChatBook, FakeClient, FakeInput, FakeInventory, FakeItemBook, FakeLighting, FakeListener, FakeNetwork,
-    FakeOverlay, FakePhase, FakeRequests, FakeTextureBook, FakeUi, FakeWindow,
+    FakeCameraFree, FakeCameraState, FakeChatBook, FakeClient, FakeInput, FakeInventory, FakeItemBook, FakeLighting,
+    FakeListener, FakeNetwork, FakeOverlay, FakePhase, FakeRender, FakeRequests, FakeShapes, FakeTextureBook, FakeUi,
+    FakeWindow,
 };
 
 thread_local! {
@@ -37,7 +38,9 @@ pub(crate) struct FakeState {
     dirs: RefCell<Vec<(AmmlDirKind, Box<str>)>>,
     phase: Cell<FakePhase>,
     areas: RefCell<Vec<(&'static str, u32)>>,
-    client: Cell<Option<FakeClient>>,
+    client: RefCell<Option<FakeClient>>,
+    // The chunk positions the fake gave handles for, in the order of their handles.
+    chunks: RefCell<Vec<(i32, i32)>>,
     inventory: Cell<FakeInventory>,
     lighting: FakeLighting,
     client_writes: RefCell<Vec<String>>,
@@ -53,6 +56,10 @@ pub(crate) struct FakeState {
     items: FakeItemBook,
     requests: FakeRequests,
     network: FakeNetwork,
+    render: FakeRender,
+    camera: FakeCameraState,
+    camera_free: FakeCameraFree,
+    shapes: FakeShapes,
 }
 
 impl FakeState {
@@ -65,6 +72,10 @@ impl FakeState {
     const CLIENT_BASE: usize = 0x1000_0000;
     /// The local player handle is the client handle plus this.
     const PLAYER_OFFSET: usize = 0x10;
+    /// Where the chunk handles of the fakes start; each fake has `CHUNK_SPAN` bytes of them, `CHUNK_STRIDE` apart.
+    const CHUNK_BASE: usize = 0x5000_0000;
+    const CHUNK_SPAN: usize = 0x10_0000;
+    const CHUNK_STRIDE: usize = 8;
     /// The held stack handle is the player handle plus this.
     const STACK_OFFSET: usize = 0x10;
     /// The slot stack handles start at the client handle plus this and are this far apart (36 of them fit in the
@@ -87,7 +98,8 @@ impl FakeState {
             dirs: RefCell::new(Vec::new()),
             phase: Cell::new(FakePhase::Free),
             areas: RefCell::new(vec![(Area::INPUT_LEASE.id, Area::INPUT_LEASE.version)]),
-            client: Cell::new(None),
+            client: RefCell::new(None),
+            chunks: RefCell::new(Vec::new()),
             inventory: Cell::new(FakeInventory::default()),
             lighting: FakeLighting::default(),
             client_writes: RefCell::new(Vec::new()),
@@ -102,6 +114,10 @@ impl FakeState {
             items: FakeItemBook::default(),
             requests: FakeRequests::default(),
             network: FakeNetwork::default(),
+            render: FakeRender::default(),
+            camera: FakeCameraState::default(),
+            camera_free: FakeCameraFree::default(),
+            shapes: FakeShapes::default(),
         }
     }
 
@@ -127,6 +143,22 @@ impl FakeState {
 
     pub(crate) fn network(&self) -> &FakeNetwork {
         &self.network
+    }
+
+    pub(crate) fn render(&self) -> &FakeRender {
+        &self.render
+    }
+
+    pub(crate) fn camera(&self) -> &FakeCameraState {
+        &self.camera
+    }
+
+    pub(crate) fn camera_free(&self) -> &FakeCameraFree {
+        &self.camera_free
+    }
+
+    pub(crate) fn shapes(&self) -> &FakeShapes {
+        &self.shapes
     }
 
     pub(crate) fn lighting(&self) -> &FakeLighting {
@@ -208,7 +240,8 @@ impl FakeState {
     }
 
     pub(crate) fn set_client(&self, client: FakeClient) {
-        self.client.set(Some(client));
+        *self.client.borrow_mut() = Some(client);
+        self.chunks.borrow_mut().clear();
     }
 
     pub(crate) fn set_inventory(&self, inventory: FakeInventory) {
@@ -224,6 +257,26 @@ impl FakeState {
         self.player_handle() + Self::STACK_OFFSET
     }
 
+    /// A handle for the chunk at chunk position (`x`, `z`); never read as memory. The handles of the fake stay valid until
+    /// the next `set_client`.
+    pub(crate) fn chunk_handle(&self, x: i32, z: i32) -> usize {
+        let mut chunks = self.chunks.borrow_mut();
+        let index = chunks.iter().position(|at| *at == (x, z)).unwrap_or_else(|| {
+            chunks.push((x, z));
+            chunks.len() - 1
+        });
+        Self::CHUNK_BASE + (self.tag as usize) * Self::CHUNK_SPAN + index * Self::CHUNK_STRIDE
+    }
+
+    /// The chunk position a handle names; `None` for a handle this fake did not give.
+    pub(crate) fn chunk_of_handle(&self, handle: usize) -> Option<(i32, i32)> {
+        let offset = handle.checked_sub(Self::CHUNK_BASE + (self.tag as usize) * Self::CHUNK_SPAN)?;
+        if offset % Self::CHUNK_STRIDE != 0 {
+            return None;
+        }
+        self.chunks.borrow().get(offset / Self::CHUNK_STRIDE).copied()
+    }
+
     /// The handle of the fake client; unique per fake, never read as memory.
     pub(crate) fn client_handle(&self) -> usize {
         Self::CLIENT_BASE + (self.tag as usize) * 0x100
@@ -231,7 +284,7 @@ impl FakeState {
 
     /// The handle of the fake client while one is set, else 0.
     pub(crate) fn current_client(&self) -> usize {
-        if self.client.get().is_some() { self.client_handle() } else { 0 }
+        if self.client.borrow().is_some() { self.client_handle() } else { 0 }
     }
 
     /// The handle of the local player of the fake client.
@@ -245,7 +298,8 @@ impl FakeState {
         if !self.gate.get() {
             return Err(AmmlStatus::NOT_READY);
         }
-        let client = self.client.get().filter(|_| handle == self.client_handle()).ok_or(AmmlStatus::REFUSED)?;
+        let client =
+            self.client.borrow().clone().filter(|_| handle == self.client_handle()).ok_or(AmmlStatus::REFUSED)?;
         if !self.area_offered(area.id, area.version) {
             return Err(AmmlStatus::NOT_AVAILABLE);
         }
@@ -254,9 +308,8 @@ impl FakeState {
 
     /// Changes the client state and keeps `line` as a client write.
     pub(crate) fn write_client(&self, change: impl FnOnce(&mut FakeClient), line: String) {
-        if let Some(mut client) = self.client.get() {
-            change(&mut client);
-            self.client.set(Some(client));
+        if let Some(client) = self.client.borrow_mut().as_mut() {
+            change(client);
         }
         self.client_writes.borrow_mut().push(line);
     }

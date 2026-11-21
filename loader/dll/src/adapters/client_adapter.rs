@@ -10,7 +10,7 @@ use amml_runtime::RestoreFlag;
 
 use crate::{
     ClientDetours, EventHub, GameGate, LeaveHold, LoaderState, NonOwnerPointerLayout, PauseOption, ScreenNames,
-    SessionAdapter, SessionHook,
+    SessionAdapter, SessionHook, WorldRenderAdapter,
 };
 
 static ADAPTER: OnceLock<ClientAdapter> = OnceLock::new();
@@ -53,6 +53,7 @@ pub struct ClientAdapter {
     get_hide_hud: Option<usize>,
     set_hide_gui: Option<usize>,
     get_if_valid: Option<usize>,
+    is_graphics_deferred: Option<usize>,
     // The `ClientInstance.getMinecraftInput` slot and the derived offsets of the any-input chain.
     minecraft_input: Option<usize>,
     input_handler_at: Option<usize>,
@@ -118,6 +119,7 @@ impl ClientAdapter {
             get_hide_hud: slot("IOptionRegistry.getHideHud"),
             set_hide_gui: slot("IOptionRegistry.setHideGUI"),
             get_if_valid: slot("OptionRegistry.getIfValid"),
+            is_graphics_deferred: slot("IOptionRegistry.isGraphicsModeDeferred"),
             minecraft_input: slot("ClientInstance.getMinecraftInput"),
             input_handler_at: slot("MinecraftInputHandler.mInputHandler"),
             any_input_at: slot("InputHandler.mAnyInputHandler"),
@@ -573,6 +575,20 @@ impl ClientAdapter {
         let mut event = MouseGrab { header: EventHub::header::<MouseGrab>(AmmlPhase::BEFORE) };
         hub.raise(&mut event, &context);
         event.header.cancelled == 0
+    }
+
+    /// At a `ClientTick` of the primary client: reads the game's graphics mode (`isGraphicsModeDeferred`, true in
+    /// Vibrant Visuals) and gives it to the world render, which raises it as `WorldRendered.vibrant` and frees the
+    /// meshes when it changes. Reads nothing while the world render is not installed, no option slot resolved, or no
+    /// mod listens to `WorldRendered` or holds a mesh.
+    pub(crate) fn note_graphics_mode(&self, client: usize) {
+        if !WorldRenderAdapter::with(false, WorldRenderAdapter::reads_graphics_mode) {
+            return;
+        }
+        let Ok(options) = self.options_of(client) else { return };
+        if let Ok(deferred) = Self::call_bool(options, self.is_graphics_deferred) {
+            WorldRenderAdapter::with((), |adapter| adapter.set_vibrant(deferred));
+        }
     }
 
     /// Records the grab state the game or the loader just set.

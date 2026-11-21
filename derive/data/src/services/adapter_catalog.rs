@@ -161,6 +161,167 @@ static UI_TEXTURES_RELOADED: [AdapterShape; 1] = AdapterShape::single(
 );
 static INPUT_GAMEPAD: [AdapterShape; 1] = AdapterShape::single("default", &["GameControllerHandler_GameCore.refresh"]);
 static CAMERA_FOV: [AdapterShape; 1] = AdapterShape::single("default", &["LevelRendererPlayer.getFov"]);
+// `WorldRendered` after the game's level pass, with the graphics mode read from the option registry at each client tick.
+static RENDER_WORLD_RENDERED: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &["LevelRenderer.renderLevel", "ClientInstance.getOptions", "IOptionRegistry.isGraphicsModeDeferred"],
+);
+// The world canvas: the camera position of the view of the running level renderer (the views of the frame object and
+// the renderer's own camera position), and the world mesh path of `build` and `draw` (the tessellator, the mesh, the
+// camera world matrix, the actor constants, the wireframe material and its four patched bytes, the name tag material
+// of a loader-owned `BaseActorRenderer`). The mirrors of the path are checked against their entries at install. The
+// optional entries are the per-call needs of `WorldCanvas::draw`: the loader's white texture goes through `ui.textures`;
+// without them the area stays offered and `draw` gives `NotAvailable`.
+static RENDER_WORLD_CANVAS: [AdapterShape; 1] = [AdapterShape {
+    name: "default",
+    entries: &[
+        "FrameRenderObject.mViews",
+        "ViewRenderObject.mViewData",
+        "ViewRenderData.mCameraPos",
+        "ViewRenderObject.size",
+        "LevelRenderer.mLevelRendererPlayer",
+        "LevelRendererCamera.mCameraPos",
+        "ScreenContext.tessellator",
+        "ScreenContext.meshContext",
+        "ScreenContext.camera",
+        "ScreenContext.constantBuffers",
+        "ScreenContext.currentShaderColor",
+        "Tessellator.begin",
+        "Tessellator.end",
+        "Tessellator.clear",
+        "Tessellator.mTessellating",
+        "Mesh.size",
+        "Mesh.isValid",
+        "Mesh.dtor",
+        "Mesh.renderMeshTextureList",
+        "MatrixStack.push",
+        "MatrixStackRef.dtor",
+        "Camera.mForward",
+        "ActorShaderManager.setEntityConstants",
+        "GlobalConstantBuffers.entityConstantBuffer",
+        "LevelRendererCamera.mWireframeMaterial",
+        "RenderMaterialInfo.mMaterial",
+        "RenderMaterial.mEnableBlend",
+        "RenderMaterial.mBlendSource",
+        "RenderMaterial.mBlendDestination",
+        "RenderMaterial.mDepthWriteMask",
+        "BaseActorRenderer.ctor",
+        "BaseActorRenderer.size",
+    ],
+    optional: &UI_TEXTURES_ENTRIES,
+}];
+// `CameraSetup` Before and After the game's camera setup of a rendered frame.
+static CAMERA_SETUP: [AdapterShape; 1] = AdapterShape::single("default", &["LevelRendererPlayer.setupCamera"]);
+// `Camera::set_pose`: the rotation written into the `mce::Camera` after `setupCamera` (mirror anchored by
+// `Camera.mForward`, then `updateViewMatrixDependencies`), the position written into the view object after
+// `createViewRenderObject` and into the level camera after `preRenderUpdate`. The mirrors are checked against their
+// entries at install. The `setupCamera` hook of `camera.setup` is needed as well.
+static CAMERA_POSE: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &[
+        "LevelRendererPlayer.createViewRenderObject",
+        "LevelRendererCamera.preRenderUpdate",
+        "LevelRendererCamera.mCameraPos",
+        "LevelRendererCamera.mCameraTargetPos",
+        "Camera.mForward",
+        "Camera.updateViewMatrixDependencies",
+        "ViewRenderObject.mViewData",
+        "ViewRenderData.mCameraPos",
+    ],
+);
+// `Camera::projection`: the top of the camera's projection stack, through the `mce::Camera` mirror anchored by
+// `Camera.mForward`, read in `CameraSetup` After.
+static CAMERA_PROJECTION: [AdapterShape; 1] = AdapterShape::single("default", &["Camera.mForward"]);
+// `CameraControl::{set_free, release_free, free_available}`: the loader captures the client network handler from its
+// hooked handler slots (the camera instruction and chunk publisher slots of the table it patches), makes a
+// `CameraInstructionPacket` with the game's factory, writes the set or clear instruction through the
+// `CameraInstruction` mirror (checked against the packet size and the spline offset) with the index of the
+// `minecraft:free` preset of the local player's level, and hands it to the captured handler's camera slot. The captured
+// handler is forgotten at the world leave and at the next join start, so the row needs those session hooks too.
+static CAMERA_FREE: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &[
+        "LegacyClientNetworkHandler.vtable",
+        "ClientNetworkHandler.handle.CameraInstructionPacket",
+        "ClientNetworkHandler.handle.NetworkChunkPublisherUpdatePacket",
+        "MinecraftPackets.createPacket",
+        "CameraInstructionPacket.size",
+        "CameraInstructionPacket.mCameraInstruction",
+        "CameraInstruction.mSpline",
+        "Level.getCameraPresets",
+        "CameraPreset.size",
+        "Actor.mLevel",
+        "ClientExitLevel.hook",
+        "ClientInstance.onStartJoinGame",
+        AdapterCatalog::CLIENT_INSTANCE_VTABLE,
+    ],
+);
+// `WorldShapes::{apply, max_batch, target_epoch}`: the client network handler captured as for `camera.free` (its
+// hooked slots and the session hooks that forget it), a `PrimitiveShapesPacket` from the game's factory whose shape
+// vector (`PrimitiveShapesPacket.mShapes`) the loader fills with payloads (checked against
+// `PrimitiveShapeDataPayload.size`) in a block of the game heap, handed to the captured handler's shapes slot.
+static WORLD_SHAPES: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &[
+        "LegacyClientNetworkHandler.vtable",
+        "ClientNetworkHandler.handle.CameraInstructionPacket",
+        "ClientNetworkHandler.handle.NetworkChunkPublisherUpdatePacket",
+        "ClientNetworkHandler.handle.PrimitiveShapesPacket",
+        "MinecraftPackets.createPacket",
+        "PrimitiveShapesPacket.mShapes",
+        "PrimitiveShapeDataPayload.size",
+        "core.operator_new",
+        "core.operator_delete",
+        "ClientExitLevel.hook",
+        "ClientInstance.onStartJoinGame",
+        AdapterCatalog::CLIENT_INSTANCE_VTABLE,
+    ],
+);
+// `CameraControl::active_camera`: the camera registry of the client (`getCameraRegistry`), its camera entity vector and
+// the game's entt lookup of the `CameraComponent` (its name) and the `ActiveCameraComponent` of each camera entity. The
+// name is a `HashedString` of the layout `HashedString.layout` names. The component size is the stride of its payload
+// pages: 26.63 builds it from a factor and a shift, 70.x has it as one value.
+static CAMERA_ACTIVE: [AdapterShape; 2] = [
+    AdapterShape {
+        name: AdapterCatalog::ACTIVE_CAMERA_FACTOR_SHAPE,
+        entries: &[
+            "ClientInstance.getCameraRegistry",
+            "CameraRegistry.mCameraEntities",
+            "CameraRegistry.cameraEntityStride",
+            "CameraComponent.typeId",
+            "ActiveCameraComponent.typeId",
+            "HashedString.layout",
+            "CameraComponent.sizeFactor",
+            "CameraComponent.sizeShift",
+        ],
+        optional: &[],
+    },
+    AdapterShape {
+        name: AdapterCatalog::ACTIVE_CAMERA_SIZE_SHAPE,
+        entries: &[
+            "ClientInstance.getCameraRegistry",
+            "CameraRegistry.mCameraEntities",
+            "CameraRegistry.cameraEntityStride",
+            "CameraComponent.typeId",
+            "ActiveCameraComponent.typeId",
+            "HashedString.layout",
+            "CameraComponent.size",
+        ],
+        optional: &[],
+    },
+];
+// `CameraInstructionReceived` Before the game's handler of a `CameraInstructionPacket`; its set and clear parts are read
+// through the `CameraInstruction` mirror (checked against the packet size and the spline offset).
+static CAMERA_INSTRUCTION_RECEIVED: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &[
+        "LegacyClientNetworkHandler.vtable",
+        "ClientNetworkHandler.handle.CameraInstructionPacket",
+        "CameraInstructionPacket.mCameraInstruction",
+        "CameraInstructionPacket.size",
+        "CameraInstruction.mSpline",
+    ],
+);
 static DIMENSION_CHANGING: [AdapterShape; 1] =
     AdapterShape::single("default", &["LevelRendererPlayer.onWillChangeDimension"]);
 // The game's any-input handler: getMinecraftInput()->mInputHandler->mAnyInputHandler.
@@ -173,7 +334,8 @@ static IDLE_SCREEN_OPEN: [AdapterShape; 1] =
 
 // The local player of the primary client, read through its Actor vtable. Later appends to the actor table raise the
 // row's version (`AdapterNeed::area_at`).
-// Version 2 adds the position, eye position, rotation and dimension reads.
+// Version 2 adds the position, eye position, rotation and dimension reads; version 3 the head position and the block
+// source of the dimension.
 static ACTOR_READ: [AdapterShape; 1] = AdapterShape::single(
     "default",
     &[
@@ -186,8 +348,175 @@ static ACTOR_READ: [AdapterShape; 1] = AdapterShape::single(
         "ActorRotationComponent.mRot",
         "Actor.getDimension",
         "Dimension.getDimensionId",
+        "Actor.getAttachPos",
+        "Dimension.getBlockSourceFromMainChunkSource",
     ],
 );
+// The health of the local player: the attribute read of the entity context the actor holds.
+static ACTOR_HEALTH: [AdapterShape; 1] =
+    AdapterShape::single("default", &["ActorAttribute.getHealth", "Actor.mEntityContext"]);
+// The first block a ray meets in the block source of the local player: `BlockSource::clip` through its vtable slot,
+// with a `std::function` of the loader. The block source comes from the actor chain.
+static WORLD_RAYCAST: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &["BlockSource.clip", "Actor.getDimension", "Dimension.getBlockSourceFromMainChunkSource"],
+);
+// The boxes of the actors in a box of the block source of the local player: `BlockSource::fetchEntities` through its
+// vtable slot, the word order of the span it gives (`BlockSource.fetchEntitiesSpanOrder`), the box of each actor
+// through its shape component, and the local player to mark it.
+static WORLD_ACTORS_IN: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &[
+        "BlockSource.fetchEntities",
+        "BlockSource.fetchEntitiesSpanOrder",
+        "Actor.aabbShapeComponent",
+        "ClientInstance.getLocalPlayer",
+        "Actor.getDimension",
+        "Dimension.getBlockSourceFromMainChunkSource",
+    ],
+);
+// The sky darkness of the dimension of the local player.
+static WORLD_SKY_DARKEN: [AdapterShape; 1] =
+    AdapterShape::single("default", &["Dimension.mSkyDarken", "Actor.getDimension"]);
+// The chunk of the block source of the local player, how much of it the client has, the walk of its columns and the
+// names of block types. The block source comes from the actor chain.
+static WORLD_CHUNK_READ: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &[
+        "BlockSource.getChunk",
+        "LevelChunk.mSubChunks",
+        "LevelChunk.getBlock",
+        "SubChunk.size",
+        "SubChunk.isPlaceHolderSubChunk",
+        "BlockType.mMaterialInline",
+        "BlockType.mNameInfo.mFullName",
+        "HashedString.layout",
+        "Block.mBlockType",
+        "Actor.getDimension",
+        "Dimension.getBlockSourceFromMainChunkSource",
+    ],
+);
+// The game's own map colours in the column read: 26.63 reads the map colour component of the block and tints it by
+// its biome policy (the block type's own colour when the block has no component); 70.x asks the block. Both read the
+// water and grass colours of the biome the chunk holds, through the main chunk source of the chunk's dimension.
+static WORLD_MAP_COLOR: [AdapterShape; 2] = [
+    AdapterShape {
+        name: AdapterCatalog::MAP_COLOR_COMPONENT_SHAPE,
+        entries: &[
+            "Block.tryGetComponent.BlockMapColorComponent",
+            "BiomeColorSampling.getMapPolicy",
+            "MapPolicy.get",
+            "BlockType.getMapColor",
+            "Block.mBlockType",
+            "Dimension.getBlockSourceFromMainChunkSource",
+            "BiomeColorSampling.getWaterColor",
+            "BiomeColorSampling.getMapGrassColor",
+            "LevelChunk.getBiome",
+        ],
+        optional: &[],
+    },
+    AdapterShape {
+        name: AdapterCatalog::MAP_COLOR_BLOCK_SHAPE,
+        entries: &[
+            "Block.getMapColor",
+            "Block.mBlockType",
+            "Dimension.getBlockSourceFromMainChunkSource",
+            "BiomeColorSampling.getWaterColor",
+            "BiomeColorSampling.getMapGrassColor",
+            "LevelChunk.getBiome",
+        ],
+        optional: &[],
+    },
+];
+// A block change of the block source of the local player: the loader's own listener object (a copy of the base listener
+// vtable with the two slots replaced), attached to and detached from the block source, the dimension id of the source,
+// and the block type ids of the chunk reads. The block source comes from the actor chain.
+static BLOCK_CHANGED: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &[
+        "BlockSourceListener.vtable",
+        "BlockSourceListener.onSourceDestroyed",
+        "BlockSourceListener.onBlockChanged",
+        "BlockSource.addListener",
+        "BlockSource.removeListener",
+        "BlockSource.getDimensionId",
+        "Block.mBlockType",
+        "BlockType.mMaterialInline",
+        "BlockType.mNameInfo.mFullName",
+        "HashedString.layout",
+        "ClientInstance.getLocalPlayer",
+        "Actor.getDimension",
+        "Dimension.getBlockSourceFromMainChunkSource",
+    ],
+);
+// The facts of the joined world: the connection info of the client (the getter, its size and its destructor), the level
+// of the client with its seed and level data, the realm flag, and the storage the game opened for the world (the two
+// hooked functions keep the live storage; its folder is a derived member).
+static CLIENT_WORLD_INFO: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &[
+        "ClientInstance.getGameConnectionInfo",
+        "ClientInstance.getLevel",
+        "ClientInstance.isInRealm",
+        "GameConnectionInfo.size",
+        "GameConnectionInfo.dtor",
+        "Level.getLevelSeed64",
+        "ClientLevel.getLevelData",
+        "LevelData.mLevelName",
+        "LevelData.mCommandsEnabled",
+        "DBStorage.vtable",
+        "DBStorage.ctor",
+        "DBStorage.checkShutdownDone",
+        "DBStorage.mFullPath",
+    ],
+);
+// The biome id of a column and the names behind the ids.
+static WORLD_BIOMES: [AdapterShape; 1] =
+    AdapterShape::single("default", &["LevelChunk.getBiome", "HashedString.layout", "Biome.mId", "Biome.mHash"]);
+// The surfaces of a column: the chunk reads, the support of a block (26.63 takes the face, 70.x the face and a flag), the
+// collision shape of a block type and the light of a block position.
+static WORLD_SCAN_SURFACES: [AdapterShape; 2] = [
+    AdapterShape {
+        name: AdapterCatalog::SURFACE_SUPPORT_SHAPE,
+        entries: &[
+            "BlockSource.getChunk",
+            "LevelChunk.mSubChunks",
+            "LevelChunk.getBlock",
+            "SubChunk.size",
+            "SubChunk.isPlaceHolderSubChunk",
+            "BlockType.mMaterialInline",
+            "BlockType.mNameInfo.mFullName",
+            "HashedString.layout",
+            "Block.mBlockType",
+            "Actor.getDimension",
+            "Dimension.getBlockSourceFromMainChunkSource",
+            "Block.canProvideFullSupport",
+            "BlockType.getCollisionShape",
+            "BlockSource.getBrightnessPair",
+        ],
+        optional: &[],
+    },
+    AdapterShape {
+        name: AdapterCatalog::SURFACE_SUPPORT_FLAG_SHAPE,
+        entries: &[
+            "BlockSource.getChunk",
+            "LevelChunk.mSubChunks",
+            "LevelChunk.getBlock",
+            "SubChunk.size",
+            "SubChunk.isPlaceHolderSubChunk",
+            "BlockType.mMaterialInline",
+            "BlockType.mNameInfo.mFullName",
+            "HashedString.layout",
+            "Block.mBlockType",
+            "Actor.getDimension",
+            "Dimension.getBlockSourceFromMainChunkSource",
+            "Block.canProvideFullSupportWithFlag",
+            "BlockType.getCollisionShape",
+            "BlockSource.getBrightnessPair",
+        ],
+        optional: &[],
+    },
+];
 
 // The held stack and the selected slot of the local player, read through the inventory chain and the ItemStack mirror;
 // the names through the HashedString mirror that `HashedString.layout` selects.
@@ -423,27 +752,26 @@ static UI_DRAW: [AdapterShape; 1] = [AdapterShape {
 }];
 // The texture requests: the render context asks the game for a texture by its resource location; an upload goes
 // through the texture group of the client (the image buffer is filled in the loader, the group takes it).
-static UI_TEXTURES: [AdapterShape; 1] = AdapterShape::single(
-    "default",
-    &[
-        "ClientInstance.getTextureGroup",
-        "TextureGroup.uploadTexture",
-        "TextureGroup.getTexture",
-        "TextureGroup.unloadTexture",
-        "TextureGroup.textureGroupBase",
-        "TextureGroup.baseOffset",
-        "ResourceLocation.ctor",
-        "ResourceLocation.size",
-        "ImageBuffer.ctorFromDescription",
-        "ImageBuffer.size",
-        "ImageBuffer.mData",
-        "ImageBuffer.mSize",
-        "ImageBuffer.mDeleter",
-        "MinecraftUIRenderContext.getTexture",
-        "core.operator_new",
-        "core.operator_delete",
-    ],
-);
+static UI_TEXTURES: [AdapterShape; 1] = AdapterShape::single("default", &UI_TEXTURES_ENTRIES);
+// The entries of `ui.textures`, also the per-call needs of `WorldCanvas::draw`.
+const UI_TEXTURES_ENTRIES: [&str; 16] = [
+    "ClientInstance.getTextureGroup",
+    "TextureGroup.uploadTexture",
+    "TextureGroup.getTexture",
+    "TextureGroup.unloadTexture",
+    "TextureGroup.textureGroupBase",
+    "TextureGroup.baseOffset",
+    "ResourceLocation.ctor",
+    "ResourceLocation.size",
+    "ImageBuffer.ctorFromDescription",
+    "ImageBuffer.size",
+    "ImageBuffer.mData",
+    "ImageBuffer.mSize",
+    "ImageBuffer.mDeleter",
+    "MinecraftUIRenderContext.getTexture",
+    "core.operator_new",
+    "core.operator_delete",
+];
 
 // The text calls: the draw and flush of the render context, the client's font handle and its destructor, the font
 // vector of the repository that the handle's font id indexes, and the font's line length.
@@ -607,7 +935,7 @@ static NETWORK_SKIN_DETAILS: [AdapterShape; 1] = AdapterShape::single(
     &["SerializedSkinImpl.mIsPersona", "SerializedSkinImpl.mIsPremium", "SerializedSkinImpl.mResourcePatch"],
 );
 
-static NEEDS: [AdapterNeed; 95] = [
+static NEEDS: [AdapterNeed; 115] = [
     AdapterNeed::event("frame.update", &FRAME_UPDATE),
     AdapterNeed::event("client.tick", &CLIENT_TICK),
     AdapterNeed::event_at("client.game_tick", 2, &CLIENT_GAME_TICK),
@@ -648,6 +976,7 @@ static NEEDS: [AdapterNeed; 95] = [
     AdapterNeed::event_at("input.injected_released", 2, &LOADER_ONLY),
     AdapterNeed::area("window.read", &WINDOW_ONLY),
     AdapterNeed::area("window.request_size", &WINDOW_ONLY),
+    AdapterNeed::area("window.cursor_clip", &WINDOW_ONLY),
     AdapterNeed::event("window.pointer", &WINDOW_ONLY),
     AdapterNeed::event("window.char", &WINDOW_ONLY),
     AdapterNeed::event("window.focus", &WINDOW_ONLY),
@@ -667,7 +996,26 @@ static NEEDS: [AdapterNeed; 95] = [
     AdapterNeed::event("overlay.screenshot_written", &OVERLAY_ONLY),
     AdapterNeed::event("camera.fov", &CAMERA_FOV),
     AdapterNeed::event("world.dimension_changing", &DIMENSION_CHANGING),
-    AdapterNeed::area_at("actor.read", 2, &ACTOR_READ),
+    AdapterNeed::event("render.world_rendered", &RENDER_WORLD_RENDERED),
+    AdapterNeed::area_at("render.world_canvas", 2, &RENDER_WORLD_CANVAS),
+    AdapterNeed::event("camera.setup", &CAMERA_SETUP),
+    AdapterNeed::area("camera.pose", &CAMERA_POSE),
+    AdapterNeed::area("camera.projection", &CAMERA_PROJECTION),
+    AdapterNeed::area("camera.free", &CAMERA_FREE),
+    AdapterNeed::area("camera.active", &CAMERA_ACTIVE),
+    AdapterNeed::event("camera.instruction_received", &CAMERA_INSTRUCTION_RECEIVED),
+    AdapterNeed::area_at("actor.read", 3, &ACTOR_READ),
+    AdapterNeed::area("actor.health", &ACTOR_HEALTH),
+    AdapterNeed::area("world.sky_darken", &WORLD_SKY_DARKEN),
+    AdapterNeed::area("world.chunk_read", &WORLD_CHUNK_READ),
+    AdapterNeed::area("world.map_color", &WORLD_MAP_COLOR),
+    AdapterNeed::area("world.biomes", &WORLD_BIOMES),
+    AdapterNeed::area("world.scan_surfaces", &WORLD_SCAN_SURFACES),
+    AdapterNeed::area("world.shapes", &WORLD_SHAPES),
+    AdapterNeed::area("world.raycast", &WORLD_RAYCAST),
+    AdapterNeed::area("world.actors_in", &WORLD_ACTORS_IN),
+    AdapterNeed::event("world.block_changed", &BLOCK_CHANGED),
+    AdapterNeed::area("client.world_info", &CLIENT_WORLD_INFO),
     AdapterNeed::area_at("inventory.read", 4, &INVENTORY_READ),
     AdapterNeed::area("inventory.request", &INVENTORY_REQUEST),
     AdapterNeed::event("inventory.request_done", &INVENTORY_REQUEST),
@@ -725,6 +1073,18 @@ impl AdapterCatalog {
     pub const LIGHT_GRID_SHAPE: &'static str = "fillSubChunkGrid";
     /// The `lighting.vibrant` shape of 70.x: the grid fill without a mode argument.
     pub const LIGHT_GRID_NO_MODE_SHAPE: &'static str = "fillSubChunkGridNoMode";
+    /// The `world.map_color` shape of 26.63: the map colour component of the block, tinted by its biome policy.
+    pub const MAP_COLOR_COMPONENT_SHAPE: &'static str = "component";
+    /// The `world.map_color` shape of 70.x: `Block::getMapColor`.
+    pub const MAP_COLOR_BLOCK_SHAPE: &'static str = "block";
+    /// The `camera.active` shape of 26.63: the `CameraComponent` size built from a factor and a shift.
+    pub const ACTIVE_CAMERA_FACTOR_SHAPE: &'static str = "factor_shift";
+    /// The `camera.active` shape of 70.x: the `CameraComponent` size as one value.
+    pub const ACTIVE_CAMERA_SIZE_SHAPE: &'static str = "size";
+    /// The `world.scan_surfaces` shape of 26.63: `Block::canProvideFullSupport(face)`.
+    pub const SURFACE_SUPPORT_SHAPE: &'static str = "support";
+    /// The `world.scan_surfaces` shape of 70.x: `Block::canProvideFullSupport(face, flag)`.
+    pub const SURFACE_SUPPORT_FLAG_SHAPE: &'static str = "support_flag";
 
     pub fn needs() -> &'static [AdapterNeed] {
         &NEEDS

@@ -5,8 +5,8 @@ use amml_abi::{
 };
 use amml_api::testing::{FakeGame, FakeWindow};
 use amml_api::{
-    ApiError, Area, Cancel, HookOrder, MouseButton, Point, PointerKind, Size, WindowCharExt, WindowPointerExt,
-    WindowSizeExt,
+    ApiError, Area, Cancel, CursorClip, HookOrder, MouseButton, Point, PointerKind, Size, WindowCharExt,
+    WindowPointerExt, WindowSizeExt,
 };
 
 fn pointer(kind: AmmlPointerKind, button: AmmlMouseButton, down: bool) -> WindowPointer {
@@ -176,4 +176,29 @@ fn a_written_window_size_reaches_later_listeners() {
 
     assert_eq!(*seen.lock().unwrap(), [Size { width: 800, height: 600 }]);
     assert_eq!(event.size(), Size { width: 800, height: 600 });
+}
+
+#[test]
+fn clip_cursor_is_recorded() {
+    let fake = FakeGame::new();
+    let window = fake.ctx().window();
+    assert_eq!(window.clip_cursor(Some(CursorClip::Centre)), Err(ApiError::NotAvailable), "the area is not offered");
+
+    fake.offer_area(Area::WINDOW_CURSOR_CLIP);
+    assert_eq!(window.clip_cursor(Some(CursorClip::Centre)), Err(ApiError::NotReady), "no window is attached");
+
+    fake.set_window(FakeWindow::default());
+    assert_eq!(window.clip_cursor(Some(CursorClip::Centre)), Ok(()));
+    assert_eq!(window.clip_cursor(None), Ok(()));
+    assert_eq!(fake.window_requests(), ["clip_cursor centre", "clip_cursor none"]);
+}
+
+#[test]
+fn a_loader_without_a_window_table_cannot_clip() {
+    let fake = FakeGame::with_v2_services();
+    fake.offer_area(Area::WINDOW_CURSOR_CLIP);
+    fake.set_window(FakeWindow::default());
+
+    assert_eq!(fake.ctx().window().clip_cursor(Some(CursorClip::Centre)), Err(ApiError::NotAvailable));
+    assert!(fake.window_requests().is_empty());
 }

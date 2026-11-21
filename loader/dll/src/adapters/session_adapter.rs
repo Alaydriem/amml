@@ -11,9 +11,10 @@ use amml_abi::{
 use amml_data::{AdapterCatalog, Availability, EntryId, NeedKind};
 
 use crate::{
-    ClientAdapter, EventHub, InlineIconAdapter, InventoryAdapter, ItemDrawAdapter, LevelRendererAdapter,
-    LightingAdapter, LoaderState, ModLoader, RequestAdapter, ScreenAdapter, SessionActions, SessionDetours,
-    SessionHook, TestWorld, TextureAdapter, TextureReloadAdapter,
+    BlockListener, CameraAdapter, ClientAdapter, EventHub, FreeCameraAdapter, InlineIconAdapter, InventoryAdapter,
+    ItemDrawAdapter, LevelRendererAdapter, LightingAdapter, LoaderState, ModLoader, RequestAdapter, ScreenAdapter,
+    SessionActions, SessionDetours, SessionHook, ShapesAdapter, TestWorld, TextureAdapter, TextureReloadAdapter,
+    WorldRenderAdapter,
 };
 
 static ADAPTER: OnceLock<SessionAdapter> = OnceLock::new();
@@ -185,6 +186,7 @@ impl SessionAdapter {
             self.hub().gate().open();
             self.hub().gate().note_game_thread();
             InventoryAdapter::frame_began();
+            CameraAdapter::frame_began();
             self.game.store(game.expose_provenance(), Ordering::Release);
             self.hub().deferred().drain(&ModLoader::new(self.state));
             self.state.capture().expire_shots(Instant::now());
@@ -200,6 +202,7 @@ impl SessionAdapter {
         self.hub().raise(&mut event, &self.hub().loader_context());
         if phase == AmmlPhase::AFTER {
             LevelRendererAdapter::with((), LevelRendererAdapter::flush_pending);
+            BlockListener::with((), BlockListener::flush);
             TextureReloadAdapter::with((), TextureReloadAdapter::flush_pending);
             TestWorld::with(TestWorld::frame);
         }
@@ -228,7 +231,9 @@ impl SessionAdapter {
             SessionActions::with(SessionActions::world_joined);
             TextureAdapter::with((), |adapter| adapter.rebind("world_joined"));
         }
+        BlockListener::with((), BlockListener::reconcile);
         ClientAdapter::with((), |adapter| adapter.apply_restores(client));
+        ClientAdapter::with((), |adapter| adapter.note_graphics_mode(client));
         ScreenAdapter::with((), |adapter| adapter.client_tick(client));
         RequestAdapter::with((), |adapter| adapter.client_tick(client));
         let mut tick = ClientTick { header: EventHub::header::<ClientTick>(AmmlPhase::AFTER) };
@@ -286,6 +291,7 @@ impl SessionAdapter {
     /// player joins the world.
     pub(crate) fn join_started(&self) {
         self.awaiting.store(true, Ordering::Release);
+        FreeCameraAdapter::with((), FreeCameraAdapter::join_started);
         let mut event = JoinStarted { header: EventHub::header::<JoinStarted>(AmmlPhase::AFTER) };
         self.hub().raise(&mut event, &self.hub().loader_context());
     }
@@ -307,7 +313,12 @@ impl SessionAdapter {
         let epoch = self.hub().gate().epoch();
         let mut event = WorldLeft { header: EventHub::header::<WorldLeft>(AmmlPhase::BEFORE), epoch: epoch.0 };
         self.hub().raise(&mut event, &self.context(client));
+        BlockListener::with((), BlockListener::world_left);
         LightingAdapter::with((), LightingAdapter::world_left);
+        WorldRenderAdapter::with((), WorldRenderAdapter::world_left);
+        CameraAdapter::with((), CameraAdapter::world_left);
+        ShapesAdapter::with((), ShapesAdapter::world_left);
+        FreeCameraAdapter::with((), FreeCameraAdapter::world_left);
         TextureAdapter::with((), TextureAdapter::world_left);
         InlineIconAdapter::with((), InlineIconAdapter::world_left);
         ItemDrawAdapter::with((), ItemDrawAdapter::world_left);

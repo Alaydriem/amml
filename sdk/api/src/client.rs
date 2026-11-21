@@ -1,10 +1,15 @@
 use std::ffi::c_void;
 use std::marker::PhantomData;
 
-use amml_abi::{AmmlClientFlag, AmmlScreen, AmmlStartWorldOutcome, AmmlStr};
+use amml_abi::{AmmlClientFlag, AmmlScreen, AmmlStartWorldOutcome, AmmlStr, AmmlWorldInfo, AmmlWorldText};
 
 use crate::client_tables::ClientTables;
-use crate::{ApiError, Hud, JoinId, JoinTarget, LocalPlayer, Menu, Screen, StartWorldOutcome};
+use std::path::PathBuf;
+
+use crate::{
+    ApiError, Connection, ConnectionKind, Hud, JoinId, JoinTarget, LocalPlayer, Menu, Screen, StartWorldOutcome,
+    WorldInfo,
+};
 
 /// The game client of an event (`EventCtx::client`) or of a disable (`DisableCtx::client`). It lives no
 /// longer than that call and is used on the game thread only.
@@ -23,9 +28,17 @@ pub struct Client<'f> {
 impl<'f> Client<'f> {
     /// The longest command text `send_command` takes, in bytes.
     pub const MAX_COMMAND: usize = 4096;
+    // The first buffer of a world text read, and the reads before a text that keeps changing is given up.
+    const TEXT_START: usize = 256;
+    const TEXT_TRIES: usize = 3;
 
     pub(crate) fn new(tables: ClientTables, handle: *const c_void, module: &'static str) -> Self {
         Self { tables, handle, module, _event: PhantomData }
+    }
+
+    // The handle the loader checks on every call of the client's areas.
+    pub(crate) fn handle(&self) -> *const c_void {
+        self.handle
     }
 
     /// The local player; `None` while no world is joined or when the loader refuses the read.
@@ -35,7 +48,7 @@ impl<'f> Client<'f> {
         #[allow(unsafe_code)]
         let status = unsafe { (self.tables.client.local_player)(self.handle, &mut out) };
         (status.is_ok() && !out.is_null())
-            .then(|| LocalPlayer::new(out, self.tables.actor, self.tables.inventory, self.module))
+            .then(|| LocalPlayer::new(out, self.tables.actor, self.tables.inventory, self.tables.world, self.module))
     }
 
     pub fn world_active(&self) -> Option<bool> {
@@ -176,6 +189,61 @@ impl<'f> Client<'f> {
         #[allow(unsafe_code)]
         let status = unsafe { note(self.handle) };
         ApiError::check(status)
+    }
+
+    /// The facts of the joined world: folder, level name, seed, realm, commands and connection. Valid from
+    /// `WorldJoined` to `WorldLeft`: `None` outside a world, without area `Area::CLIENT_WORLD_INFO`, on a loader before
+    /// client table v4 and when the loader refuses the read. A fact the game does not give, or gives as text that is not
+    /// UTF-8, is `None` in the value.
+    pub fn world_info(&self) -> Option<WorldInfo> {
+        let read = self.tables.client.world_info?;
+        let mut out = AmmlWorldInfo::default();
+        // SAFETY: the loader checks the handle before it reads game memory, and `out` is a live local.
+        #[allow(unsafe_code)]
+        let status = unsafe { read(self.handle, &mut out) };
+        if !status.is_ok() {
+            return None;
+        }
+        let has = |flag: u32| out.flags & flag != 0;
+        let connection = has(AmmlWorldInfo::HAS_CONNECTION)
+            .then(|| self.world_text(AmmlWorldText::HOST))
+            .flatten()
+            .map(|host| Connection { kind: ConnectionKind::from_abi(out.connection_kind), host, port: out.port });
+        Some(WorldInfo {
+            storage_folder: has(AmmlWorldInfo::HAS_STORAGE)
+                .then(|| self.world_text(AmmlWorldText::STORAGE_FOLDER))
+                .flatten()
+                .map(PathBuf::from),
+            level_name: has(AmmlWorldInfo::HAS_LEVEL_NAME)
+                .then(|| self.world_text(AmmlWorldText::LEVEL_NAME))
+                .flatten(),
+            seed: has(AmmlWorldInfo::HAS_SEED).then_some(out.seed),
+            realm: has(AmmlWorldInfo::HAS_REALM).then(|| has(AmmlWorldInfo::REALM)),
+            commands_enabled: has(AmmlWorldInfo::HAS_COMMANDS).then(|| has(AmmlWorldInfo::COMMANDS)),
+            connection,
+        })
+    }
+
+    // The text `field` of the world; read again with a larger buffer when the first one was too small, so a long text is
+    // whole. `None` when the loader gives no text or it is not UTF-8.
+    fn world_text(&self, field: AmmlWorldText) -> Option<String> {
+        let read = self.tables.client.world_text?;
+        let mut buffer = vec![0u8; Self::TEXT_START];
+        for _ in 0..Self::TEXT_TRIES {
+            let mut len = 0usize;
+            // SAFETY: `buffer` is writable for its length, `len` is a live local and the loader checks the handle.
+            #[allow(unsafe_code)]
+            let status = unsafe { read(self.handle, field, buffer.as_mut_ptr(), buffer.len(), &mut len) };
+            if !status.is_ok() {
+                return None;
+            }
+            if len <= buffer.len() {
+                buffer.truncate(len);
+                return String::from_utf8(buffer).ok();
+            }
+            buffer = vec![0u8; len];
+        }
+        None
     }
 
     /// The game HUD of this client (`Hud::select_hotbar_slot`).

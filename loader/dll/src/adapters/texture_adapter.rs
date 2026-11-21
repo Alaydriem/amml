@@ -50,6 +50,8 @@ pub struct TextureAdapter {
     pump_thread: ThreadNote,
     upload_logged: AtomicBool,
     ready_word_logged: AtomicBool,
+    // The loader's own 1x1 white texture for world meshes; `None` before the first ask.
+    white: Mutex<Option<TextureKey>>,
 }
 
 impl TextureAdapter {
@@ -64,6 +66,9 @@ impl TextureAdapter {
     const LOCATION_FILE_SYSTEM: usize = 0;
     const LOCATION_PATH_HASH: usize = 0x28;
     const LOCATION_FULL_HASH: usize = 0x30;
+    /// The owner of the loader's own textures in the book: no mod has this index.
+    pub const LOADER_OWNER: usize = usize::MAX;
+    const WHITE_PIXEL: [u8; 4] = [0xFF; 4];
 
     /// Offers `ui.textures` when its catalog shape resolved and the layouts fit. Logs one line. Works once per
     /// process.
@@ -102,6 +107,7 @@ impl TextureAdapter {
             pump_thread: ThreadNote::new(),
             upload_logged: AtomicBool::new(false),
             ready_word_logged: AtomicBool::new(false),
+            white: Mutex::new(None),
         };
         if ADAPTER.set(adapter).is_err() {
             return false;
@@ -203,6 +209,33 @@ impl TextureAdapter {
     /// texture of an older generation or one freed.
     pub(crate) fn drawable(&self, key: TextureKey) -> Result<Option<usize>, AmmlStatus> {
         self.book.drawable(key).map_err(Self::status)
+    }
+
+    /// A copy of the loader's 1x1 opaque white texture, which world meshes are drawn with: a `TexturePtr` that holds
+    /// one use of each of its two control blocks, taken while the book holds its own copy (under the book's lock), so a
+    /// release at the UI pump cannot free it in between. The caller gives the copy to the game, which destroys it, or
+    /// releases it. `None` while it is not ready: the first ask, and the first ask after the book freed it (a world
+    /// leave, a device reset), queue its upload into the client texture group at the next UI draw point. The texture
+    /// belongs to the loader (`LOADER_OWNER`): no mod disable frees it.
+    pub fn white_texture(&self) -> Option<TexturePtrLayout> {
+        let mut white = self.white.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let key = match *white {
+            Some(key) if self.book.is_current(key) => key,
+            _ => {
+                let key = self.book.upload(Self::LOADER_OWNER, 1, 1, &Self::WHITE_PIXEL).ok()?;
+                *white = Some(key);
+                TexturePump::request();
+                return None;
+            }
+        };
+        let copy = |held: usize| {
+            // SAFETY: `held` is the address of a `TexturePtr` box the book holds for a ready texture; the book's lock
+            // keeps it alive for this call.
+            let texture = unsafe { &*std::ptr::with_exposed_provenance::<TexturePtrLayout>(held) };
+            // SAFETY: each pointer of the held value is empty or holds the use the game gave the book.
+            unsafe { TexturePtrLayout { texture: texture.texture.clone_ref(), location: texture.location.clone_ref() } }
+        };
+        self.book.with_drawable(key, copy).ok().flatten()
     }
 
     /// A world was left: every texture is freed and the old ids are stale.

@@ -2,7 +2,10 @@
 
 pub mod block_break_continue;
 pub mod block_break_start;
+pub mod block_changed;
 pub mod camera_fov;
+pub mod camera_instruction_received;
+pub mod camera_setup;
 pub mod chat_message_added;
 pub mod client_tick;
 pub mod container_slot_hover;
@@ -57,10 +60,14 @@ pub mod window_pointer;
 pub mod window_size;
 pub mod world_joined;
 pub mod world_left;
+pub mod world_rendered;
 
 pub use block_break_continue::BlockBreakContinue;
 pub use block_break_start::BlockBreakStart;
+pub use block_changed::BlockChanged;
 pub use camera_fov::CameraFov;
+pub use camera_instruction_received::CameraInstructionReceived;
+pub use camera_setup::CameraSetup;
 pub use chat_message_added::ChatMessageAdded;
 pub use client_tick::ClientTick;
 pub use container_slot_hover::ContainerSlotHover;
@@ -115,6 +122,7 @@ pub use window_pointer::WindowPointer;
 pub use window_size::WindowSize;
 pub use world_joined::WorldJoined;
 pub use world_left::WorldLeft;
+pub use world_rendered::WorldRendered;
 
 /// An event struct: its id, layout version and whether a listener may cancel it.
 pub trait AmmlEvent {

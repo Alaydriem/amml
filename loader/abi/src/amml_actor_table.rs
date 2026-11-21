@@ -6,8 +6,8 @@ use crate::{AmmlRotation, AmmlStatus, AmmlVec3};
 /// a client call gave in the same game frame.
 pub type ActorIsAliveFn = unsafe extern "C" fn(player: *const c_void, out: *mut u8) -> AmmlStatus;
 
-/// Gives a point of the actor `player` in `out` (the feet for `position`, the eyes for `eye_position`). Area
-/// `actor.read` version 2.
+/// Gives a point of the actor `player` in `out` (the feet for `position`, the eyes for `eye_position`, the head for
+/// `head_position`). Area `actor.read` version 2; `head_position` is version 3.
 pub type ActorPointFn = unsafe extern "C" fn(player: *const c_void, out: *mut AmmlVec3) -> AmmlStatus;
 /// Gives the view direction of the actor `player` in `out`. Area `actor.read` version 2.
 pub type ActorRotationFn = unsafe extern "C" fn(player: *const c_void, out: *mut AmmlRotation) -> AmmlStatus;
@@ -15,6 +15,12 @@ pub type ActorRotationFn = unsafe extern "C" fn(player: *const c_void, out: *mut
 pub type ActorDimensionFn = unsafe extern "C" fn(player: *const c_void, out: *mut *const c_void) -> AmmlStatus;
 /// Gives the id of `dimension`, a handle `dimension` gave in the same frame. Area `actor.read` version 2.
 pub type DimensionIdFn = unsafe extern "C" fn(dimension: *const c_void, out: *mut i32) -> AmmlStatus;
+
+/// Gives the block source of the dimension of the actor `player` in `out`, as a handle for the world calls. Area
+/// `actor.read` version 3.
+pub type ActorBlockSourceFn = unsafe extern "C" fn(player: *const c_void, out: *mut *const c_void) -> AmmlStatus;
+/// Gives the health of the actor `player` in `out`. Area `actor.health`.
+pub type ActorHealthFn = unsafe extern "C" fn(player: *const c_void, out: *mut i32) -> AmmlStatus;
 
 /// The actor functions of `AmmlServices` (area `actor.read`). The table only grows: a function added later is
 /// appended, `size` and `version` grow, and a reader calls a function only when `size` covers it.
@@ -29,6 +35,9 @@ pub struct AmmlActorTable {
     pub rotation: Option<ActorRotationFn>,
     pub dimension: Option<ActorDimensionFn>,
     pub dimension_id: Option<DimensionIdFn>,
+    pub head_position: Option<ActorPointFn>,
+    pub block_source: Option<ActorBlockSourceFn>,
+    pub health: Option<ActorHealthFn>,
 }
 
 impl AmmlActorTable {
@@ -36,6 +45,8 @@ impl AmmlActorTable {
     pub const SIZE_V1: u32 = 16;
     /// `size` of a v2 actor table: v1 plus `position`, `eye_position`, `rotation`, `dimension` and `dimension_id`.
     pub const SIZE_V2: u32 = 56;
+    /// `size` of a v3 actor table: v2 plus `head_position`, `block_source` and `health`.
+    pub const SIZE_V3: u32 = 80;
 
     /// A copy of the table at `table`, read as far as its own `size` covers; a later field is `None`. A null
     /// table, or one shorter than v1, gives `None`.
@@ -63,4 +74,4 @@ impl AmmlActorTable {
     }
 }
 
-const _: () = assert!(core::mem::size_of::<AmmlActorTable>() == AmmlActorTable::SIZE_V2 as usize);
+const _: () = assert!(core::mem::size_of::<AmmlActorTable>() == AmmlActorTable::SIZE_V3 as usize);

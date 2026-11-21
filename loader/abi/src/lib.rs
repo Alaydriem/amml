@@ -1,21 +1,34 @@
 //! The versioned `#[repr(C)]` contract between the AMML loader and AMML mods.
 #![deny(unsafe_code)]
 
+pub mod amml_aabb;
+pub mod amml_actor_box;
 pub mod amml_actor_table;
 pub mod amml_amount;
 pub mod amml_api;
+pub mod amml_apply_stats;
 pub mod amml_band;
 pub mod amml_block_handle;
+pub mod amml_block_hit;
 pub mod amml_block_pos;
+pub mod amml_camera_kind;
+pub mod amml_camera_table;
 pub mod amml_capture_frame;
 pub mod amml_capture_request;
 pub mod amml_chat_field;
+pub mod amml_chunk_load;
 pub mod amml_client_flag;
 pub mod amml_client_table;
 pub mod amml_color;
+pub mod amml_color_quad;
+pub mod amml_column_read_stats;
+pub mod amml_column_request;
+pub mod amml_column_sample;
+pub mod amml_connection_kind;
 pub mod amml_container_action;
 pub mod amml_container_entry;
 pub mod amml_core_table;
+pub mod amml_cursor_clip;
 pub mod amml_cursor_shape;
 pub mod amml_dir_kind;
 pub mod amml_draw_surface;
@@ -30,6 +43,7 @@ pub mod amml_inline_icon;
 pub mod amml_input_blocks;
 pub mod amml_input_mode;
 pub mod amml_input_table;
+pub mod amml_instruction_kind;
 pub mod amml_inventory_move;
 pub mod amml_inventory_table;
 pub mod amml_item_draw;
@@ -45,6 +59,8 @@ pub mod amml_lighting_table;
 pub mod amml_log_level;
 pub mod amml_lost_reason;
 pub mod amml_menu;
+pub mod amml_mesh_id;
+pub mod amml_mesh_style;
 pub mod amml_mod_info;
 pub mod amml_modifiers;
 pub mod amml_mouse_action;
@@ -57,9 +73,13 @@ pub mod amml_phase;
 pub mod amml_player_list_entry;
 pub mod amml_point;
 pub mod amml_pointer_kind;
+pub mod amml_pose;
+pub mod amml_projection;
+pub mod amml_ray_options;
 pub mod amml_rect;
 pub mod amml_registry_table;
 pub mod amml_release_reason;
+pub mod amml_render_table;
 pub mod amml_request_options;
 pub mod amml_request_outcome;
 pub mod amml_rgba;
@@ -68,6 +88,7 @@ pub mod amml_route_via;
 pub mod amml_screen;
 pub mod amml_screen_kind;
 pub mod amml_services;
+pub mod amml_shape_op;
 pub mod amml_shot_layers;
 pub mod amml_size;
 pub mod amml_slot_at;
@@ -75,11 +96,13 @@ pub mod amml_start_world_outcome;
 pub mod amml_status;
 pub mod amml_str;
 pub mod amml_surface_loss;
+pub mod amml_surface_sample;
 pub mod amml_text_align;
 pub mod amml_texture_id;
 pub mod amml_texture_reload;
 pub mod amml_texture_source;
 pub mod amml_thread;
+pub mod amml_transform;
 pub mod amml_ui_profile;
 pub mod amml_ui_table;
 pub mod amml_use_row;
@@ -88,32 +111,53 @@ pub mod amml_uv;
 pub mod amml_vec3;
 pub mod amml_window_change;
 pub mod amml_window_table;
+pub mod amml_world_info;
+pub mod amml_world_table;
+pub mod amml_world_text;
 pub mod events;
 pub mod known_log_level;
 pub mod mod_id;
 pub mod world_epoch;
 
+pub use amml_aabb::AmmlAabb;
+pub use amml_actor_box::AmmlActorBox;
 pub use amml_actor_table::{
-    ActorDimensionFn, ActorIsAliveFn, ActorPointFn, ActorRotationFn, AmmlActorTable, DimensionIdFn,
+    ActorBlockSourceFn, ActorDimensionFn, ActorHealthFn, ActorIsAliveFn, ActorPointFn, ActorRotationFn, AmmlActorTable,
+    DimensionIdFn,
 };
 pub use amml_amount::AmmlAmount;
 pub use amml_api::{AMML_API_VERSION, AmmlApi, HeapDeleteFn, HeapNewFn, HookFn, LogFn, ModDirFn, ResolveFn, UnhookFn};
+pub use amml_apply_stats::AmmlApplyStats;
 pub use amml_band::AmmlBand;
 pub use amml_block_handle::AmmlBlockHandle;
+pub use amml_block_hit::AmmlBlockHit;
 pub use amml_block_pos::AmmlBlockPos;
+pub use amml_camera_kind::AmmlCameraKind;
+pub use amml_camera_table::{
+    AmmlCameraTable, CameraActiveFn, CameraFreeAvailableFn, CameraProjectionFn, CameraReleaseFreeFn,
+    CameraRenderedPositionFn, CameraSetFreeFn, CameraSetPoseFn,
+};
 pub use amml_capture_frame::AmmlCaptureFrame;
 pub use amml_capture_request::AmmlCaptureRequest;
 pub use amml_chat_field::AmmlChatField;
+pub use amml_chunk_load::AmmlChunkLoad;
 pub use amml_client_flag::AmmlClientFlag;
 pub use amml_client_table::{
     AmmlClientTable, ClientCanJoinFn, ClientCurrentFn, ClientFlagFn, ClientJoinServerFn, ClientLeaveWorldFn,
     ClientLocalPlayerFn, ClientNoteActivityFn, ClientOpenMenuFn, ClientOpenPauseFn, ClientSelectHotbarSlotFn,
-    ClientSendCommandFn, ClientSetFlagFn, ClientStartLocalWorldFn, ClientTopScreenFn,
+    ClientSendCommandFn, ClientSetFlagFn, ClientStartLocalWorldFn, ClientTopScreenFn, ClientWorldInfoFn,
+    ClientWorldTextFn,
 };
 pub use amml_color::AmmlColor;
+pub use amml_color_quad::AmmlColorQuad;
+pub use amml_column_read_stats::AmmlColumnReadStats;
+pub use amml_column_request::AmmlColumnRequest;
+pub use amml_column_sample::AmmlColumnSample;
+pub use amml_connection_kind::AmmlConnectionKind;
 pub use amml_container_action::AmmlContainerAction;
 pub use amml_container_entry::AmmlContainerEntry;
 pub use amml_core_table::{AmmlCoreTable, AvailableFn, DirFn, GameAliveFn, LogFieldsFn};
+pub use amml_cursor_clip::AmmlCursorClip;
 pub use amml_cursor_shape::AmmlCursorShape;
 pub use amml_dir_kind::AmmlDirKind;
 pub use amml_draw_surface::AmmlDrawSurface;
@@ -132,6 +176,7 @@ pub use amml_input_table::{
     InputLeaseStateFn, InputModifiersFn, InputReleaseAllFn, InputReleaseHoldFn, InputSetCoexistFn, InputSetMoveFn,
     InputSetRankingFn, InputTurnFn, InputWheelFn,
 };
+pub use amml_instruction_kind::AmmlInstructionKind;
 pub use amml_inventory_move::AmmlInventoryMove;
 pub use amml_inventory_table::{
     AmmlInventoryTable, InventoryContentsCloseFn, InventoryContentsEntryFn, InventoryContentsNameFn,
@@ -152,6 +197,8 @@ pub use amml_lighting_table::{AmmlLightingTable, LightingSetSourceFn};
 pub use amml_log_level::AmmlLogLevel;
 pub use amml_lost_reason::AmmlLostReason;
 pub use amml_menu::AmmlMenu;
+pub use amml_mesh_id::AmmlMeshId;
+pub use amml_mesh_style::AmmlMeshStyle;
 pub use amml_mod_info::AmmlModInfo;
 pub use amml_modifiers::AmmlModifiers;
 pub use amml_mouse_action::AmmlMouseAction;
@@ -171,9 +218,15 @@ pub use amml_phase::AmmlPhase;
 pub use amml_player_list_entry::AmmlPlayerListEntry;
 pub use amml_point::AmmlPoint;
 pub use amml_pointer_kind::AmmlPointerKind;
+pub use amml_pose::AmmlPose;
+pub use amml_projection::AmmlProjection;
+pub use amml_ray_options::AmmlRayOptions;
 pub use amml_rect::AmmlRect;
 pub use amml_registry_table::{AmmlRegistryTable, ProvideFn, RequireFn};
 pub use amml_release_reason::AmmlReleaseReason;
+pub use amml_render_table::{
+    AmmlRenderTable, RenderCanvasCameraPositionFn, RenderMeshBuildFn, RenderMeshDrawFn, RenderMeshFreeFn,
+};
 pub use amml_request_options::AmmlRequestOptions;
 pub use amml_request_outcome::AmmlRequestOutcome;
 pub use amml_rgba::AmmlRgba;
@@ -182,6 +235,7 @@ pub use amml_route_via::AmmlRouteVia;
 pub use amml_screen::AmmlScreen;
 pub use amml_screen_kind::AmmlScreenKind;
 pub use amml_services::AmmlServices;
+pub use amml_shape_op::AmmlShapeOp;
 pub use amml_shot_layers::AmmlShotLayers;
 pub use amml_size::AmmlSize;
 pub use amml_slot_at::AmmlSlotAt;
@@ -189,11 +243,13 @@ pub use amml_start_world_outcome::AmmlStartWorldOutcome;
 pub use amml_status::AmmlStatus;
 pub use amml_str::AmmlStr;
 pub use amml_surface_loss::AmmlSurfaceLoss;
+pub use amml_surface_sample::AmmlSurfaceSample;
 pub use amml_text_align::AmmlTextAlign;
 pub use amml_texture_id::AmmlTextureId;
 pub use amml_texture_reload::AmmlTextureReload;
 pub use amml_texture_source::AmmlTextureSource;
 pub use amml_thread::AmmlThread;
+pub use amml_transform::AmmlTransform;
 pub use amml_ui_profile::AmmlUiProfile;
 pub use amml_ui_table::{
     AmmlUiTable, UiCanDrawFn, UiChatIconsActiveFn, UiChatSetTextFn, UiChatTextFn, UiContainerActionFn,
@@ -208,19 +264,26 @@ pub use amml_uv::AmmlUv;
 pub use amml_vec3::AmmlVec3;
 pub use amml_window_change::AmmlWindowChange;
 pub use amml_window_table::{
-    AmmlWindowTable, WindowBufferSizeFn, WindowClientSizeFn, WindowCursorPosFn, WindowDpiFn, WindowHasFocusFn,
-    WindowIsForegroundFn, WindowReplayFocusLossFn, WindowRequestSizeFn, WindowToBufferFn,
+    AmmlWindowTable, WindowBufferSizeFn, WindowClientSizeFn, WindowClipCursorFn, WindowCursorPosFn, WindowDpiFn,
+    WindowHasFocusFn, WindowIsForegroundFn, WindowReplayFocusLossFn, WindowRequestSizeFn, WindowToBufferFn,
 };
+pub use amml_world_info::AmmlWorldInfo;
+pub use amml_world_table::{
+    AmmlWorldTable, WorldActorsInFn, WorldBiomeNameFn, WorldBlockTypeNameFn, WorldChunkFn, WorldChunkLoadStateFn,
+    WorldRaycastFn, WorldReadColumnsFn, WorldScanSurfacesFn, WorldShapesApplyFn, WorldShapesMaxBatchFn,
+    WorldShapesTargetEpochFn, WorldSkyDarkenFn,
+};
+pub use amml_world_text::AmmlWorldText;
 pub use events::{
-    AmmlEvent, BlockBreakContinue, BlockBreakStart, CameraFov, ChatMessageAdded, ClientTick, ContainerSlotHover,
-    ContainerSlotUnhover, DimensionChanging, FramePresent, FramePresented, FrameUpdate, GameTick, GamepadPoll,
-    IdleScreenOpen, InjectedInputReleased, InputLeaseLost, InputLeaseResumed, InputLeaseSuspended,
-    InventoryRequestDone, ItemHovertext, ItemUse, ItemUseOnBlock, JoinServerResult, JoinStarted, KeyInput,
-    LocatorBarIconDraw, LookDelta, ModsLoaded, MouseGrab, MouseInput, PlayerAttack, PlayerListUpdate, PlayerMoveInput,
-    PlayerSkinChanged, ProviderGone, ProviderReady, RenderDeviceReset, ScreenChanged, ScreenClosing, ScreenRender,
-    ScreenshotTaken, ScreenshotWritten, Shutdown, SurfaceLost, SwapChainResize, SwapChainResized, TexturesReloaded,
-    UiPointer, UiScroll, WindowChanged, WindowChar, WindowCursor, WindowFocus, WindowPointer, WindowSize, WorldJoined,
-    WorldLeft,
+    AmmlEvent, BlockBreakContinue, BlockBreakStart, BlockChanged, CameraFov, CameraInstructionReceived, CameraSetup,
+    ChatMessageAdded, ClientTick, ContainerSlotHover, ContainerSlotUnhover, DimensionChanging, FramePresent,
+    FramePresented, FrameUpdate, GameTick, GamepadPoll, IdleScreenOpen, InjectedInputReleased, InputLeaseLost,
+    InputLeaseResumed, InputLeaseSuspended, InventoryRequestDone, ItemHovertext, ItemUse, ItemUseOnBlock,
+    JoinServerResult, JoinStarted, KeyInput, LocatorBarIconDraw, LookDelta, ModsLoaded, MouseGrab, MouseInput,
+    PlayerAttack, PlayerListUpdate, PlayerMoveInput, PlayerSkinChanged, ProviderGone, ProviderReady, RenderDeviceReset,
+    ScreenChanged, ScreenClosing, ScreenRender, ScreenshotTaken, ScreenshotWritten, Shutdown, SurfaceLost,
+    SwapChainResize, SwapChainResized, TexturesReloaded, UiPointer, UiScroll, WindowChanged, WindowChar, WindowCursor,
+    WindowFocus, WindowPointer, WindowSize, WorldJoined, WorldLeft, WorldRendered,
 };
 pub use known_log_level::KnownLogLevel;
 pub use mod_id::ModId;

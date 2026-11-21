@@ -118,6 +118,9 @@ impl TestTables {
             lighting: core::ptr::null(),
             ui: core::ptr::null(),
             network: core::ptr::null(),
+            world: core::ptr::null(),
+            render: core::ptr::null(),
+            camera: core::ptr::null(),
         });
         let api = AmmlApi {
             size: AmmlApi::SIZE_V3,

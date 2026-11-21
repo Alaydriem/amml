@@ -79,6 +79,9 @@ fn services(size: u32, ui: *const AmmlUiTable) -> AmmlServices {
         lighting: core::ptr::null(),
         ui,
         network: core::ptr::null(),
+        world: core::ptr::null(),
+        render: core::ptr::null(),
+        camera: core::ptr::null(),
     }
 }
 

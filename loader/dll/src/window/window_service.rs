@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use amml_abi::{AmmlPoint, AmmlSize, AmmlStatus};
 use amml_data::{AdapterCatalog, NeedKind};
-use amml_runtime::{BufferMap, FocusHold, PointerPairs};
+use amml_runtime::{BufferMap, ClipKind, FocusHold, PointerPairs};
 use windows::Win32::Foundation::{HANDLE, HWND, LPARAM, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::ScreenToClient;
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
@@ -16,7 +16,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows::core::{PCWSTR, w};
 
 use super::{RouterState, SizeMessage, SizeRequests, WindowProc};
-use crate::{AreaBook, EventHub, ShutdownLatch};
+use crate::{AreaBook, CursorClipAdapter, EventHub, ShutdownLatch};
 
 /// The game window as the loader holds it: the one subclass, the reads and requests of the `window` table, and the
 /// state the window procedure keeps between messages (pointer pairs, held focus losses, size messages the loader
@@ -45,6 +45,7 @@ pub struct WindowService {
     pairs: PointerPairs,
     focus: FocusHold,
     sizes: SizeRequests,
+    clip: CursorClipAdapter,
 }
 
 impl WindowService {
@@ -52,6 +53,8 @@ impl WindowService {
     pub const READ_AREA: &'static str = "window.read";
     /// The area of `request_size`.
     pub const REQUEST_SIZE_AREA: &'static str = "window.request_size";
+    /// The area of `clip_cursor`.
+    pub const CURSOR_CLIP_AREA: &'static str = "window.cursor_clip";
     const AREA_VERSION: u32 = 1;
     // The largest side a `WM_SIZE` can carry.
     const MAX_SIDE: u32 = 0xFFFF;
@@ -72,6 +75,7 @@ impl WindowService {
             pairs: PointerPairs::new(),
             focus: FocusHold::new(),
             sizes: SizeRequests::new(),
+            clip: CursorClipAdapter::new(),
         }
     }
 
@@ -176,6 +180,7 @@ impl WindowService {
         *attached = 0;
         self.hwnd.store(0, Ordering::Release);
         self.marked.store(false, Ordering::Release);
+        self.clip.detach(hwnd);
         self.forget_window_state();
         curia::info!("game window destroyed, the loader forgets it", { hwnd: hwnd });
     }
@@ -206,6 +211,11 @@ impl WindowService {
     /// The size requests of mods and the size messages the loader posted.
     pub fn sizes(&self) -> &SizeRequests {
         &self.sizes
+    }
+
+    /// The cursor clip of the window: focus, size and move messages reach it from the window procedure.
+    pub fn clip(&self) -> &CursorClipAdapter {
+        &self.clip
     }
 
     /// The client to back buffer map.
@@ -308,9 +318,35 @@ impl WindowService {
         if self.post_size(owner, hwnd, width, height, holds, reason) { Ok(()) } else { Err(AmmlStatus::FAILED) }
     }
 
-    /// Ends what the mod at `owner` holds in the window: when it holds the render size, the client size is posted.
+    /// Clips the cursor for the mod at `owner`, or drops its request with `None`. The clip is set only while the
+    /// window is in front and not minimised; a loss of that keeps the request and gives the clip back. The last
+    /// request wins and the others come back when it drops. A request while the loader shuts down is `NOT_READY`.
+    ///
+    /// `live` tells whether the mod may still hold a clip; it runs under the clip lock for a `Some` request, so no
+    /// request lands after `end_owner` of that mod (`REFUSED`).
+    pub fn clip_cursor(
+        &self,
+        owner: usize,
+        clip: Option<ClipKind>,
+        live: impl FnOnce() -> bool,
+    ) -> Result<(), AmmlStatus> {
+        let hwnd = self.ready(Self::CURSOR_CLIP_AREA)?;
+        if clip.is_some() && self.shutdown.is_closing() {
+            return Err(AmmlStatus::NOT_READY);
+        }
+        let shutdown = &self.shutdown;
+        if self.clip.request(hwnd, owner, clip, || live() && !shutdown.is_closing()) {
+            Ok(())
+        } else {
+            Err(AmmlStatus::REFUSED)
+        }
+    }
+
+    /// Ends what the mod at `owner` holds in the window: its cursor clip request is dropped, and when it holds the
+    /// render size, the client size is posted.
     /// While the loader shuts down nothing is posted: the message would reach a game that tears its renderer down.
     pub fn end_owner(&self, owner: usize) {
+        self.clip.end_owner(self.hwnd(), owner);
         if !self.sizes.end_owner(owner) {
             return;
         }

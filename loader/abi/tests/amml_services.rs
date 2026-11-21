@@ -1,11 +1,12 @@
 use core::ffi::c_void;
 
 use amml_abi::{
-    AmmlActorTable, AmmlCaptureFrame, AmmlCaptureRequest, AmmlClientFlag, AmmlClientTable, AmmlHand, AmmlInputMode,
-    AmmlInputTable, AmmlInventoryTable, AmmlItemSnapshot, AmmlLeaseRequest, AmmlLeaseState, AmmlLightSource,
-    AmmlLightingTable, AmmlModifiers, AmmlMouseButton, AmmlMoveIntent, AmmlNetworkTable, AmmlOverlayTable, AmmlPoint,
-    AmmlRect, AmmlScreen, AmmlScreenKind, AmmlServices, AmmlShotLayers, AmmlSize, AmmlStatus, AmmlStr, AmmlUiProfile,
-    AmmlUiTable, AmmlWindowTable,
+    AmmlActorTable, AmmlCameraTable, AmmlCaptureFrame, AmmlCaptureRequest, AmmlClientFlag, AmmlClientTable,
+    AmmlColorQuad, AmmlHand, AmmlInputMode, AmmlInputTable, AmmlInventoryTable, AmmlItemSnapshot, AmmlLeaseRequest,
+    AmmlLeaseState, AmmlLightSource, AmmlLightingTable, AmmlMeshId, AmmlMeshStyle, AmmlModifiers, AmmlMouseButton,
+    AmmlMoveIntent, AmmlNetworkTable, AmmlOverlayTable, AmmlPoint, AmmlPose, AmmlProjection, AmmlRect, AmmlRenderTable,
+    AmmlScreen, AmmlScreenKind, AmmlServices, AmmlShotLayers, AmmlSize, AmmlStatus, AmmlStr, AmmlUiProfile,
+    AmmlUiTable, AmmlVec3, AmmlWindowTable, AmmlWorldInfo, AmmlWorldTable,
 };
 
 unsafe extern "C" fn current(_: *mut *const c_void) -> AmmlStatus {
@@ -124,6 +125,9 @@ fn actor_table() -> AmmlActorTable {
         rotation: None,
         dimension: None,
         dimension_id: None,
+        head_position: None,
+        block_source: None,
+        health: None,
     }
 }
 
@@ -240,6 +244,8 @@ fn client_table() -> AmmlClientTable {
         send_command: None,
         select_hotbar_slot: None,
         note_activity: None,
+        world_info: None,
+        world_text: None,
     }
 }
 
@@ -277,6 +283,7 @@ fn window_table() -> AmmlWindowTable {
         dpi,
         request_size,
         replay_focus_loss,
+        clip_cursor: None,
     }
 }
 
@@ -311,6 +318,9 @@ fn services(size: u32, client: *const AmmlClientTable, input: *const AmmlInputTa
         lighting: core::ptr::null(),
         ui: core::ptr::null(),
         network: core::ptr::null(),
+        world: core::ptr::null(),
+        render: core::ptr::null(),
+        camera: core::ptr::null(),
     }
 }
 
@@ -325,6 +335,9 @@ struct AreaTables {
     lighting: AmmlLightingTable,
     ui: AmmlUiTable,
     network: AmmlNetworkTable,
+    world: AmmlWorldTable,
+    render: AmmlRenderTable,
+    camera: AmmlCameraTable,
 }
 
 impl AreaTables {
@@ -339,6 +352,41 @@ impl AreaTables {
             lighting: AmmlLightingTable { size: AmmlLightingTable::SIZE_V1, version: 1, set_light_source },
             ui: ui_table(),
             network: network_table(),
+            world: AmmlWorldTable {
+                size: AmmlWorldTable::SIZE_V4,
+                version: 4,
+                sky_darken,
+                chunk: None,
+                chunk_load_state: None,
+                read_columns: None,
+                block_type_name: None,
+                biome_name: None,
+                scan_surfaces: None,
+                shapes_apply: None,
+                shapes_max_batch: None,
+                shapes_target_epoch: None,
+                raycast: None,
+                actors_in: None,
+            },
+            render: AmmlRenderTable {
+                size: AmmlRenderTable::SIZE_V1,
+                version: 1,
+                canvas_camera_position,
+                mesh_free,
+                mesh_build: None,
+                mesh_draw: None,
+            },
+            camera: AmmlCameraTable {
+                size: AmmlCameraTable::SIZE_V1,
+                version: 1,
+                set_pose,
+                rendered_position,
+                projection,
+                set_free: None,
+                release_free: None,
+                free_available: None,
+                active_camera: None,
+            },
         }
     }
 
@@ -352,6 +400,9 @@ impl AreaTables {
             lighting: &raw const self.lighting,
             ui: &raw const self.ui,
             network: &raw const self.network,
+            world: &raw const self.world,
+            render: &raw const self.render,
+            camera: &raw const self.camera,
             ..services(size, &raw const self.client, &raw const self.input)
         }
     }
@@ -589,6 +640,25 @@ fn a_v2_client_table_reads_with_its_session_actions() {
     assert!(read.leave_world.is_some());
 }
 
+unsafe extern "C" fn world_info(_: *const c_void, _: *mut AmmlWorldInfo) -> AmmlStatus {
+    AmmlStatus::OK
+}
+
+#[test]
+fn a_v3_client_table_reads_with_no_world_info_and_a_v4_table_reads_it() {
+    let mut table = client_table();
+    table.world_info = Some(world_info);
+    table.size = AmmlClientTable::SIZE_V3;
+    // SAFETY: the table lives for the call; the read covers only its first `size` bytes (the v3 size).
+    let older = unsafe { AmmlClientTable::read(&raw const table) }.unwrap();
+    assert!(older.world_info.is_none());
+
+    table.size = AmmlClientTable::SIZE_V4;
+    // SAFETY: the table lives for the call.
+    let newer = unsafe { AmmlClientTable::read(&raw const table) }.unwrap();
+    assert!(newer.world_info.is_some());
+}
+
 unsafe extern "C" fn contents_close(_: AmmlStr, _: u64) {}
 
 #[test]
@@ -718,4 +788,146 @@ fn a_v8_services_table_gives_the_network_table_unless_it_is_null_or_short() {
     assert!(network_of(&null).is_none());
     areas.network.size = AmmlNetworkTable::SIZE_V1 - 8;
     assert!(network_of(&areas.services(AmmlServices::SIZE_V8)).is_none());
+}
+
+unsafe extern "C" fn sky_darken(_: *const c_void, _: *mut u8) -> AmmlStatus {
+    AmmlStatus::OK
+}
+
+unsafe extern "C" fn canvas_camera_position(_: u64, _: *mut AmmlVec3) -> AmmlStatus {
+    AmmlStatus::OK
+}
+
+unsafe extern "C" fn mesh_free(_: AmmlStr, _: AmmlMeshId) -> AmmlStatus {
+    AmmlStatus::OK
+}
+
+fn render_of(table: &AmmlServices) -> Option<*const AmmlRenderTable> {
+    // SAFETY: the table and the area tables it points to live for the whole test.
+    unsafe { AmmlServices::render(table) }
+}
+
+#[test]
+fn a_v9_services_table_has_no_render_table() {
+    let areas = AreaTables::new();
+    // A v9 table is only 112 bytes long: the render field is not part of it, whatever it holds.
+    assert!(render_of(&areas.services(AmmlServices::SIZE_V9)).is_none());
+}
+
+#[test]
+fn a_v10_services_table_gives_the_render_table_unless_it_is_null_or_short() {
+    let mut areas = AreaTables::new();
+    assert_eq!(AmmlServices::SIZE_V10, 120);
+    assert_eq!(render_of(&areas.services(AmmlServices::SIZE_V10)), Some(&raw const areas.render));
+    let null = AmmlServices { render: core::ptr::null(), ..areas.services(AmmlServices::SIZE_V10) };
+    assert!(render_of(&null).is_none());
+    areas.render.size = AmmlRenderTable::SIZE_V1 - 8;
+    assert!(render_of(&areas.services(AmmlServices::SIZE_V10)).is_none());
+}
+
+unsafe extern "C" fn mesh_build(
+    _: AmmlStr,
+    _: u64,
+    _: *const AmmlColorQuad,
+    _: u32,
+    _: AmmlMeshStyle,
+    _: *mut AmmlMeshId,
+) -> AmmlStatus {
+    AmmlStatus::OK
+}
+
+#[test]
+fn a_v1_render_table_reads_mesh_build_and_draw_as_none() {
+    let mut areas = AreaTables::new();
+    areas.render.mesh_build = Some(mesh_build);
+
+    // SAFETY: the table is live and its `size` is covered; the bytes past v1 are ignored by the reader.
+    let v1 = unsafe { AmmlRenderTable::read(&raw const areas.render) }.unwrap();
+    areas.render.size = AmmlRenderTable::SIZE_V2;
+    // SAFETY: as above, now with the v2 fields covered.
+    let v2 = unsafe { AmmlRenderTable::read(&raw const areas.render) }.unwrap();
+
+    assert!(v1.mesh_build.is_none() && v1.mesh_draw.is_none());
+    assert!(v2.mesh_build.is_some() && v2.mesh_draw.is_none());
+}
+
+fn world_of(table: &AmmlServices) -> Option<*const AmmlWorldTable> {
+    // SAFETY: the table and the area tables it points to live for the whole test.
+    unsafe { AmmlServices::world(table) }
+}
+
+#[test]
+fn a_v8_services_table_has_no_world_table() {
+    let areas = AreaTables::new();
+    // A v8 table is only 104 bytes long: the world field is not part of it, whatever it holds.
+    assert!(world_of(&areas.services(AmmlServices::SIZE_V8)).is_none());
+}
+
+#[test]
+fn a_v9_services_table_gives_the_world_table_unless_it_is_null_or_short() {
+    let mut areas = AreaTables::new();
+    assert_eq!(AmmlServices::SIZE_V9, 112);
+    assert_eq!(world_of(&areas.services(AmmlServices::SIZE_V9)), Some(&raw const areas.world));
+    let null = AmmlServices { world: core::ptr::null(), ..areas.services(AmmlServices::SIZE_V9) };
+    assert!(world_of(&null).is_none());
+    areas.world.size = AmmlWorldTable::SIZE_V1 - 8;
+    assert!(world_of(&areas.services(AmmlServices::SIZE_V9)).is_none());
+}
+
+#[test]
+fn a_v1_window_table_reads_clip_cursor_as_none() {
+    let mut table = window_table();
+    table.size = AmmlWindowTable::SIZE_V1;
+    table.clip_cursor = Some(clip_cursor);
+
+    // SAFETY: `table` is a live table whose `size` is covered; the bytes past v1 are ignored by the reader.
+    let read = unsafe { AmmlWindowTable::read(&raw const table) }.unwrap();
+    assert!(read.clip_cursor.is_none());
+    assert_eq!(read.size, AmmlWindowTable::SIZE_V1);
+
+    table.size = AmmlWindowTable::SIZE_V2;
+    // SAFETY: as above; the size now covers the whole struct.
+    let read = unsafe { AmmlWindowTable::read(&raw const table) }.unwrap();
+    assert!(read.clip_cursor.is_some());
+}
+
+unsafe extern "C" fn clip_cursor(_module: AmmlStr, _clip: amml_abi::AmmlCursorClip) -> AmmlStatus {
+    AmmlStatus::OK
+}
+
+unsafe extern "C" fn set_pose(_: AmmlStr, _: u64, _: *const AmmlPose) -> AmmlStatus {
+    AmmlStatus::OK
+}
+
+unsafe extern "C" fn rendered_position(_: u64, _: *mut AmmlVec3) -> AmmlStatus {
+    AmmlStatus::OK
+}
+
+unsafe extern "C" fn projection(_: u64, _: *mut AmmlProjection) -> AmmlStatus {
+    AmmlStatus::OK
+}
+
+fn camera_of(table: &AmmlServices) -> Option<*const AmmlCameraTable> {
+    // SAFETY: the table and the area tables it points to live for the whole test.
+    unsafe { AmmlServices::camera(table) }
+}
+
+#[test]
+fn a_v10_services_table_has_no_camera_table() {
+    let areas = AreaTables::new();
+    // A v10 table is only 120 bytes long: the camera field is not part of it, whatever it holds.
+    assert!(camera_of(&areas.services(AmmlServices::SIZE_V10)).is_none());
+}
+
+#[test]
+fn a_v11_services_table_gives_the_camera_table_unless_it_is_null_or_short() {
+    let mut areas = AreaTables::new();
+    assert_eq!(AmmlServices::SIZE_V11, 128);
+    assert_eq!(camera_of(&areas.services(AmmlServices::SIZE_V11)), Some(&raw const areas.camera));
+    let null = AmmlServices { camera: core::ptr::null(), ..areas.services(AmmlServices::SIZE_V11) };
+    assert!(camera_of(&null).is_none());
+    areas.camera.size = AmmlCameraTable::SIZE_V1 - 8;
+    assert!(camera_of(&areas.services(AmmlServices::SIZE_V11)).is_none());
+    // SAFETY: the table is live; its `size` is below v1, so the reader refuses it before reading more.
+    assert!(unsafe { AmmlCameraTable::read(&raw const areas.camera) }.is_none());
 }

@@ -31,6 +31,8 @@ impl Area {
     pub const WINDOW_READ: Self = Self::v1("window.read");
     /// `Window::request_size`.
     pub const WINDOW_REQUEST_SIZE: Self = Self::v1("window.request_size");
+    /// `Window::clip_cursor`.
+    pub const WINDOW_CURSOR_CLIP: Self = Self::v1("window.cursor_clip");
     /// The `FramePresent` surface, `DrawSurface::copy_back_buffer` and `Overlay::present_count`.
     pub const OVERLAY_SURFACE: Self = Self::v1("overlay.surface");
     /// `Overlay::screenshot`.
@@ -53,8 +55,42 @@ impl Area {
     pub const HUD_SELECT_HOTBAR: Self = Self::v1("hud.select_hotbar");
     /// `Client::note_activity`: the game's any-input handler, with no input event.
     pub const CLIENT_ACTIVITY: Self = Self::v1("client.activity");
-    /// `LocalPlayer::is_alive`. Later reads are appended to the same table at a higher version.
+    /// `Client::world_info`: the storage folder, level name, seed, realm flag, commands flag and connection of the
+    /// joined world.
+    pub const CLIENT_WORLD_INFO: Self = Self::v1("client.world_info");
+    /// `LocalPlayer::is_alive` (version 1). Version 2 (`Area::ACTOR_READ.at(2)`) adds `position`, `eye_position`,
+    /// `rotation` and `dimension`; version 3 (`Area::ACTOR_READ.at(3)`) adds `head_position` and `block_source`.
     pub const ACTOR_READ: Self = Self::v1("actor.read");
+    /// `LocalPlayer::health`.
+    pub const ACTOR_HEALTH: Self = Self::v1("actor.health");
+    /// `Dimension::sky_darken`.
+    pub const WORLD_SKY_DARKEN: Self = Self::v1("world.sky_darken");
+    /// `BlockSource::chunk`, `LevelChunk::{load_state, read_columns}` and `Blocks::type_name`.
+    pub const WORLD_CHUNK_READ: Self = Self::v1("world.chunk_read");
+    /// The game's own map colours in `LevelChunk::read_columns` (`ColumnRequest::vanilla_colors`). Needs
+    /// `WORLD_CHUNK_READ`.
+    pub const WORLD_MAP_COLOR: Self = Self::v1("world.map_color");
+    /// The biome id of each column of `LevelChunk::read_columns` and `Biomes::name`. Needs `WORLD_CHUNK_READ`.
+    pub const WORLD_BIOMES: Self = Self::v1("world.biomes");
+    /// `BlockSource::scan_surfaces`. Needs `WORLD_CHUNK_READ`.
+    pub const WORLD_SCAN_SURFACES: Self = Self::v1("world.scan_surfaces");
+    /// `WorldShapes::{apply, max_batch, target_epoch}` (`Ctx::world_shapes`).
+    pub const WORLD_SHAPES: Self = Self::v1("world.shapes");
+    /// `BlockSource::raycast`. `RayOptions::every_block` false needs `WORLD_CHUNK_READ` too.
+    pub const WORLD_RAYCAST: Self = Self::v1("world.raycast");
+    /// `BlockSource::actors_in`.
+    pub const WORLD_ACTORS_IN: Self = Self::v1("world.actors_in");
+    /// `WorldRenderedExt::canvas`, `WorldCanvas::camera_position` and `WorldCanvas::free` (version 1). Version 2
+    /// (`Area::RENDER_WORLD_CANVAS.at(2)`) adds `WorldCanvas::build` and `WorldCanvas::draw`.
+    pub const RENDER_WORLD_CANVAS: Self = Self::v1("render.world_canvas");
+    /// `Camera::set_pose` and `Camera::rendered_position` of a `CameraSetup` camera.
+    pub const CAMERA_POSE: Self = Self::v1("camera.pose");
+    /// `Camera::projection` of a `CameraSetup` camera.
+    pub const CAMERA_PROJECTION: Self = Self::v1("camera.projection");
+    /// `CameraControl::set_free`, `release_free` and `free_available` (`Ctx::camera`).
+    pub const CAMERA_FREE: Self = Self::v1("camera.free");
+    /// `CameraControl::active_camera`: which vanilla camera the client shows the world through.
+    pub const CAMERA_ACTIVE: Self = Self::v1("camera.active");
     /// `Inventory::request_moves` and `Inventory::request_swap`, with the `InventoryRequestDone` event.
     pub const INVENTORY_REQUEST: Self = Self::v1("inventory.request");
     /// `LocalPlayer::held_item`, `LocalPlayer::inventory` and the `ItemView` and `Inventory` reads. Version 2 adds
@@ -139,6 +175,21 @@ impl Area {
     /// Whether the area is served through the network table.
     pub(crate) fn is_network(&self) -> bool {
         self.id.starts_with("network.")
+    }
+
+    /// Whether the area is served through the world table.
+    pub(crate) fn is_world(&self) -> bool {
+        self.id.starts_with("world.")
+    }
+
+    /// Whether the area is served through the render table.
+    pub(crate) fn is_render(&self) -> bool {
+        self.id.starts_with("render.")
+    }
+
+    /// Whether the area is served through the camera table.
+    pub(crate) fn is_camera(&self) -> bool {
+        self.id.starts_with("camera.")
     }
 
     /// Whether the area is served through the overlay table.

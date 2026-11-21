@@ -643,7 +643,7 @@ fn a_missing_optional_area_logs_the_feature_that_is_off_and_enables() {
     assert!(!log.contains("a required area is not available"), "{log}");
     let too_old = log.lines().find(|line| line.contains("loader too old")).unwrap_or_default();
     assert!(
-        too_old.contains("future") && too_old.contains("actor.read") && too_old.contains("\"served\":\"2\""),
+        too_old.contains("future") && too_old.contains("actor.read") && too_old.contains("\"served\":\"3\""),
         "{log}"
     );
     assert_eq!(log.matches("loader too old").count(), 1, "{log}");

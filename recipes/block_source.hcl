@@ -66,6 +66,32 @@ entry "BlockSource.fetchEntities" {
   }
 }
 
+entry "BlockSource.fetchEntitiesSpanOrder" {
+  kind     = "field"
+  notes    = "Which word order the span that BlockSource::fetchEntities gives back has: 0 the count first and the pointer second (a gsl-style span: 26.51 to 6aed1906-b127418e74d2f2f9), 1 the pointer first and the count second (a std::span: 6afa4e47-dadc375797a3d31a). The loader (ActorsInAdapter) reads the span by this value and refuses any other value, so the world.actors_in area is not offered on a build where neither shape is found. The value is the code shape itself, read with pattern_any and the `alternative` step, as BlockType.mMaterialInline. One recipe: the epilogue of the fetchEntities body (the implementation the slot function calls, 0x32d3b80 on 6aed1906, 0x47a38c0 on 6afa4e47), right after the call that destroys its std::function argument: the load of the begin and the end of the member vector that the body filled, the subtraction, `sar reg,3` (8-byte elements: the span holds Actor pointers) and the two stores through the hidden result pointer. Alternative 0 (6aed1906, 0x32d3f58): `mov rcx,[rdi+F0h]; mov rax,[rdi+F8h]; mov rdx,rax; sub rdx,rcx; mov r8,rdx; sar r8,3; mov rsi,[rbp+F8h]; mov [rsi],r8; cmp rdx,-8; je; mov [rsi+8],rcx` (the count at +0, the begin at +8). Alternative 1 (6afa4e47, 0x47a3dc8): `mov rax,[rdi+F8h]; mov rcx,[rdi+100h]; sub rcx,rax; sar rcx,3; mov rsi,[rbp+C8h]; mov [rsi],rax; mov [rsi+8],rcx` (the begin at +0, the count at +8). The register bytes are kept: they carry which value goes to which store. Every displacement is a wildcard, and the `cmp` immediate and the branch byte of alternative 0. Kept literals: the shift count 3 (the element size; a build with another element type must fail to derive, so that the loader never reads other elements as Actor pointers) and the store displacement 8 (the second word). Each alternative matches once on its own build, inside the body function, and not at all on the other build (`inspect scan`, logs task15/scan-order-a0-63.txt .. a1-70.txt). The pattern starts after a call and ends before the next one. The check is range 0..1. Keep one alternative per value: widen an alternative with wildcards instead of adding one. New in 6afa4e47-dadc375797a3d31a for the world batch (loader plan Task 15). Class: real code change (the return type of the slot changed from a gsl span to a std::span)."
+
+  recipe {
+    step "pattern_any" {
+      patterns   = [
+        "48 8B 8F ?? ?? ?? ?? 48 8B 87 ?? ?? ?? ?? 48 89 C2 48 29 CA 49 89 D0 49 C1 F8 03 48 8B B5 ?? ?? ?? ?? 4C 89 06 48 83 FA ?? 74 ?? 48 89 4E 08",
+        "48 8B 87 ?? ?? ?? ?? 48 8B 8F ?? ?? ?? ?? 48 29 C1 48 C1 F9 03 48 8B B5 ?? ?? ?? ?? 48 89 06 48 89 4E 08",
+      ]
+      literal_ok = [
+        "0.26: sar r8,3: the 8-byte element of the span (Actor pointers); another element size must not derive",
+        "0.46: mov [rsi+8],rcx: the second word of the span, which this entry tells apart",
+        "1.20: sar rcx,3: the 8-byte element of the span (Actor pointers); another element size must not derive",
+        "1.34: mov [rsi+8],rcx: the second word of the span, which this entry tells apart",
+      ]
+    }
+    step "alternative" {}
+  }
+
+  check "range" {
+    min = 0
+    max = 1
+  }
+}
+
 entry "BlockSource.vtable" {
   kind     = "global"
   notes    = "The primary vtable of BlockSource (no RTTI). Found through the dimension: Dimension::init (Dimension.vtable slot 15) creates its BlockSource with a make_shared helper that allocates 188h bytes and calls the BlockSource constructor with (Level, Dimension, ChunkSource, true, false, false); the constructor stores this table at this+0 and then the level, chunk source and dimension at +20h, +28h and +30h, and copies the dimension height range (two words at dimension+0C8h/0CAh) to +38h/+3Ah. The table has the IConstBlockSource virtuals first: slot 19 (shouldFireEvents) tests `chunk+0F0h == 11`, slots 37 to 39 return +30h, slots 41 and 42 are the two getChunk overloads. Recipe 0 is the constructor store (`xorps; movups [rcx+8],xmm; lea rax,[rip+..]; mov [rcx],rax; call; mov [r14+..],eax` and three byte stores of the bool arguments). Recipe 1 is the destructor store (`mov rsi,rcx; lea rax,[rip+..]; mov [rcx],rax`, then the listener loop over the vector at +98h/+0A0h). Both read the RIP target of the lea. Every displacement, immediate and branch byte is a wildcard; the `[rcx]` store keeps its ModRM byte (a register, not a field). The section check keeps the address inside .rdata."

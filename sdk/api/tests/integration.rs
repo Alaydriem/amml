@@ -1,7 +1,11 @@
 #![allow(clippy::unwrap_used)]
 
+mod block_changed;
+mod camera;
+mod camera_free;
 mod chat;
 mod chord;
+mod chunk_read;
 mod client;
 mod container_contents;
 mod container_screen;
@@ -20,7 +24,9 @@ mod macros;
 mod mod_glue;
 mod network;
 mod overlay;
+mod raycast;
 mod registry;
+mod scan_surfaces;
 mod screen;
 mod support;
 mod testing;
@@ -30,3 +36,8 @@ mod ui_draw;
 mod ui_input;
 mod uses;
 mod window;
+mod world;
+mod world_batch_contract;
+mod world_canvas;
+mod world_info;
+mod world_shapes;

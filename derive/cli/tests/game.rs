@@ -223,3 +223,16 @@ fn the_request_packets_have_the_ids_names_and_sizes_the_loader_uses() {
         assert_eq!((row.name.as_deref(), row.size), (Some(name), Some(size)), "packet {id}");
     }
 }
+
+#[test]
+#[ignore = "needs AMML_GAME_EXE"]
+fn the_world_packets_have_the_ids_names_and_sizes_the_loader_makes() {
+    // The packets the camera and shape areas make by id. The loader does not check a made packet by name, so this
+    // test keeps each id tied to its packet and its size on every build.
+    let expected = [(300, "CameraInstructionPacket", 0x188), (328, "PrimitiveShapesPacket", 0x50)];
+    let list = PacketTable::read(&Game::image(), Game::anchor("MinecraftPackets.createPacket")).unwrap();
+    for (id, name, size) in expected {
+        let row = list.rows.iter().find(|row| row.id == id).unwrap_or_else(|| panic!("no packet {id}"));
+        assert_eq!((row.name.as_deref(), row.size), (Some(name), Some(size)), "packet {id}");
+    }
+}

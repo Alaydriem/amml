@@ -10,9 +10,9 @@ use amml_data::{AdapterCatalog, EntryId, NeedKind};
 use amml_runtime::{AmmlVersion, ModRegistry, ModSpec};
 
 use crate::{
-    Boundary, Callback, ClientAdapter, CurrentMod, EventHub, InlineIconAdapter, ItemDrawAdapter, Library,
-    LightingAdapter, LoaderLog, LoaderState, ModExports, ModLoadError, ModPhase, ModRecord, ModReport, RequestAdapter,
-    SessionAdapter, TextureAdapter, UseRow,
+    Boundary, Callback, CameraAdapter, ClientAdapter, CurrentMod, EventHub, FreeCameraAdapter, InlineIconAdapter,
+    ItemDrawAdapter, Library, LightingAdapter, LoaderLog, LoaderState, ModExports, ModLoadError, ModPhase, ModRecord,
+    ModReport, RequestAdapter, SessionAdapter, ShapesAdapter, TextureAdapter, UseRow, WorldRenderAdapter,
 };
 
 // A workspace version that does not parse panics on first use; the package-version test catches this in CI.
@@ -69,6 +69,7 @@ impl ModLoader {
             let report = match outcome {
                 Ok(()) => {
                     self.set_phase(index, ModPhase::Enabled);
+                    FreeCameraAdapter::refresh_capture(self.state);
                     ModReport { id, phase: ModPhase::Enabled, error: None }
                 }
                 Err(error) => self.fail(index, id, ModPhase::Failed, error),
@@ -469,6 +470,10 @@ impl ModLoader {
         ItemDrawAdapter::with((), |adapter| adapter.disable_owner(index));
         InlineIconAdapter::with((), |adapter| adapter.disable_owner(index));
         RequestAdapter::with((), |adapter| adapter.disable_owner(index));
+        WorldRenderAdapter::with((), |adapter| adapter.disable_owner(index));
+        CameraAdapter::with((), |adapter| adapter.disable_owner(index));
+        ShapesAdapter::with((), |adapter| adapter.disable_owner(index));
+        FreeCameraAdapter::with((), |adapter| adapter.disable_owner(index));
         let _ = self.state.resources().take_owner(index);
         self.state.remove_hooks_of(index);
     }

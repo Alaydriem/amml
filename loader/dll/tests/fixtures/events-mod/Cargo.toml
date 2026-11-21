@@ -27,3 +27,7 @@ require-area = []
 # The `uses` block also holds an optional area row `input.key_inject` under the feature `keys`, and an optional
 # area row `actor.read` version 9 (newer than the loader serves) under the feature `future`.
 optional-area = []
+# The `uses` block also holds an optional area row `camera.free` under the feature `freecam`.
+free-camera = []
+# The `uses` block also holds an optional area row `world.shapes` under the feature `markers`.
+world-shapes = []

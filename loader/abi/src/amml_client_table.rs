@@ -1,6 +1,8 @@
 use core::ffi::c_void;
 
-use crate::{AmmlClientFlag, AmmlMenu, AmmlScreen, AmmlStartWorldOutcome, AmmlStatus, AmmlStr};
+use crate::{
+    AmmlClientFlag, AmmlMenu, AmmlScreen, AmmlStartWorldOutcome, AmmlStatus, AmmlStr, AmmlWorldInfo, AmmlWorldText,
+};
 
 /// Gives the primary client in `out`. Game thread only.
 pub type ClientCurrentFn = unsafe extern "C" fn(out: *mut *const c_void) -> AmmlStatus;
@@ -43,6 +45,19 @@ pub type ClientSelectHotbarSlotFn = unsafe extern "C" fn(client: *const c_void, 
 /// Runs the game's any-input handler of `client` once, as the game does for each input event, with no input event
 /// (area `client.activity`). `REFUSED` when the game is not ready for it.
 pub type ClientNoteActivityFn = unsafe extern "C" fn(client: *const c_void) -> AmmlStatus;
+/// Gives the facts of the joined world of `client` in `out` (area `client.world_info`). `REFUSED` when no world is
+/// joined, when `client` is not the primary client and off the game thread.
+pub type ClientWorldInfoFn = unsafe extern "C" fn(client: *const c_void, out: *mut AmmlWorldInfo) -> AmmlStatus;
+/// Copies the text `field` of the joined world of `client` into `buf` (`cap` bytes, no terminator) and gives its
+/// length in `out_len`, which may be larger than `cap` (the call again with a larger buffer reads the whole text).
+/// `NOT_AVAILABLE` when the field has no readable text.
+pub type ClientWorldTextFn = unsafe extern "C" fn(
+    client: *const c_void,
+    field: AmmlWorldText,
+    buf: *mut u8,
+    cap: usize,
+    out_len: *mut usize,
+) -> AmmlStatus;
 
 /// The client functions of `AmmlServices`. The table only grows: a function added later is appended as an `Option`,
 /// `size` and `version` grow, and `read` copies only what `size` covers (a later function of an older table is
@@ -67,6 +82,10 @@ pub struct AmmlClientTable {
     pub select_hotbar_slot: Option<ClientSelectHotbarSlotFn>,
     /// From v3.
     pub note_activity: Option<ClientNoteActivityFn>,
+    /// From v4.
+    pub world_info: Option<ClientWorldInfoFn>,
+    /// From v4.
+    pub world_text: Option<ClientWorldTextFn>,
 }
 
 impl AmmlClientTable {
@@ -76,6 +95,8 @@ impl AmmlClientTable {
     pub const SIZE_V2: u32 = 112;
     /// `size` of a v3 client table: v2 plus `note_activity`.
     pub const SIZE_V3: u32 = 120;
+    /// `size` of a v4 client table: v3 plus `world_info` and `world_text`.
+    pub const SIZE_V4: u32 = 136;
 
     /// A copy of the table at `table`, read as far as its own `size` covers; a later field is `None`. A null
     /// table, or one shorter than v1, gives `None`.
@@ -103,4 +124,4 @@ impl AmmlClientTable {
     }
 }
 
-const _: () = assert!(core::mem::size_of::<AmmlClientTable>() == AmmlClientTable::SIZE_V3 as usize);
+const _: () = assert!(core::mem::size_of::<AmmlClientTable>() == AmmlClientTable::SIZE_V4 as usize);

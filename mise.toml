@@ -1464,6 +1464,39 @@ flag "--modmanager <dir>" help="The modmanager checkout to build; default: AMML_
 '''
 run = "bash scripts/ingame-peek.sh"
 
+[tasks.ingame-levels]
+description = "Runs levels and modmanager in game on a patched standalone test instance under %LOCALAPPDATA%/amml/instances (--instance, required; the same instance checks as ingame-zoom: 1.26.63.01 and 1.26.63.01-P are refused, the exe must import amml.dll, amml/instance.hcl must set a data_dir outside %LOCALAPPDATA%/amml/data). Refuses a running game of the instance. Plays in the world amml-test-levels (copied once from amml-test, restored from its own pristine copy each run). Sets pause_menu_on_focus_lost:0 in the options.txt files under data_dir for the run. Builds the release amml.dll and copies it, the recipes and the data into the instance; packages modmanager (--modmanager, else AMML_MODMANAGER_DIR, else ../modmanager) and levels (--levels, else AMML_LEVELS_DIR, else ../levels); runs mise run compat on each dist folder and stops before the game on a failure or a forbidden Win32 import warning; parks the other mods, installs the two and puts the parked mods back on exit. Starts the game in the background and posts keys only (posted mouse messages do not reach a background game; those rows are attended). Switches the world to survival, then posts F3+L, F3+G, F3+J, F3+Alt+J and two chat teleports (nether and back). Reads the loader, manager and levels logs of the run including any loader_*.log archive written during it. Closes only the game PID it started. Passes on every listed line and no 'event not available', 'area not available', 'loader too old' or 'panic' line in the three logs (ingame-levels: pass); see the script header"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--instance <name>" required=#true help="The test instance folder under %LOCALAPPDATA%/amml/instances (1.26.63.01-test, 1.26.70.26-standalone); 1.26.63.01 and 1.26.63.01-P are refused"
+flag "--levels <dir>" help="The levels checkout to build; default: AMML_LEVELS_DIR, else ../levels"
+flag "--modmanager <dir>" help="The modmanager checkout to build; default: AMML_MODMANAGER_DIR, else ../modmanager"
+'''
+run = "bash scripts/ingame-levels.sh"
+
+[tasks.ingame-freecam]
+description = "Runs freecam and modmanager in game on a patched standalone test instance under %LOCALAPPDATA%/amml/instances (--instance, required; the same instance checks as ingame-zoom: 1.26.63.01 and 1.26.63.01-P are refused, the exe must import amml.dll, amml/instance.hcl must set a data_dir outside %LOCALAPPDATA%/amml/data). Refuses a running game of the instance. Plays in the world amml-test-freecam (copied once from amml-test, restored from its own pristine copy each run). Sets pause_menu_on_focus_lost:0 in the options.txt files under data_dir for the run. Builds the release amml.dll and copies it, the recipes and the data into the instance; packages modmanager (--modmanager, else AMML_MODMANAGER_DIR, else ../modmanager) and freecam (--freecam, else AMML_FREECAM_DIR, else ../freecam); runs mise run compat on each dist folder and stops before the game on a failure or a forbidden Win32 import warning; parks the other mods, installs the two and puts the parked mods back on exit. Starts the game in the background and posts keys only (posted mouse messages do not reach a background game; those rows are attended). Posts F3+P, a held W, Ctrl+B twice, the screenshot bind (AMML_FREECAM_SCREENSHOT_VK), a chat /camera command and a focus loss. Reads the loader, manager and freecam logs of the run including any loader_*.log archive written during it. Closes only the game PID it started. Passes on every listed line and no 'event not available', 'area not available', 'loader too old' or 'panic' line in the three logs (ingame-freecam: pass); see the script header"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--instance <name>" required=#true help="The test instance folder under %LOCALAPPDATA%/amml/instances (1.26.63.01-test, 1.26.70.26-standalone); 1.26.63.01 and 1.26.63.01-P are refused"
+flag "--freecam <dir>" help="The freecam checkout to build; default: AMML_FREECAM_DIR, else ../freecam"
+flag "--modmanager <dir>" help="The modmanager checkout to build; default: AMML_MODMANAGER_DIR, else ../modmanager"
+'''
+run = "bash scripts/ingame-freecam.sh"
+
+[tasks.ingame-minimap]
+description = "Runs minimap and modmanager in game on a patched standalone test instance under %LOCALAPPDATA%/amml/instances (--instance, required; the same instance checks as ingame-zoom: 1.26.63.01 and 1.26.63.01-P are refused, the exe must import amml.dll, amml/instance.hcl must set a data_dir outside %LOCALAPPDATA%/amml/data). Refuses a running game of the instance. Plays in the world amml-test-minimap (copied once from amml-test, restored from its own pristine copy each run). Sets pause_menu_on_focus_lost:0 in the options.txt files under data_dir for the run. Builds the release amml.dll and copies it, the recipes and the data into the instance; packages modmanager (--modmanager, else AMML_MODMANAGER_DIR, else ../modmanager) and minimap (--minimap, else AMML_MINIMAP_DIR, else ../minimap); runs mise run compat on each dist folder and stops before the game on a failure or a forbidden Win32 import warning; parks the other mods, installs the two and puts the parked mods back on exit. Starts the game in the background and posts keys only (posted mouse messages do not reach a background game; those rows are attended). Posts a chat /setblock and the world map bind (AMML_MINIMAP_MAP_VK) twice, and checks the world data folder. Reads the loader, manager and minimap logs of the run including any loader_*.log archive written during it. Closes only the game PID it started. Passes on every listed line and no 'event not available', 'area not available', 'loader too old' or 'panic' line in the three logs (ingame-minimap: pass); see the script header"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--instance <name>" required=#true help="The test instance folder under %LOCALAPPDATA%/amml/instances (1.26.63.01-test, 1.26.70.26-standalone); 1.26.63.01 and 1.26.63.01-P are refused"
+flag "--minimap <dir>" help="The minimap checkout to build; default: AMML_MINIMAP_DIR, else ../minimap"
+flag "--modmanager <dir>" help="The modmanager checkout to build; default: AMML_MODMANAGER_DIR, else ../modmanager"
+'''
+run = "bash scripts/ingame-minimap.sh"
+
 [tasks.install]
 description = "Builds release amml.dll and amml-patch, patches Minecraft.Windows.exe from Minecraft.Windows.exe.bak of an AMML instance under %LOCALAPPDATA%/amml/instances (--instance, required), copies amml.dll, the recipes and the data next to it, and marks the AMML as a local build (amml/amml-version.txt = <version>+local, amml/amml-api.txt). Close the game first: a running game locks the DLL"
 dir = "{{config_root}}"

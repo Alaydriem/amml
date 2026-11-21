@@ -48,12 +48,39 @@ impl FakeGame {
     /// The most wheel notches one queued wheel sends, as in the loader.
     const MAX_WHEEL_NOTCHES: u32 = 100;
 
-    /// A fake with no events offered, the gate closed, epoch 0 and v8 services (client, input, window,
-    /// overlay, actor, inventory, lighting, ui and network tables).
+    /// A fake with no events offered, the gate closed, epoch 0 and v11 services (client, input, window,
+    /// overlay, actor, inventory, lighting, ui, network, world, render and camera tables).
     ///
     /// # Panics
     /// When this thread already holds a live `FakeGame`.
     pub fn new() -> Self {
+        Self::with_services(AmmlServices::SIZE_V11)
+    }
+
+    /// A fake whose services table is v10: every area table but the camera table, as a loader before it. Its
+    /// `CameraSetupExt::camera` gives `None` and `Ctx::supports` is false for every `camera.*` area.
+    ///
+    /// # Panics
+    /// When this thread already holds a live `FakeGame`.
+    pub fn with_v10_services() -> Self {
+        Self::with_services(AmmlServices::SIZE_V10)
+    }
+
+    /// A fake whose services table is v9: every area table but the render table, as a loader before it. Its
+    /// `WorldRenderedExt::canvas` gives `None` and `Ctx::supports` is false for every `render.*` area.
+    ///
+    /// # Panics
+    /// When this thread already holds a live `FakeGame`.
+    pub fn with_v9_services() -> Self {
+        Self::with_services(AmmlServices::SIZE_V9)
+    }
+
+    /// A fake whose services table is v8: every area table but the world table, as a loader before it. Its
+    /// `Dimension::sky_darken` gives `None` and `Ctx::supports` is false for every `world.*` area.
+    ///
+    /// # Panics
+    /// When this thread already holds a live `FakeGame`.
+    pub fn with_v8_services() -> Self {
         Self::with_services(AmmlServices::SIZE_V8)
     }
 
@@ -126,7 +153,7 @@ impl FakeGame {
     /// # Panics
     /// When this thread already holds a live `FakeGame`.
     pub fn with_v4_inventory() -> Self {
-        Self::with_tables(FakeTables::with_inventory(AmmlServices::SIZE_V8, amml_abi::AmmlInventoryTable::SIZE_V4))
+        Self::with_tables(FakeTables::with_inventory(AmmlServices::SIZE_V9, amml_abi::AmmlInventoryTable::SIZE_V4))
     }
 
     fn with_services(size: u32) -> Self {
@@ -231,22 +258,50 @@ impl FakeGame {
         client: *const c_void,
         blocked: bool,
     ) -> FakeDispatch {
+        Self::dispatch_on(&self.state, value, cancellable, client, blocked)
+    }
+
+    // `dispatch` on the listeners of `state`, for the table functions, which reach the fake through its state.
+    fn dispatch_on<E: Event + Clone>(
+        state: &FakeState,
+        value: &mut E,
+        cancellable: bool,
+        client: *const c_void,
+        blocked: bool,
+    ) -> FakeDispatch {
         let header = Self::header_of(value);
         header.size = std::mem::size_of::<E>() as u32;
         header.version = E::VERSION;
         header.cancelled = u8::from(blocked);
         let mut stamp = HeaderStamp::new(*header, cancellable);
-        let context = self.context(client);
-        let report = self
-            .state
-            .bus()
-            .dispatch(E::ID, value, |listener, value| Self::call(listener, value, &context, &mut stamp));
+        let context = Self::context_on(state, client);
+        let report =
+            state.bus().dispatch(E::ID, value, |listener, value| Self::call(listener, value, &context, &mut stamp));
         stamp.stamp(Self::header_of(value));
         let panicked = !report.panicked_owners.is_empty();
         if panicked {
-            self.state.disable_owner();
+            state.disable_owner();
         }
         FakeDispatch { cancelled: report.cancelled, panicked }
+    }
+
+    /// The loader raises the instruction of the fake mod's own `set_free` or `release_free` from the game's handler:
+    /// `CameraInstructionReceived` with `kind`, injected, with origin `THIS_MOD` (the fake has one mod), on the game
+    /// thread with the fake client.
+    pub(crate) fn raise_own_instruction(state: &FakeState, kind: crate::InstructionKind) {
+        let mut event = Self::instruction_event(kind, AmmlOrigin::THIS_MOD);
+        let client = std::ptr::with_exposed_provenance(state.current_client());
+        let _ = Self::dispatch_on(state, &mut event, false, client, false);
+    }
+
+    // A `CameraInstructionReceived` of `kind` from `origin`; injected unless the game sent it.
+    fn instruction_event(kind: crate::InstructionKind, origin: AmmlOrigin) -> amml_abi::CameraInstructionReceived {
+        let header = AmmlEventHeader {
+            origin,
+            injected: u8::from(origin != AmmlOrigin::GAME),
+            ..Self::header::<amml_abi::CameraInstructionReceived>()
+        };
+        amml_abi::CameraInstructionReceived { header, kind: kind.to_abi(), _reserved: [0; 7] }
     }
 
     // Raises an event a lease injected: `injected = 1`, the given origin, and a cancel is ignored.
@@ -352,14 +407,14 @@ impl FakeGame {
         result
     }
 
-    fn context(&self, client: *const c_void) -> AmmlEventContext {
+    fn context_on(state: &FakeState, client: *const c_void) -> AmmlEventContext {
         AmmlEventContext {
             size: std::mem::size_of::<AmmlEventContext>() as u32,
             version: 1,
             thread: AmmlThread::GAME,
-            game_alive: u8::from(self.state.gate().get()),
+            game_alive: u8::from(state.gate().get()),
             _reserved: [0; 6],
-            epoch: self.state.epoch().get(),
+            epoch: state.epoch().get(),
             client,
         }
     }
@@ -494,6 +549,106 @@ impl FakeGame {
         dispatch
     }
 
+    /// Raises `WorldRendered` for `canvas`, as the loader does after the game's level pass: the canvas calls answer for
+    /// the camera position of `canvas` while the listeners run, and refuse after. The meshes freed through the canvas
+    /// are added to `canvas.frees`, the `build` and `draw` lines to `canvas.calls`.
+    pub fn raise_world_rendered(&self, canvas: &crate::testing::FakeCanvas) -> FakeDispatch {
+        let frame = self.state.render().enter(canvas);
+        let mut event = amml_abi::WorldRendered {
+            header: Self::header::<amml_abi::WorldRendered>(),
+            frame_id: frame,
+            vibrant: u8::from(canvas.vibrant),
+            _reserved: [0; 7],
+        };
+        let dispatch = self.raise(&mut event);
+        let (frees, calls) = self.state.render().leave();
+        canvas.frees.borrow_mut().extend(frees);
+        canvas.calls.borrow_mut().extend(calls);
+        dispatch
+    }
+
+    /// Raises `CameraSetup` in `phase` for `camera`, as the loader does around the game's camera setup: a Before raise
+    /// starts a new frame (`frame_id` + 1), an After raise keeps the frame of the Before before it; the event is always
+    /// the first setup of its frame. The camera calls answer for `camera` while the listeners run (the projection in
+    /// After only), and refuse after. The poses set through the camera are added to `camera.recorded`. The event carries
+    /// the fake client once `set_client` ran, as the loader gives the primary client when the setup runs on the game
+    /// thread.
+    pub fn raise_camera_setup(&self, phase: amml_abi::AmmlPhase, camera: &crate::testing::FakeCamera) -> FakeDispatch {
+        let frame = self.state.camera().enter(phase == amml_abi::AmmlPhase::AFTER, camera);
+        let mut event = amml_abi::CameraSetup {
+            header: amml_abi::AmmlEventHeader { phase, ..Self::header::<amml_abi::CameraSetup>() },
+            frame_id: frame,
+            first_in_frame: 1,
+            _reserved: [0; 7],
+        };
+        let dispatch = self.raise_with_client(&mut event);
+        let poses = self.state.camera().leave();
+        camera.recorded.borrow_mut().extend(poses);
+        dispatch
+    }
+
+    /// A graphics mode switch for the meshes, as the loader sees at a `ClientTick`: every mesh is freed, and a later use
+    /// of one gives `Stale`.
+    /// The free camera calls of the fake mod that went out, in order: `set_free x,y,z yaw=.. pitch=..` and
+    /// `release_free` (a release with no free camera held sends nothing and is not listed).
+    pub fn camera_free(&self) -> Vec<String> {
+        self.state.camera_free().calls()
+    }
+
+    /// Whether the fake world has the `minecraft:free` preset (true at first). Without it `free_available` gives
+    /// `Some(false)` and `set_free` `Err(NotAvailable)`.
+    pub fn set_free_available(&self, available: bool) {
+        self.state.camera_free().set_available(available);
+    }
+
+    /// The loader saw the client's packet handler: `set_free` and `release_free` work from now on (`Err(NotReady)`
+    /// before). The free camera calls also need `Area::CAMERA_FREE` offered, the gate open and a non-zero epoch.
+    pub fn capture_handler(&self) {
+        self.state.camera_free().capture();
+    }
+
+    /// The shape ops of the fake mod that went out, in order, one line each: `line id=1 from=x,y,z to=x,y,z
+    /// color=r,g,b,a dim=d` (`box`, `arrow` alike) and `remove id=1 dim=d`. A refused or invalid batch is not listed.
+    pub fn shape_ops(&self) -> Vec<String> {
+        self.state.shapes().ops()
+    }
+
+    /// The generation of the client packet handler the fake loader holds (`WorldShapes::target_epoch`); 0 (at first)
+    /// is none, so `apply` gives `Err(NotReady)`. A new value forgets the live shape ids, as the loader does, so
+    /// `ApplyStats::delivered` counts payloads as the loader counts them. Shapes also need `Area::WORLD_SHAPES` offered, the gate open and a
+    /// non-zero epoch.
+    pub fn set_target_epoch(&self, epoch: u32) {
+        self.state.shapes().set_target_epoch(epoch);
+    }
+
+    /// Raises `CameraInstructionReceived` with `kind` from `origin` (`GAME` for the server; `THIS_MOD` or `OTHER_MOD`
+    /// for an instruction of a mod's free camera call, which is injected), on the game thread with the fake client.
+    pub fn raise_camera_instruction(&self, kind: crate::InstructionKind, origin: AmmlOrigin) -> FakeDispatch {
+        let mut event = Self::instruction_event(kind, origin);
+        let client = std::ptr::with_exposed_provenance(self.state.current_client());
+        self.dispatch(&mut event, false, client, false)
+    }
+
+    pub fn switch_graphics(&self) {
+        self.state.render().switch_graphics();
+    }
+
+    /// A mesh of the fake mod, as a `build` of the loader would give (`Area::RENDER_WORLD_CANVAS` must be offered for the
+    /// canvas calls to answer).
+    pub fn add_mesh(&self) -> crate::MeshId {
+        self.state.render().add_mesh()
+    }
+
+    /// A world leave for the meshes: every mesh is freed, and a later use of one gives `Stale`.
+    pub fn leave_mesh_world(&self) {
+        self.state.render().world_left();
+    }
+
+    /// The number of live meshes of the fake mod.
+    pub fn live_meshes(&self) -> usize {
+        self.state.render().live_meshes()
+    }
+
     /// Raises `TexturesReloaded` with `reason`, as the loader does after it handled the mod textures: for
     /// `TextureReload::DeviceReset` every texture is freed first (a later use of its id gives `Stale`, as after a world
     /// leave); for `TextureReload::ResourcePack` the ids stay valid.
@@ -537,6 +692,27 @@ impl FakeGame {
             header: Self::header::<amml_abi::ContainerSlotHover>(),
             screen: screen.0,
             slot: slot.into(),
+        };
+        self.raise(&mut event)
+    }
+
+    /// Raises `BlockChanged` for a change of the block at `pos` of `dimension`, layer `layer`, from the type `old` to
+    /// the type `new`, as the loader does after the game's own change.
+    pub fn raise_block_changed(
+        &self,
+        dimension: i32,
+        pos: crate::BlockPos,
+        layer: u32,
+        new: crate::BlockTypeId,
+        old: crate::BlockTypeId,
+    ) -> FakeDispatch {
+        let mut event = amml_abi::BlockChanged {
+            header: Self::header::<amml_abi::BlockChanged>(),
+            dimension,
+            pos: amml_abi::AmmlBlockPos { x: pos.x, y: pos.y, z: pos.z },
+            layer,
+            new: new.0,
+            old: old.0,
         };
         self.raise(&mut event)
     }
@@ -767,7 +943,7 @@ impl FakeGame {
     }
 
     /// Every accepted window request in order: `request_size 640x360`, `request_size none`,
-    /// `replay_focus_loss`.
+    /// `replay_focus_loss`, `clip_cursor centre`, `clip_cursor none`.
     pub fn window_requests(&self) -> Vec<String> {
         self.state.window_requests()
     }

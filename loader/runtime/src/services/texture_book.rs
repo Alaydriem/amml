@@ -185,6 +185,20 @@ impl TextureBook {
         Ok((entry.ready && entry.held != 0).then_some(entry.held))
     }
 
+    /// Runs `read` on the address of the `TexturePtr` of `key` while the book holds the lock, so no release can free it
+    /// meanwhile: `Ok(None)` (and `read` does not run) while the texture is not ready. For a reader that copies the
+    /// pointer and takes its own uses.
+    pub fn with_drawable<R>(
+        &self,
+        key: TextureKey,
+        read: impl FnOnce(usize) -> R,
+    ) -> Result<Option<R>, TextureRefusal> {
+        let state = self.lock();
+        Self::check(&state, key)?;
+        let entry = state.entries.get(&key.id).ok_or(TextureRefusal::Stale)?;
+        Ok((entry.ready && entry.held != 0).then(|| read(entry.held)))
+    }
+
     /// The releases and jobs for one UI draw point, at time `now_ms`. Gives at most `MAX_UPLOADS` uploads; a
     /// texture whose turn did not come stays due. A held texture that is not ready is asked for again when
     /// `REASK_MS` passed since the last ask.

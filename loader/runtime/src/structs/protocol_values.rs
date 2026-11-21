@@ -1,8 +1,11 @@
-/// The protocol constants of the item stack request path. They are network protocol numbers, which the game
-/// appends to and does not renumber, so they are Rust constants and not derived entries.
+/// The protocol constants of the item stack request path and of the packets the camera areas make. They are network
+/// protocol numbers, which the game appends to and does not renumber, so they are Rust constants and not derived
+/// entries.
 ///
-/// The packet ids come from `inspect packets` on both gate builds, and the game test of the deriver checks them on each gate build; the container ids are the ids the
-/// vanilla client sent in recorded requests.
+/// The packet ids come from `inspect packets` on both gate builds, and the game tests of the deriver check them on each
+/// gate build (`the_request_packets_have_the_ids_names_and_sizes_the_loader_uses`,
+/// `the_world_packets_have_the_ids_names_and_sizes_the_loader_makes`); the container ids are the ids the vanilla client
+/// sent in recorded requests.
 pub struct ProtocolValues;
 
 impl ProtocolValues {
@@ -11,6 +14,8 @@ impl ProtocolValues {
     pub const CONTAINER_CLOSE_ID: u32 = 47;
     pub const ITEM_STACK_REQUEST_ID: u32 = 147;
     pub const ITEM_STACK_RESPONSE_ID: u32 = 148;
+    pub const CAMERA_INSTRUCTION_ID: u32 = 300;
+    pub const PRIMITIVE_SHAPES_ID: u32 = 328;
 
     /// The request container id of chests, the ender chest, the hopper, the dispenser and the dropper.
     pub const LEVEL_ENTITY: u8 = 7;

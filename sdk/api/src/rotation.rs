@@ -9,6 +9,12 @@ pub struct Rotation {
     pub pitch: f32,
 }
 
+impl From<Rotation> for AmmlRotation {
+    fn from(value: Rotation) -> Self {
+        Self { yaw: value.yaw, pitch: value.pitch }
+    }
+}
+
 impl From<AmmlRotation> for Rotation {
     fn from(value: AmmlRotation) -> Self {
         Self { yaw: value.yaw, pitch: value.pitch }

@@ -41,3 +41,21 @@ end_game() {
   game_pid=""
   launched=""
 }
+
+# The lines a log got during one run, when the log may rotate during it. $1 is the log file, $2 its size at the start
+# of the run and $3 a marker file made at the start (touch it after reading the size, before the game starts). The
+# loader rotates a log at about 1 MB to <name>_<stamp>.log beside it (curia, oldest names sort first). The archives
+# newer than the marker come first (the first one holds the lines from offset $2 on; a later one is all of this run),
+# then the current file: all of it when an archive was used (it is a new file), else the lines after offset $2.
+since_rotated() {
+  local file="$1" offset="$2" marker="$3" dir name archive first=1 rotated=""
+  dir=$(dirname "$file")
+  name=$(basename "$file" .log)
+  for archive in "$dir/${name}_"*.log; do
+    [ -f "$archive" ] || continue
+    [ "$archive" -nt "$marker" ] || continue
+    rotated="yes"
+    if [ -n "$first" ]; then since "$archive" "$offset"; first=""; else cat "$archive"; fi
+  done
+  if [ -n "$rotated" ]; then [ ! -f "$file" ] || cat "$file"; else since "$file" "$offset"; fi
+}

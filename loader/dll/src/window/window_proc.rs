@@ -89,6 +89,7 @@ impl WindowProc {
             service.detach(hwnd);
             return ProcOutcome::Pass;
         }
+        service.clip().message(hwnd, message, wparam);
         if !service.router().active() {
             return ProcOutcome::Pass;
         }

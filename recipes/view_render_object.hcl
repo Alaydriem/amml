@@ -32,3 +32,22 @@ entry "ViewRenderObject.mViewData" {
     max = 0
   }
 }
+
+entry "ViewRenderObject.size" {
+  kind     = "field"
+  notes    = "Size of ViewRenderObject: the step between two views in FrameRenderObject::mViews, an inline vector of ViewRenderObject (see FrameRenderObject.mViews). 32E0h (13024) on 6aed1906-b127418e74d2f2f9 (26.63) and on 6afa4e47-dadc375797a3d31a (70.26); the 26.51 header gives 3300h. The FrameRenderObject deleter (26.63 0x53d7410, 70.26 0x6a3b440) walks the vector from begin [frame+10h] to end [frame+18h], destroys each view and steps with `add rsi,32E0h; cmp rsi,r14; jne`. The recipe finds the deleter by the head that FrameRenderObject.mViews reads (`mov rdi,[rdx]; test rdi,rdi; je; mov rsi,[rdi+..]; test rsi,rsi; je; lea rbx,[rdi+..]; mov r14,[rdi+..]; cmp rsi,r14`, one match on both builds; the pattern ends before the view destructor call), then scans that function for the step `add rsi,imm32; cmp rsi,r14; jne` and reads the immediate (operand 1). Every displacement, immediate and branch byte is a wildcard. Range window 3000h..3400h. The entry has one recipe and a range check (the rule for a field). The loader walks the views of a frame with it to find the view of the running LevelRenderer."
+
+  recipe {
+    step "pattern" { bytes = "48 8B 3A 48 85 FF 0F 84 ?? ?? ?? ?? 48 8B 77 ?? 48 85 F6 74 ?? 48 8D 5F ?? 4C 8B 77 ?? 4C 39 F6" }
+    step "pattern" { bytes = "48 81 C6 ?? ?? ?? ?? 4C 39 F6 75 ??" }
+    step "operand" {
+      index = 1
+      kind  = "immediate"
+    }
+  }
+
+  check "range" {
+    min = 12288
+    max = 13312
+  }
+}

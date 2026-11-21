@@ -4,10 +4,10 @@ use amml_abi::{AmmlActorTable, AmmlRotation, AmmlStatus, AmmlVec3};
 
 use crate::{ActorAdapter, Boundary};
 
-const TABLE_VERSION: u32 = 2;
+const TABLE_VERSION: u32 = 3;
 
 pub(crate) static ACTOR: AmmlActorTable = AmmlActorTable {
-    size: AmmlActorTable::SIZE_V2,
+    size: AmmlActorTable::SIZE_V3,
     version: TABLE_VERSION,
     is_alive: ActorTable::is_alive,
     position: Some(ActorTable::position),
@@ -15,6 +15,9 @@ pub(crate) static ACTOR: AmmlActorTable = AmmlActorTable {
     rotation: Some(ActorTable::rotation),
     dimension: Some(ActorTable::dimension),
     dimension_id: Some(ActorTable::dimension_id),
+    head_position: Some(ActorTable::head_position),
+    block_source: Some(ActorTable::block_source),
+    health: Some(ActorTable::health),
 };
 
 /// The actor table behind `AmmlServices::actor`, and its `extern "C"` functions. Each function checks its
@@ -37,6 +40,18 @@ impl ActorTable {
 
     unsafe extern "C" fn dimension(player: *const c_void, out: *mut *const c_void) -> AmmlStatus {
         Self::read(out, |adapter| adapter.dimension(player).map(std::ptr::with_exposed_provenance))
+    }
+
+    unsafe extern "C" fn head_position(player: *const c_void, out: *mut AmmlVec3) -> AmmlStatus {
+        Self::read(out, |adapter| adapter.head_position(player))
+    }
+
+    unsafe extern "C" fn block_source(player: *const c_void, out: *mut *const c_void) -> AmmlStatus {
+        Self::read(out, |adapter| adapter.block_source(player).map(std::ptr::with_exposed_provenance))
+    }
+
+    unsafe extern "C" fn health(player: *const c_void, out: *mut i32) -> AmmlStatus {
+        Self::read(out, |adapter| adapter.health(player))
     }
 
     unsafe extern "C" fn dimension_id(dimension: *const c_void, out: *mut i32) -> AmmlStatus {

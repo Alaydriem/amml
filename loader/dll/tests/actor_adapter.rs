@@ -1,6 +1,6 @@
 use std::ffi::c_void;
 
-use amml::{ActorAdapter, ClientAdapter, SessionAdapter};
+use amml::{ActorAdapter, ClientAdapter, HandleStamp, SessionAdapter};
 use amml_abi::{AmmlActorTable, AmmlApi, AmmlRotation, AmmlServices, AmmlStatus, AmmlVec3};
 
 use crate::support::{ActorGame, ClientGame, GAME_CLIENT_A, Harness, LogFile};
@@ -46,9 +46,11 @@ fn is_alive(table: &AmmlActorTable, player: usize) -> (AmmlStatus, u8) {
 fn the_area_is_offered_when_both_entries_resolve() {
     let harness = install(&[]);
     let rows = ActorAdapter::install(harness.state);
-    assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].shape, Some("default"));
-    assert!(harness.state.areas().is_available(ActorAdapter::READ, 1));
+    assert_eq!(rows.len(), 2);
+    assert_eq!((rows[0].id, rows[0].shape), (ActorAdapter::READ, Some("default")));
+    assert_eq!((rows[1].id, rows[1].shape), (ActorAdapter::HEALTH, Some("default")));
+    assert!(harness.state.areas().is_available(ActorAdapter::READ, 3));
+    assert!(harness.state.areas().is_available(ActorAdapter::HEALTH, 1));
 }
 
 #[test]
@@ -102,12 +104,12 @@ fn a_null_out_is_an_invalid_argument() {
 }
 
 #[test]
-fn the_services_table_has_a_v2_actor_table() {
+fn the_services_table_has_a_v3_actor_table() {
     let harness = Harness::start();
     // SAFETY: the loader's tables live for the process.
     let services = unsafe { &*AmmlApi::services(harness.state.api()).unwrap() };
     assert!(services.size >= AmmlServices::SIZE_V4);
-    assert_eq!(table(&harness).size, AmmlActorTable::SIZE_V2);
+    assert_eq!(table(&harness).size, AmmlActorTable::SIZE_V3);
 }
 
 fn point(read: Option<amml_abi::ActorPointFn>) -> (AmmlStatus, [f32; 3]) {
@@ -147,4 +149,68 @@ fn an_eye_read_logs_the_position_measurement_once_per_world() {
     let log = LogFile::wait_for(&harness.logs().join("loader.log"), "actor position measured");
     assert_eq!(log.matches("actor position measured").count(), 1, "{log}");
     assert!(log.contains("\"aabb_min_y\":64.0"), "{log}");
+}
+
+#[test]
+fn the_head_is_the_attach_position_of_the_head_location() {
+    let harness = start_in_world();
+    assert_eq!(point(table(&harness).head_position), (AmmlStatus::OK, ActorGame::head()));
+}
+
+#[test]
+fn the_block_source_is_the_one_of_the_dimension_of_the_player() {
+    let harness = start_in_world();
+    let mut out: *const c_void = std::ptr::null();
+    // SAFETY: the table is live and `out` is writable.
+    let status = unsafe {
+        (table(&harness).block_source.unwrap())(std::ptr::with_exposed_provenance(ActorGame::player()), &mut out)
+    };
+    // The handle is the block source with the epoch of the world (1) in its top bits.
+    let sealed = HandleStamp::seal(ActorGame::block_source(), 1).unwrap();
+    assert_eq!((status, out.addr()), (AmmlStatus::OK, sealed));
+}
+
+#[test]
+fn a_head_or_block_source_read_of_another_handle_is_refused() {
+    let harness = start_in_world();
+    let table = table(&harness);
+    let other = std::ptr::with_exposed_provenance::<c_void>(ActorGame::player() + 8);
+    let mut head = AmmlVec3 { x: 0.0, y: 0.0, z: 0.0 };
+    let mut source: *const c_void = std::ptr::null();
+    // SAFETY: the table is live and both outputs are writable.
+    let statuses = unsafe {
+        [(table.head_position.unwrap())(other, &mut head), (table.block_source.unwrap())(other, &mut source)]
+    };
+    assert_eq!(statuses, [AmmlStatus::REFUSED, AmmlStatus::REFUSED]);
+}
+
+#[test]
+fn the_health_is_read_through_the_entity_context() {
+    let harness = start_in_world();
+    let mut out = 0i32;
+    // SAFETY: the table is live and `out` is writable.
+    let status =
+        unsafe { (table(&harness).health.unwrap())(std::ptr::with_exposed_provenance(ActorGame::player()), &mut out) };
+    assert_eq!((status, out), (AmmlStatus::OK, ActorGame::HEALTH));
+}
+
+#[test]
+fn the_health_area_is_not_offered_without_its_entries_and_the_read_gives_not_available() {
+    let harness = install(&["ActorAttribute.getHealth"]);
+    assert!(!harness.state.areas().is_available(ActorAdapter::HEALTH, 1));
+    ClientGame::frame();
+    ClientGame::set_player(ActorGame::player());
+    ClientGame::update(&GAME_CLIENT_A);
+    let mut out = 0i32;
+    // SAFETY: the table is live and `out` is writable.
+    let status =
+        unsafe { (table(&harness).health.unwrap())(std::ptr::with_exposed_provenance(ActorGame::player()), &mut out) };
+    assert_eq!(status, AmmlStatus::NOT_AVAILABLE);
+}
+
+#[test]
+fn without_the_block_source_entries_the_actor_area_is_not_offered_at_all() {
+    let harness = install(&["Dimension.getBlockSourceFromMainChunkSource"]);
+    assert!(!harness.state.areas().is_available(ActorAdapter::READ, 1));
+    assert!(harness.state.areas().is_available(ActorAdapter::HEALTH, 1));
 }

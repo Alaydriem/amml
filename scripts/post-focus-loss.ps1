@@ -4,8 +4,10 @@
 # The message is PostMessage to that one HWND: no SetForegroundWindow, so nothing reaches any other window. The game
 # may take focus loss from another path and ignore it, so a caller checks the effect. Only call it for the PID the
 # ingame-* task recorded and re-checked. Exit 1 when the PID has no visible window.
+# -Active posts wParam 1 (the app gained activation) instead, so a caller can make a later loss a change.
 param(
-  [Parameter(Mandatory = $true)][int]$ProcessId
+  [Parameter(Mandatory = $true)][int]$ProcessId,
+  [switch]$Active
 )
 Add-Type -TypeDefinition @'
 using System;
@@ -40,6 +42,7 @@ public static class GameFocus {
 '@
 $hwnd = [GameFocus]::Find([uint32]$ProcessId)
 if ($hwnd -eq [IntPtr]::Zero) { "no visible window for pid $ProcessId"; exit 1 }
-# WM_ACTIVATEAPP, wParam 0: deactivated; lParam 0: no thread id of the window that is activated
-[GameFocus]::PostMessageW($hwnd, 0x001C, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
-"posted WM_ACTIVATEAPP 0 to window 0x{0:x} of pid {1}" -f $hwnd.ToInt64(), $ProcessId
+# WM_ACTIVATEAPP, wParam 0: deactivated (1 with -Active: activated); lParam 0: no thread id of the other window
+$wparam = if ($Active) { 1 } else { 0 }
+[GameFocus]::PostMessageW($hwnd, 0x001C, [IntPtr]$wparam, [IntPtr]::Zero) | Out-Null
+"posted WM_ACTIVATEAPP {0} to window 0x{1:x} of pid {2}" -f $wparam, $hwnd.ToInt64(), $ProcessId

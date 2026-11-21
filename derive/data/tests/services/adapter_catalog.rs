@@ -85,7 +85,9 @@ fn area_needs_are_marked_area() {
 
 #[test]
 fn window_needs_take_the_window_shape_and_need_no_entry() {
-    for id in ["window.read", "window.request_size", "window.pointer", "window.size", "window.cursor"] {
+    for id in
+        ["window.read", "window.request_size", "window.cursor_clip", "window.pointer", "window.size", "window.cursor"]
+    {
         let row = availability_of(&[], id);
         assert_eq!(row.shape, Some(AdapterCatalog::WINDOW_SHAPE), "{id}");
         assert!(row.missing.is_empty(), "{id}");
@@ -128,28 +130,160 @@ fn camera_and_dimension_rows_name_their_entries() {
     assert_eq!(dimension.missing, vec!["LevelRendererPlayer.onWillChangeDimension"]);
 }
 
+const ACTOR_V2: [&str; 9] = [
+    "Actor.isAlive",
+    "ClientInstance.getLocalPlayer",
+    "Actor.stateVectorComponent",
+    "StateVectorComponent.mPos",
+    "Actor.aabbShapeComponent",
+    "Actor.actorRotationComponent",
+    "ActorRotationComponent.mRot",
+    "Actor.getDimension",
+    "Dimension.getDimensionId",
+];
+
 #[test]
 fn the_actor_read_area_needs_the_alive_slot_the_local_player_and_the_v2_reads() {
-    let all = [
-        "Actor.isAlive",
-        "ClientInstance.getLocalPlayer",
-        "Actor.stateVectorComponent",
-        "StateVectorComponent.mPos",
-        "Actor.aabbShapeComponent",
-        "Actor.actorRotationComponent",
-        "ActorRotationComponent.mRot",
-        "Actor.getDimension",
-        "Dimension.getDimensionId",
-    ];
+    let mut all = ACTOR_V2.to_vec();
+    all.extend(["Actor.getAttachPos", "Dimension.getBlockSourceFromMainChunkSource"]);
     let row = availability_of(&all, "actor.read");
-    assert_eq!((row.kind, row.shape), (NeedKind::Area, Some("default")));
+    assert_eq!((row.kind, row.shape, row.version), (NeedKind::Area, Some("default"), 3));
     assert_eq!(availability_of(&all[1..], "actor.read").missing, ["Actor.isAlive"]);
-    assert_eq!(availability_of(&all[..2], "actor.read").missing.len(), 7);
+    assert_eq!(availability_of(&all[..2], "actor.read").missing.len(), 9);
+}
+
+#[test]
+fn actor_read_v3_needs_the_block_source_entries() {
+    let v2_only = availability_of(&ACTOR_V2, "actor.read");
+    assert_eq!(v2_only.shape, None);
+    assert_eq!(v2_only.missing, ["Actor.getAttachPos", "Dimension.getBlockSourceFromMainChunkSource"]);
+}
+
+#[test]
+fn actor_health_needs_the_attribute_read_and_the_entity_context() {
+    let row = availability_of(&["ActorAttribute.getHealth", "Actor.mEntityContext"], "actor.health");
+    assert_eq!((row.kind, row.shape), (NeedKind::Area, Some("default")));
+    assert_eq!(availability_of(&["ActorAttribute.getHealth"], "actor.health").missing, ["Actor.mEntityContext"]);
+}
+
+#[test]
+fn sky_darken_row_needs_its_field() {
+    let row = availability_of(&["Dimension.mSkyDarken", "Actor.getDimension"], "world.sky_darken");
+    assert_eq!((row.kind, row.shape), (NeedKind::Area, Some("default")));
+    assert_eq!(availability_of(&["Actor.getDimension"], "world.sky_darken").missing, ["Dimension.mSkyDarken"]);
+}
+
+#[test]
+fn chunk_read_row_needs_the_chunk_entries_and_the_block_source_chain() {
+    let all = entries_of("world.chunk_read");
+    assert!(all.contains(&"Dimension.getBlockSourceFromMainChunkSource"));
+    assert!(all.contains(&"Actor.getDimension"));
+    let row = AdapterCatalog::availability(&|name| all.contains(&name))
+        .into_iter()
+        .find(|row| row.id == "world.chunk_read")
+        .unwrap();
+    assert_eq!((row.kind, row.shape), (NeedKind::Area, Some("default")));
+    let without = AdapterCatalog::availability(&|name| name != "Block.mBlockType" && all.contains(&name))
+        .into_iter()
+        .find(|row| row.id == "world.chunk_read")
+        .unwrap();
+    assert_eq!(without.missing, ["Block.mBlockType"]);
+}
+
+#[test]
+fn map_color_row_has_one_shape_per_build_and_biomes_need_only_what_they_use() {
+    let component = entries_of("world.map_color");
+    let on_26_63 = AdapterCatalog::availability(&|name| name != "Block.getMapColor" && component.contains(&name))
+        .into_iter()
+        .find(|row| row.id == "world.map_color")
+        .unwrap();
+    let on_70_26 = AdapterCatalog::availability(&|name| {
+        name != "Block.tryGetComponent.BlockMapColorComponent" && component.contains(&name)
+    })
+    .into_iter()
+    .find(|row| row.id == "world.map_color")
+    .unwrap();
+    assert_eq!((on_26_63.shape, on_70_26.shape), (Some("component"), Some("block")));
+    let biomes = entries_of("world.biomes");
+    assert!(biomes.contains(&"HashedString.layout"));
+    for unused in ["Level.getBiomeRegistry", "BiomeRegistry.lookupById", "ClientInstance.getLevel"] {
+        assert!(!biomes.contains(&unused), "{unused}");
+    }
+    for shape in AdapterCatalog::needs().iter().find(|need| need.id == "world.map_color").unwrap().shapes {
+        assert!(shape.entries.contains(&"Block.mBlockType"), "{}", shape.name);
+    }
+}
+
+#[test]
+fn scan_surfaces_has_one_shape_per_build_and_needs_the_chunk_reads() {
+    let all = entries_of("world.scan_surfaces");
+    let row = |without: &str| {
+        AdapterCatalog::availability(&|name| name != without && all.contains(&name))
+            .into_iter()
+            .find(|row| row.id == "world.scan_surfaces")
+            .unwrap()
+    };
+    assert_eq!(row("Block.canProvideFullSupportWithFlag").shape, Some("support"));
+    assert_eq!(row("Block.canProvideFullSupport").shape, Some("support_flag"));
+    assert_eq!(row("LevelChunk.getBlock").shape, None);
+    for needed in ["BlockType.getCollisionShape", "BlockSource.getBrightnessPair", "Block.mBlockType"] {
+        assert_eq!(row(needed).shape, None, "{needed}");
+    }
+}
+
+#[test]
+fn block_changed_needs_the_listener_the_source_and_the_type_reads() {
+    let all = entries_of("world.block_changed");
+    let row = |without: &str| {
+        AdapterCatalog::availability(&|name| name != without && all.contains(&name))
+            .into_iter()
+            .find(|row| row.id == "world.block_changed")
+            .unwrap()
+    };
+    assert_eq!(availability_of(&all, "world.block_changed").shape, Some("default"));
+    for needed in [
+        "BlockSourceListener.vtable",
+        "BlockSourceListener.onSourceDestroyed",
+        "BlockSourceListener.onBlockChanged",
+        "BlockSource.addListener",
+        "BlockSource.removeListener",
+        "BlockSource.getDimensionId",
+        "Block.mBlockType",
+        "BlockType.mNameInfo.mFullName",
+        "HashedString.layout",
+        "Dimension.getBlockSourceFromMainChunkSource",
+    ] {
+        assert_eq!(row(needed).shape, None, "{needed}");
+    }
+}
+
+#[test]
+fn world_info_needs_the_getters_the_level_reads_and_the_storage_entries() {
+    let all = entries_of("client.world_info");
+    let row = |without: &str| {
+        AdapterCatalog::availability(&|name| name != without && all.contains(&name))
+            .into_iter()
+            .find(|row| row.id == "client.world_info")
+            .unwrap()
+    };
+    assert_eq!(availability_of(&all, "client.world_info").shape, Some("default"));
+    for needed in [
+        "ClientInstance.getGameConnectionInfo",
+        "GameConnectionInfo.size",
+        "GameConnectionInfo.dtor",
+        "Level.getLevelSeed64",
+        "LevelData.mLevelName",
+        "DBStorage.ctor",
+        "DBStorage.checkShutdownDone",
+        "DBStorage.mFullPath",
+    ] {
+        assert_eq!(row(needed).shape, None, "{needed}");
+    }
 }
 
 #[test]
 fn served_version_gives_the_catalog_version_or_none() {
-    assert_eq!(AdapterCatalog::served_version(NeedKind::Area, "actor.read"), Some(2));
+    assert_eq!(AdapterCatalog::served_version(NeedKind::Area, "actor.read"), Some(3));
     assert_eq!(AdapterCatalog::served_version(NeedKind::Event, "input.injected_released"), Some(2));
     assert_eq!(AdapterCatalog::served_version(NeedKind::Event, "actor.read"), None);
     assert_eq!(AdapterCatalog::served_version(NeedKind::Area, "no.such_area"), None);
@@ -500,4 +634,158 @@ fn the_textures_reloaded_event_needs_the_texture_entries_and_the_pack_hook() {
     );
     let without_group: Vec<&str> = all.iter().copied().filter(|name| *name != "TextureGroup.uploadTexture").collect();
     assert_eq!(availability_of(&without_group, "ui.textures_reloaded").missing, vec!["TextureGroup.uploadTexture"]);
+}
+
+#[test]
+fn the_world_rendered_event_needs_the_level_pass_and_the_graphics_mode_read() {
+    let all = ["LevelRenderer.renderLevel", "ClientInstance.getOptions", "IOptionRegistry.isGraphicsModeDeferred"];
+    let row = availability_of(&all, "render.world_rendered");
+    assert_eq!((row.kind, row.shape), (NeedKind::Event, Some("default")));
+    assert_eq!(availability_of(&all[..2], "render.world_rendered").missing, ["IOptionRegistry.isGraphicsModeDeferred"]);
+}
+
+#[test]
+fn the_world_canvas_area_needs_the_view_and_mesh_entries_but_not_render_mesh() {
+    let row_entries: Vec<&str> = AdapterCatalog::needs()
+        .iter()
+        .filter(|need| need.id == "render.world_canvas")
+        .flat_map(|need| need.shapes)
+        .flat_map(|shape| shape.entries)
+        .copied()
+        .collect();
+    let row = availability_of(&row_entries, "render.world_canvas");
+    assert_eq!((row.kind, row.shape, row.version), (NeedKind::Area, Some("default"), 2));
+    // `Mesh.renderMesh` fails on 70.26: the draw goes through the list overload only.
+    assert!(!row_entries.contains(&"Mesh.renderMesh"));
+    // The white texture of `draw` is a per-call need: the `ui.textures` entries are optional entries of the row.
+    let optional: Vec<&str> = AdapterCatalog::needs()
+        .iter()
+        .filter(|need| need.id == "render.world_canvas")
+        .flat_map(|need| need.shapes)
+        .flat_map(|shape| shape.optional)
+        .copied()
+        .collect();
+    let textures: Vec<&str> = AdapterCatalog::needs()
+        .iter()
+        .filter(|need| need.id == "ui.textures")
+        .flat_map(|need| need.shapes)
+        .flat_map(|shape| shape.entries)
+        .copied()
+        .collect();
+    assert_eq!(optional, textures);
+    for needed in [
+        "FrameRenderObject.mViews",
+        "ViewRenderObject.size",
+        "LevelRendererCamera.mCameraPos",
+        "Mesh.renderMeshTextureList",
+        "Tessellator.mTessellating",
+        "LevelRendererCamera.mWireframeMaterial",
+        "BaseActorRenderer.size",
+    ] {
+        let without: Vec<&str> = row_entries.iter().copied().filter(|name| *name != needed).collect();
+        assert_eq!(availability_of(&without, "render.world_canvas").missing, [needed]);
+    }
+}
+
+#[test]
+fn the_camera_rows_need_the_setup_hook_the_writes_and_the_anchor() {
+    let setup = availability_of(&["LevelRendererPlayer.setupCamera"], "camera.setup");
+    assert_eq!((setup.kind, setup.shape), (NeedKind::Event, Some("default")));
+    let pose = [
+        "LevelRendererPlayer.createViewRenderObject",
+        "LevelRendererCamera.preRenderUpdate",
+        "LevelRendererCamera.mCameraPos",
+        "LevelRendererCamera.mCameraTargetPos",
+        "Camera.mForward",
+        "Camera.updateViewMatrixDependencies",
+        "ViewRenderObject.mViewData",
+        "ViewRenderData.mCameraPos",
+    ];
+    let row = availability_of(&pose, "camera.pose");
+    assert_eq!((row.kind, row.shape, row.version), (NeedKind::Area, Some("default"), 1));
+    assert_eq!(availability_of(&pose[1..], "camera.pose").missing, ["LevelRendererPlayer.createViewRenderObject"]);
+    let projection = availability_of(&["Camera.mForward"], "camera.projection");
+    assert_eq!((projection.kind, projection.shape), (NeedKind::Area, Some("default")));
+}
+
+#[test]
+fn the_active_camera_row_has_one_shape_for_each_component_size_entry() {
+    let common = [
+        "ClientInstance.getCameraRegistry",
+        "CameraRegistry.mCameraEntities",
+        "CameraRegistry.cameraEntityStride",
+        "CameraComponent.typeId",
+        "ActiveCameraComponent.typeId",
+        "HashedString.layout",
+    ];
+    let with = |extra: &[&'static str]| -> Vec<&'static str> { common.iter().chain(extra).copied().collect() };
+
+    let factor = availability_of(&with(&["CameraComponent.sizeFactor", "CameraComponent.sizeShift"]), "camera.active");
+    assert_eq!((factor.kind, factor.shape, factor.version), (NeedKind::Area, Some("factor_shift"), 1));
+    let size = availability_of(&with(&["CameraComponent.size"]), "camera.active");
+    assert_eq!((size.kind, size.shape, size.version), (NeedKind::Area, Some("size"), 1));
+
+    let neither = availability_of(&common, "camera.active");
+    assert_eq!(neither.shape, None);
+    assert_eq!(neither.missing, ["CameraComponent.sizeFactor", "CameraComponent.sizeShift"]);
+    let half = availability_of(&with(&["CameraComponent.sizeFactor"]), "camera.active");
+    assert_eq!(half.missing, ["CameraComponent.sizeShift"]);
+    for needed in common {
+        let without: Vec<&str> = with(&["CameraComponent.size"]).into_iter().filter(|name| *name != needed).collect();
+        assert_eq!(availability_of(&without, "camera.active").shape, None, "{needed}");
+    }
+}
+
+#[test]
+fn the_free_camera_rows_need_the_handler_slots_the_packet_and_the_presets() {
+    let free = entries_of("camera.free");
+    assert_eq!(free.len(), 13);
+    for needed in [
+        "ClientNetworkHandler.handle.CameraInstructionPacket",
+        "ClientNetworkHandler.handle.NetworkChunkPublisherUpdatePacket",
+        "MinecraftPackets.createPacket",
+        "Level.getCameraPresets",
+        "CameraPreset.size",
+        "Actor.mLevel",
+        "ClientExitLevel.hook",
+        "ClientInstance.onStartJoinGame",
+        AdapterCatalog::CLIENT_INSTANCE_VTABLE,
+    ] {
+        assert!(free.contains(&needed), "{needed}");
+        let without: Vec<&str> = free.iter().copied().filter(|name| *name != needed).collect();
+        assert_eq!(availability_of(&without, "camera.free").missing, [needed]);
+    }
+    let row = availability_of(&free, "camera.free");
+    assert_eq!((row.kind, row.shape, row.version), (NeedKind::Area, Some("default"), 1));
+
+    let received = entries_of("camera.instruction_received");
+    let event = availability_of(&received, "camera.instruction_received");
+    assert_eq!((event.kind, event.shape), (NeedKind::Event, Some("default")));
+    assert!(!received.contains(&"MinecraftPackets.createPacket"));
+    assert!(received.contains(&"CameraInstruction.mSpline"));
+}
+
+#[test]
+fn the_shapes_row_needs_the_capture_the_session_clearing_the_shapes_slot_and_the_payload() {
+    let shapes = entries_of("world.shapes");
+    for needed in [
+        "LegacyClientNetworkHandler.vtable",
+        "ClientNetworkHandler.handle.CameraInstructionPacket",
+        "ClientNetworkHandler.handle.NetworkChunkPublisherUpdatePacket",
+        "ClientNetworkHandler.handle.PrimitiveShapesPacket",
+        "MinecraftPackets.createPacket",
+        "PrimitiveShapesPacket.mShapes",
+        "PrimitiveShapeDataPayload.size",
+        "core.operator_new",
+        "core.operator_delete",
+        "ClientExitLevel.hook",
+        "ClientInstance.onStartJoinGame",
+        AdapterCatalog::CLIENT_INSTANCE_VTABLE,
+    ] {
+        assert!(shapes.contains(&needed), "{needed}");
+        let without: Vec<&str> = shapes.iter().copied().filter(|name| *name != needed).collect();
+        assert_eq!(availability_of(&without, "world.shapes").missing, [needed]);
+    }
+    let row = availability_of(&shapes, "world.shapes");
+    assert_eq!((row.kind, row.shape, row.version), (NeedKind::Area, Some("default"), 1));
 }

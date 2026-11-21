@@ -1,6 +1,7 @@
 use crate::{
-    AmmlActorTable, AmmlClientTable, AmmlCoreTable, AmmlEventsTable, AmmlInputTable, AmmlInventoryTable,
-    AmmlLightingTable, AmmlNetworkTable, AmmlOverlayTable, AmmlRegistryTable, AmmlUiTable, AmmlWindowTable,
+    AmmlActorTable, AmmlCameraTable, AmmlClientTable, AmmlCoreTable, AmmlEventsTable, AmmlInputTable,
+    AmmlInventoryTable, AmmlLightingTable, AmmlNetworkTable, AmmlOverlayTable, AmmlRegistryTable, AmmlRenderTable,
+    AmmlUiTable, AmmlWindowTable, AmmlWorldTable,
 };
 
 /// The service tables of API v3, reached through `AmmlApi::services`.
@@ -25,6 +26,9 @@ pub struct AmmlServices {
     pub lighting: *const AmmlLightingTable,
     pub ui: *const AmmlUiTable,
     pub network: *const AmmlNetworkTable,
+    pub world: *const AmmlWorldTable,
+    pub render: *const AmmlRenderTable,
+    pub camera: *const AmmlCameraTable,
 }
 
 impl AmmlServices {
@@ -53,6 +57,15 @@ impl AmmlServices {
     /// `size` of a v8 services table: v7 plus the `network` table. Its `version` is 8. A reader still judges the
     /// table by `size`, never by `version`.
     pub const SIZE_V8: u32 = 104;
+    /// `size` of a v9 services table: v8 plus the `world` table. Its `version` is 9. A reader still judges the
+    /// table by `size`, never by `version`.
+    pub const SIZE_V9: u32 = 112;
+    /// `size` of a v10 services table: v9 plus the `render` table. Its `version` is 10. A reader still judges the
+    /// table by `size`, never by `version`.
+    pub const SIZE_V10: u32 = 120;
+    /// `size` of a v11 services table: v10 plus the `camera` table. Its `version` is 11. A reader still judges the
+    /// table by `size`, never by `version`.
+    pub const SIZE_V11: u32 = 128;
 
     /// The client table of `services`, when `size` covers it, the pointer is not null and the table's
     /// own `size` covers its v1 functions. Reads only the fields `size` covers.
@@ -173,6 +186,45 @@ impl AmmlServices {
         unsafe { Self::area(services, Self::SIZE_V8, AmmlNetworkTable::SIZE_V1, read) }
     }
 
+    /// The world table of `services`, under the same rules as `client`; it needs a v9 `size`.
+    ///
+    /// # Safety
+    ///
+    /// As for `client`, for the `world` table.
+    #[allow(unsafe_code)]
+    pub unsafe fn world(services: *const AmmlServices) -> Option<*const AmmlWorldTable> {
+        // SAFETY: `area` calls this only when `size` covers the `world` field.
+        let read = |services: *const AmmlServices| unsafe { (&raw const (*services).world).read() };
+        // SAFETY: the caller's guarantee is passed on; `read` runs only when `size` covers v9.
+        unsafe { Self::area(services, Self::SIZE_V9, AmmlWorldTable::SIZE_V1, read) }
+    }
+
+    /// The render table of `services`, under the same rules as `client`; it needs a v10 `size`.
+    ///
+    /// # Safety
+    ///
+    /// As for `client`, for the `render` table.
+    #[allow(unsafe_code)]
+    pub unsafe fn render(services: *const AmmlServices) -> Option<*const AmmlRenderTable> {
+        // SAFETY: `area` calls this only when `size` covers the `render` field.
+        let read = |services: *const AmmlServices| unsafe { (&raw const (*services).render).read() };
+        // SAFETY: the caller's guarantee is passed on; `read` runs only when `size` covers v10.
+        unsafe { Self::area(services, Self::SIZE_V10, AmmlRenderTable::SIZE_V1, read) }
+    }
+
+    /// The camera table of `services`, under the same rules as `client`; it needs a v11 `size`.
+    ///
+    /// # Safety
+    ///
+    /// As for `client`, for the `camera` table.
+    #[allow(unsafe_code)]
+    pub unsafe fn camera(services: *const AmmlServices) -> Option<*const AmmlCameraTable> {
+        // SAFETY: `area` calls this only when `size` covers the `camera` field.
+        let read = |services: *const AmmlServices| unsafe { (&raw const (*services).camera).read() };
+        // SAFETY: the caller's guarantee is passed on; `read` runs only when `size` covers v11.
+        unsafe { Self::area(services, Self::SIZE_V11, AmmlCameraTable::SIZE_V1, read) }
+    }
+
     // The area table that `read` gives, when `size` is at least `needed`, the pointer is not null and the
     // table's own `size` is at least `table_size`.
     //
@@ -202,4 +254,4 @@ impl AmmlServices {
     }
 }
 
-const _: () = assert!(core::mem::size_of::<AmmlServices>() == AmmlServices::SIZE_V8 as usize);
+const _: () = assert!(core::mem::size_of::<AmmlServices>() == AmmlServices::SIZE_V11 as usize);

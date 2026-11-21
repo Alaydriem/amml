@@ -8,6 +8,12 @@ pub struct BlockPos {
     pub z: i32,
 }
 
+impl From<BlockPos> for AmmlBlockPos {
+    fn from(pos: BlockPos) -> Self {
+        Self { x: pos.x, y: pos.y, z: pos.z }
+    }
+}
+
 impl From<AmmlBlockPos> for BlockPos {
     fn from(pos: AmmlBlockPos) -> Self {
         Self { x: pos.x, y: pos.y, z: pos.z }

@@ -1,9 +1,9 @@
 use std::ffi::c_void;
 use std::marker::PhantomData;
 
-use amml_abi::{AmmlActorTable, AmmlInventoryTable, AmmlRotation, AmmlVec3};
+use amml_abi::{AmmlActorTable, AmmlInventoryTable, AmmlRotation, AmmlVec3, AmmlWorldTable};
 
-use crate::{Dimension, Hand, Inventory, ItemView, Rotation, Vec3};
+use crate::{BlockSource, Dimension, Hand, Inventory, ItemView, Rotation, Vec3};
 
 /// The local player of a `Client`, as an opaque handle. Two values are equal when they name the same
 /// player. It lives no longer than the event that gave its client.
@@ -15,6 +15,7 @@ pub struct LocalPlayer<'f> {
     handle: *const c_void,
     actor: Option<AmmlActorTable>,
     inventory: Option<AmmlInventoryTable>,
+    world: Option<AmmlWorldTable>,
     module: &'static str,
     _event: PhantomData<&'f ()>,
 }
@@ -24,9 +25,10 @@ impl<'f> LocalPlayer<'f> {
         handle: *const c_void,
         actor: Option<AmmlActorTable>,
         inventory: Option<AmmlInventoryTable>,
+        world: Option<AmmlWorldTable>,
         module: &'static str,
     ) -> Self {
-        Self { handle, actor, inventory, module, _event: PhantomData }
+        Self { handle, actor, inventory, world, module, _event: PhantomData }
     }
 
     /// The stack in `hand`; `None` for an empty hand, a refused read, or a loader without the inventory table.
@@ -97,7 +99,40 @@ impl<'f> LocalPlayer<'f> {
         // SAFETY: the loader checks the handle before it reads game memory, and `out` is a live local.
         #[allow(unsafe_code)]
         let status = unsafe { read(self.handle, &mut out) };
-        (status.is_ok() && !out.is_null()).then(|| Dimension::new(out, actor))
+        (status.is_ok() && !out.is_null()).then(|| Dimension::new(out, actor, self.world))
+    }
+
+    /// The position of the player's head, as the game's own head attach point (the eyes of the model, not the camera).
+    /// Area `actor.read` version 3 (`Area::ACTOR_READ.at(3)`).
+    pub fn head_position(&self) -> Option<Vec3> {
+        let read = self.actor?.head_position?;
+        let mut out = AmmlVec3::default();
+        // SAFETY: the loader checks the handle before it reads game memory, and `out` is a live local.
+        #[allow(unsafe_code)]
+        let status = unsafe { read(self.handle, &mut out) };
+        status.is_ok().then(|| Vec3::from(out))
+    }
+
+    /// The block source of the dimension the player is in. Area `actor.read` version 3. The handle is valid in the
+    /// game frame of the call: a later frame, another dimension or another world gives a refusal on every use.
+    pub fn block_source(&self) -> Option<BlockSource<'f>> {
+        let read = self.actor?.block_source?;
+        let mut out: *const c_void = std::ptr::null();
+        // SAFETY: the loader checks the handle before it reads game memory, and `out` is a live local.
+        #[allow(unsafe_code)]
+        let status = unsafe { read(self.handle, &mut out) };
+        (status.is_ok() && !out.is_null()).then(|| BlockSource::new(out, self.world))
+    }
+
+    /// The health of the player, in half hearts as the game counts them. Area `actor.health`
+    /// (`Area::ACTOR_HEALTH`).
+    pub fn health(&self) -> Option<i32> {
+        let read = self.actor?.health?;
+        let mut out = 0i32;
+        // SAFETY: the loader checks the handle before it reads game memory, and `out` is a live local.
+        #[allow(unsafe_code)]
+        let status = unsafe { read(self.handle, &mut out) };
+        status.is_ok().then_some(out)
     }
 }
 

@@ -25,3 +25,17 @@ impl From<AmmlFace> for Face {
         }
     }
 }
+
+impl From<Face> for AmmlFace {
+    fn from(face: Face) -> Self {
+        match face {
+            Face::Down => Self::DOWN,
+            Face::Up => Self::UP,
+            Face::North => Self::NORTH,
+            Face::South => Self::SOUTH,
+            Face::West => Self::WEST,
+            Face::East => Self::EAST,
+            Face::Other(other) => Self(other),
+        }
+    }
+}

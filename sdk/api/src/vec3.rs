@@ -8,6 +8,12 @@ pub struct Vec3 {
     pub z: f32,
 }
 
+impl From<Vec3> for AmmlVec3 {
+    fn from(value: Vec3) -> Self {
+        Self { x: value.x, y: value.y, z: value.z }
+    }
+}
+
 impl From<AmmlVec3> for Vec3 {
     fn from(value: AmmlVec3) -> Self {
         Self { x: value.x, y: value.y, z: value.z }

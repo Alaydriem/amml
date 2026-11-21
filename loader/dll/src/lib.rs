@@ -5,6 +5,7 @@ pub mod area_book;
 pub mod block_handles;
 pub mod boundary;
 pub mod callback;
+pub mod camera_table;
 pub mod client_table;
 pub mod current_mod;
 pub mod deferred_disable;
@@ -58,6 +59,7 @@ pub mod overlay;
 pub mod overlay_table;
 pub mod owner_event;
 pub mod owner_events;
+pub mod render_table;
 pub mod services_table;
 pub mod settings_error;
 pub mod shutdown_latch;
@@ -74,32 +76,48 @@ pub mod use_row;
 pub mod version_label;
 pub mod window;
 pub mod window_table;
+pub mod world_table;
 
 pub use actor_table::ActorTable;
 pub use adapters::{
-    ActorAdapter, CharWidthDetours, ChatAdapter, ChatDetours, ChatEvent, ChatScope, ClientAdapter, ClientDetours,
-    ContainerAdapter, ContainerCalls, ContainerSlotData, ContainerTransferAmount, ContentsEntry, ContentsList,
-    CoordinatorWalk, DispatchFinish, DrawBatch, DrawCalls, EightArgMouseFeed, EmitterPush, FontFrame, GameAnswers,
-    GameRequestPort, GamepadAdapter, GuiMessageLayout, HashedStringLayout30, HashedStringLayout38, HidKeyFeed,
-    HovertextDetours, HudAdapter, HudDetours, ImageDescriptionLayout, InlineIconAdapter, InputAdapter,
-    InventoryAdapter, InventoryLayout, ItemDrawAdapter, ItemDrawCalls, ItemDrawFrame, JoinBook, KeyDetours, KeyFeed,
-    LeaveHold, LevelRendererAdapter, LevelRendererDetours, LightingAdapter, LightingDetours, LocatorBarAdapter,
-    LocatorBarDetours, LocatorBarLayout, LocatorIconCall, LookAdapter, LookMoveDetours, MceImageLayout, MouseDetours,
-    MouseFeed, MoveAdapter, MoveLayout, NameReader, NetworkAdapter, NetworkEvent, NetworkEventKind, NetworkListLayout,
-    NetworkScope, NonOwnerPointerLayout, ObjectRead, PacketDetours, PacketIo, PacketLayout, PathViewLayout,
-    PauseOption, PlayerActionAdapter, PlayerActionDetours, ProcessorKeyFeed, RealKeyPath, RealMousePath,
-    RequestAdapter, RequestCalls, RequestPort, RouterAdapter, RouterDetours, ScreenAdapter, ScreenControllerDetours,
-    ScreenDetours, ScreenLayout, ScreenNames, SessionActions, SessionAdapter, SessionDetours, SessionHook,
-    SevenArgMouseFeed, SkinAnimatedLayout, SkinDetailsLayout, SkinGeometryLayout, SkinPacketLayout, SkinReader,
-    StringViewLayout, TagReader, TagVariantLayout, TextAdapter, TextCalls, TextureAdapter, TextureCalls,
-    TexturePtrLayout, TexturePump, TextureReloadAdapter, TextureReloadDetours, ThreadNote, TurnFeed, UiDrawAdapter,
-    UiFlags, UiInputAdapter, UiInputDetours, UiInputLayout, UiTreeWalk,
+    AabbShapeLayout, ActiveCameraAdapter, ActorAdapter, ActorsInAdapter, ArrowDataLayout, BaseActorRendererLayout,
+    BiomeReader, BlockListener, BlockListenerAttach, BlockListenerDetours, BlockListenerObject, BlockTypeReader,
+    CameraAdapter, CameraDetours, CameraEntityLayout, CameraInstructionLayout, CameraLayout, CameraLayoutError,
+    CameraPresetLayout, CameraPresetsLayout, CameraProjection, CameraRegistryHold, CameraWriter, CharWidthDetours,
+    ChatAdapter, ChatDetours, ChatEvent, ChatScope, ChunkAdapter, ChunkBlockPos, ChunkLayout2651, ChunkLayout2660,
+    ChunkLayoutKind, ChunkOffsets, ClientAdapter, ClientDetours, ColumnExtras, ContainerAdapter, ContainerCalls,
+    ContainerSlotData, ContainerTransferAmount, ContentsEntry, ContentsList, CoordinatorWalk, CursorClipAdapter,
+    DispatchFinish, DrawBatch, DrawCalls, EightArgMouseFeed, EmitterPush, EnttLookup, EnttPoolNodeLayout,
+    EnttRegistryLayout, EnttStorageLayout, FontFrame, FreeCameraAdapter, FreeCameraCalls, FreeCameraHeld, GameAnswers,
+    GameConnectionInfoLayout, GameConnectionInfoLayout2663, GameConnectionInfoLayout2670, GameConnectionRead,
+    GameRequestPort, GameVector, GamepadAdapter, GuiMessageLayout, HandleStamp, HandlerDetours, HashedStringLayout30,
+    HashedStringLayout38, HidKeyFeed, HitResultLayout, HovertextDetours, HudAdapter, HudDetours,
+    ImageDescriptionLayout, InlineIconAdapter, InputAdapter, InventoryAdapter, InventoryLayout, ItemDrawAdapter,
+    ItemDrawCalls, ItemDrawFrame, JoinBook, KeyDetours, KeyFeed, LeaveHold, LevelRendererAdapter, LevelRendererDetours,
+    LightingAdapter, LightingDetours, LocatorBarAdapter, LocatorBarDetours, LocatorBarLayout, LocatorIconCall,
+    LookAdapter, LookMoveDetours, MapColorAdapter, MapColorComponentLayout, MapColorShape, MatrixStackLayout,
+    MatrixStackRefLayout, MceColor, MceImageLayout, MeshBuilder, MeshCalls, MeshContextLayout, MeshDataLayout,
+    MeshDrawAdapter, MeshLayout, MeshLayoutError, MeshParts, MouseDetours, MouseFeed, MoveAdapter, MoveLayout,
+    NameReader, NameTagMaterial, NetworkAdapter, NetworkEvent, NetworkEventKind, NetworkIdentifierBuffer,
+    NetworkListLayout, NetworkScope, NonOwnerPointerLayout, ObjectRead, PacketDetours, PacketFactory, PacketIo,
+    PacketLayout, PathViewLayout, PauseOption, PlayerActionAdapter, PlayerActionDetours, PrimitiveShapeLayout,
+    ProcessorKeyFeed, RaycastAdapter, RealKeyPath, RealMousePath, RenderCall, RenderLevelDetours, RequestAdapter,
+    RequestCalls, RequestPort, RouterAdapter, RouterDetours, ScreenAdapter, ScreenControllerDetours, ScreenDetours,
+    ScreenLayout, ScreenNames, SessionActions, SessionAdapter, SessionDetours, SessionHook, SetInstructionLayout,
+    SevenArgMouseFeed, ShaderColorLayout, ShapeCalls, ShapesAdapter, ShapesHeld, SkinAnimatedLayout, SkinDetailsLayout,
+    SkinGeometryLayout, SkinPacketLayout, SkinReader, StorageDetours, StorageReadGuard, StringViewLayout,
+    SubChunkLayout, SurfaceAdapter, SurfaceReader, SurfaceShape, TagReader, TagVariantLayout, TessellatorLayout,
+    TextAdapter, TextCalls, TextureAdapter, TextureCalls, TextureListLayout, TexturePtrLayout, TexturePump,
+    TextureReloadAdapter, TextureReloadDetours, ThreadNote, TurnFeed, UiDrawAdapter, UiFlags, UiInputAdapter,
+    UiInputDetours, UiInputLayout, UiTreeWalk, ViewCameraReader, ViewRenderDataLayout, WorldAdapter, WorldBlockPos,
+    WorldInfoAdapter, WorldMaterial, WorldRenderAdapter,
 };
 pub use api_table::ApiTable;
 pub use area_book::AreaBook;
 pub use block_handles::BlockHandles;
 pub use boundary::Boundary;
 pub use callback::Callback;
+pub use camera_table::CameraTable;
 pub use client_table::ClientTable;
 pub use current_mod::CurrentMod;
 pub use deferred_disable::DeferredDisable;
@@ -153,6 +171,7 @@ pub use overlay::{
 pub use overlay_table::OverlayTable;
 pub use owner_event::OwnerEvent;
 pub use owner_events::OwnerEvents;
+pub use render_table::RenderTable;
 pub use services_table::ServicesTable;
 pub use settings_error::SettingsError;
 pub use shutdown_latch::ShutdownLatch;
@@ -169,3 +188,4 @@ pub use window::{
     WindowProcDepth, WindowService,
 };
 pub use window_table::WindowTable;
+pub use world_table::WorldTable;

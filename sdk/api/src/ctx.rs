@@ -7,8 +7,8 @@ use crate::area_tables::AreaTables;
 use crate::client_tables::ClientTables;
 use crate::lent_tables::LentTables;
 use crate::{
-    ApiError, Area, Chat, Dirs, DisableCtx, Event, Events, Input, Lighting, Logger, Overlay, Registry, Textures, Uses,
-    Window,
+    ApiError, Area, Biomes, Blocks, CameraControl, Chat, Dirs, DisableCtx, Event, Events, Input, Lighting, Logger,
+    Overlay, Registry, Textures, Uses, Window, WorldShapes,
 };
 
 /// The checked v3 loader tables of one mod: a cheap `Copy` view that holds function pointers, the
@@ -121,6 +121,8 @@ impl Ctx {
             ui: self.areas.ui,
             inventory: self.areas.inventory,
             network: self.areas.network,
+            render: self.areas.render,
+            camera: self.areas.camera,
         };
         Events::new(self.listen, self.unlisten, self.uses, self.log(), self.client_tables(), lent, self.module)
     }
@@ -168,6 +170,28 @@ impl Ctx {
         Chat::new(self.areas.ui, self.module)
     }
 
+    /// The client's free camera (`Area::CAMERA_FREE`). Without a camera table, or with a v1 one, every call gives
+    /// `NotAvailable` or `None`.
+    pub fn camera(&self) -> CameraControl {
+        CameraControl::new(self.areas.camera, self.module)
+    }
+
+    /// Lines, boxes and arrows in the world (`Area::WORLD_SHAPES`). Without a world table, or with one older than v5,
+    /// every call gives `NotAvailable`, `0` or `None`.
+    pub fn world_shapes(&self) -> WorldShapes {
+        WorldShapes::new(self.areas.world, self.module)
+    }
+
+    /// The block types of the game: names for the ids of `ColumnSample`. Without a world table every call gives `None`.
+    pub fn blocks(&self) -> Blocks {
+        Blocks::new(self.areas.world)
+    }
+
+    /// The biomes of the game: names for the ids of `ColumnSample`. Without a world table every call gives `None`.
+    pub fn biomes(&self) -> Biomes {
+        Biomes::new(self.areas.world)
+    }
+
     /// Whether the loader serves `area` at `area.version` now: the table of the area is there and the
     /// loader's area book offers it. Asks the loader on every call, so it follows the book, also when
     /// the loader withdraws an area after a later check.
@@ -192,6 +216,7 @@ impl Ctx {
             client,
             actor: self.areas.actor,
             inventory: self.areas.inventory,
+            world: self.areas.world,
         })
     }
 

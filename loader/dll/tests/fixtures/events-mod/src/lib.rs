@@ -245,6 +245,24 @@ pub unsafe extern "C" fn amml_mod_load(api: *const AmmlApi, info: *mut AmmlModIn
             required: 0,
         });
     }
+    if cfg!(feature = "free-camera") {
+        rows.push(AmmlUseRow {
+            feature: AmmlStr::from_str("freecam"),
+            kind: AmmlUseRow::KIND_AREA,
+            name: AmmlStr::from_str("camera.free"),
+            version: 1,
+            required: 0,
+        });
+    }
+    if cfg!(feature = "world-shapes") {
+        rows.push(AmmlUseRow {
+            feature: AmmlStr::from_str("markers"),
+            kind: AmmlUseRow::KIND_AREA,
+            name: AmmlStr::from_str("world.shapes"),
+            version: 1,
+            required: 0,
+        });
+    }
     let rows: &'static [AmmlUseRow] = Box::leak(rows.into_boxed_slice());
     let uses: &'static AmmlUses =
         Box::leak(Box::new(AmmlUses { size: AmmlUses::SIZE_V1, version: 1, rows: rows.as_ptr(), count: rows.len() }));

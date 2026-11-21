@@ -5,8 +5,9 @@ use std::time::{Duration, Instant};
 
 use amml::{LoaderState, ModListener, ModLoader, ModPhase, SessionAdapter, SizeMessage, WindowProc};
 use amml_abi::{
-    AmmlApi, AmmlBand, AmmlCursorShape, AmmlEventContext, AmmlEventHeader, AmmlPointerKind, AmmlServices, AmmlSize,
-    AmmlStatus, AmmlStr, AmmlThread, AmmlWindowTable, WindowChar, WindowCursor, WindowFocus, WindowPointer, WindowSize,
+    AmmlApi, AmmlBand, AmmlCursorClip, AmmlCursorShape, AmmlEventContext, AmmlEventHeader, AmmlPointerKind,
+    AmmlServices, AmmlSize, AmmlStatus, AmmlStr, AmmlThread, AmmlWindowTable, WindowChar, WindowCursor, WindowFocus,
+    WindowPointer, WindowSize,
 };
 use amml_runtime::ModRegistry;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
@@ -769,4 +770,46 @@ fn a_destroyed_window_is_forgotten_at_nc_destroy() {
     let other = TestWindow::new(640, 480);
     assert!(harness.state.window().attach(other.address()));
     assert_eq!(procedure_of(&other), WindowProc::address());
+}
+
+#[test]
+fn a_clip_request_after_the_owner_was_ended_is_refused() {
+    let (harness, _window) = start();
+    let window = harness.state.window();
+
+    assert_eq!(window.clip_cursor(0, Some(amml_runtime::ClipKind::Centre), || false), Err(AmmlStatus::REFUSED));
+    assert_eq!(window.clip_cursor(0, Some(amml_runtime::ClipKind::Centre), || true), Ok(()));
+    window.end_owner(0);
+    assert_eq!(window.clip_cursor(0, None, || false), Ok(()), "dropping a request needs no live mod");
+}
+
+#[test]
+fn a_disabled_mod_gets_no_clip_from_the_table() {
+    let plain = EchoMod::build("plain", &[]);
+    let (harness, _window) = start();
+    harness.install_mod("echo", "echo", &plain, "echo.dll", 2);
+    let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
+    let loader = ModLoader::new(harness.state);
+    assert!(loader.load_all(&scan.mods).iter().all(|report| report.is_ok()));
+    assert!(loader.enable_all().iter().all(|report| report.is_ok()));
+    let clip_cursor = window_table(&harness).clip_cursor.unwrap();
+    let module = AmmlStr::from_str("@echo/echo");
+
+    // SAFETY: the module view lives for the call.
+    assert_eq!(unsafe { clip_cursor(module, AmmlCursorClip::CENTRE) }, AmmlStatus::OK);
+    loader.disable_one(0);
+    // SAFETY: as above.
+    assert_eq!(unsafe { clip_cursor(module, AmmlCursorClip::CENTRE) }, AmmlStatus::REFUSED);
+}
+
+#[test]
+fn an_unknown_clip_value_is_an_invalid_argument() {
+    let (harness, _window) = start();
+    let clip_cursor = window_table(&harness).clip_cursor.unwrap();
+
+    // SAFETY: the module view lives for the call.
+    assert_eq!(
+        unsafe { clip_cursor(AmmlStr::from_str("@echo/echo"), AmmlCursorClip(9)) },
+        AmmlStatus::INVALID_ARGUMENT
+    );
 }

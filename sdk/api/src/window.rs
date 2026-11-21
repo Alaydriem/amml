@@ -1,6 +1,6 @@
-use amml_abi::{AmmlPoint, AmmlSize, AmmlStatus, AmmlStr, AmmlWindowTable};
+use amml_abi::{AmmlCursorClip, AmmlPoint, AmmlSize, AmmlStatus, AmmlStr, AmmlWindowTable};
 
-use crate::{ApiError, Point, Size};
+use crate::{ApiError, CursorClip, Point, Size};
 
 /// The game window, through the loader's window table. Usable from any thread.
 ///
@@ -126,6 +126,21 @@ impl Window {
         // SAFETY: the loader's function takes no arguments.
         #[allow(unsafe_code)]
         let status = unsafe { (table.replay_focus_loss)() };
+        ApiError::check(status)
+    }
+
+    /// Clips the system cursor for this mod: `Some` makes this mod's request the last one, `None` drops it. The
+    /// loader holds the clip only while the game window is in front and not minimised: a loss of the focus gives
+    /// the clip back and keeps the request, and a gain, a size or a move sets it again at the new place. The
+    /// clip ends when the mod is disabled, at shutdown and with the window. When two mods ask, the last request
+    /// wins and the other comes back when it drops. Without the area `window.cursor_clip` (or a loader that has
+    /// no such function), `NotAvailable`; before the window is attached, `NotReady`.
+    pub fn clip_cursor(&self, clip: Option<CursorClip>) -> Result<(), ApiError> {
+        let function = self.table.and_then(|table| table.clip_cursor).ok_or(ApiError::NotAvailable)?;
+        let clip = clip.map_or(AmmlCursorClip::NONE, AmmlCursorClip::from);
+        // SAFETY: the module id lives for the call.
+        #[allow(unsafe_code)]
+        let status = unsafe { function(AmmlStr::from_str(self.module), clip) };
         ApiError::check(status)
     }
 

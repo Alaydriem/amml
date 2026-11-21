@@ -6,7 +6,9 @@ use amml_abi::{AmmlLightSource, AmmlStatus};
 use amml_data::{AdapterCatalog, Availability, EntryId, NeedKind};
 use amml_runtime::{EmitterEntry, LightBook, LightCell, LightChange, LightPoint, LightRefusal, VvPlan};
 
-use crate::{BlockHandles, CoordinatorWalk, EmitterPush, LightingDetours, LoaderState, SessionHook};
+use crate::{
+    BlockHandles, CoordinatorWalk, EmitterPush, LightingDetours, LoaderState, RenderLevelDetours, SessionHook,
+};
 
 static ADAPTER: OnceLock<LightingAdapter> = OnceLock::new();
 
@@ -46,7 +48,7 @@ impl LightingAdapter {
             AdapterCatalog::availability(&resolved).into_iter().filter(Self::is_own_row).collect();
         let shape_of = |rows: &[Availability], id: &str| rows.iter().find(|row| row.id == id).and_then(|row| row.shape);
         let install = |hook: &SessionHook| hook.install(state, Self::PRIORITY);
-        let terrain = shape_of(&rows, Self::TERRAIN).is_some() && LightingDetours::terrain_hooks().iter().all(install);
+        let terrain = shape_of(&rows, Self::TERRAIN).is_some() && Self::install_terrain_hooks(state, &install);
         let walk = terrain.then(|| CoordinatorWalk::new(state)).flatten();
         let terrain = terrain && walk.is_some();
         let entity = terrain && shape_of(&rows, Self::ENTITY).is_some() && install(&LightingDetours::entity_hook());
@@ -102,6 +104,16 @@ impl LightingAdapter {
             Some(adapter) => body(adapter),
             None => fallback,
         }
+    }
+
+    // The terrain light getter, the shared `renderLevel` detour (which then runs the lighting rebuild) and
+    // `propagateForMesh`, in this order; the first refusal stops the chain.
+    fn install_terrain_hooks(state: &'static LoaderState, install: &impl Fn(&SessionHook) -> bool) -> bool {
+        if !install(&LightingDetours::terrain_light_hook()) || !RenderLevelDetours::install(state) {
+            return false;
+        }
+        RenderLevelDetours::set(RenderLevelDetours::LIGHTING, true);
+        install(&LightingDetours::propagate_hook())
     }
 
     fn is_own_row(row: &Availability) -> bool {

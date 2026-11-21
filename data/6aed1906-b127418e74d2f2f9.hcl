@@ -404,6 +404,13 @@ resolved "BlockSource.fetchEntities" {
   fingerprint = "47d5cac7bdfc8431"
 }
 
+resolved "BlockSource.fetchEntitiesSpanOrder" {
+  kind        = "field"
+  value       = "0x0"
+  recipes     = 1
+  fingerprint = "fbb6035274fb4588"
+}
+
 resolved "BlockSource.getBlock" {
   kind        = "function"
   value       = "0x32ce100"
@@ -3398,6 +3405,13 @@ resolved "ViewRenderObject.mViewData" {
   value       = "0x0"
   recipes     = 2
   fingerprint = "f31a3f47c6388c74"
+}
+
+resolved "ViewRenderObject.size" {
+  kind        = "field"
+  value       = "0x32e0"
+  recipes     = 1
+  fingerprint = "510ed94e0e2d8dad"
 }
 
 resolved "VisualTree.mRootControl" {

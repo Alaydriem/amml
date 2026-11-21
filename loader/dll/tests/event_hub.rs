@@ -4,12 +4,13 @@ use std::sync::Mutex;
 
 use amml::{EventHub, ModListener};
 use amml_abi::{
-    AmmlBand, AmmlEvent, AmmlEventContext, AmmlEventHeader, AmmlOrigin, AmmlPhase, AmmlStatus, CameraFov, ClientTick,
-    DimensionChanging, FramePresent, FramePresented, FrameUpdate, GameTick, GamepadPoll, InjectedInputReleased,
-    InputLeaseLost, InputLeaseResumed, InputLeaseSuspended, JoinServerResult, JoinStarted, KeyInput, LookDelta,
-    ModsLoaded, MouseGrab, MouseInput, PlayerMoveInput, ProviderGone, ProviderReady, RenderDeviceReset,
-    ScreenshotTaken, ScreenshotWritten, Shutdown, SurfaceLost, SwapChainResize, SwapChainResized, WindowChanged,
-    WindowChar, WindowCursor, WindowFocus, WindowPointer, WindowSize, WorldJoined, WorldLeft,
+    AmmlBand, AmmlEvent, AmmlEventContext, AmmlEventHeader, AmmlOrigin, AmmlPhase, AmmlStatus, CameraFov,
+    CameraInstructionReceived, CameraSetup, ClientTick, DimensionChanging, FramePresent, FramePresented, FrameUpdate,
+    GameTick, GamepadPoll, InjectedInputReleased, InputLeaseLost, InputLeaseResumed, InputLeaseSuspended,
+    JoinServerResult, JoinStarted, KeyInput, LookDelta, ModsLoaded, MouseGrab, MouseInput, PlayerMoveInput,
+    ProviderGone, ProviderReady, RenderDeviceReset, ScreenshotTaken, ScreenshotWritten, Shutdown, SurfaceLost,
+    SwapChainResize, SwapChainResized, WindowChanged, WindowChar, WindowCursor, WindowFocus, WindowPointer, WindowSize,
+    WorldJoined, WorldLeft,
 };
 use amml_data::{AdapterCatalog, NeedKind};
 
@@ -161,11 +162,14 @@ fn every_catalog_event_is_an_abi_event_and_the_other_way_round() {
         abi_event::<ScreenshotTaken>(),
         abi_event::<ScreenshotWritten>(),
         abi_event::<CameraFov>(),
+        abi_event::<CameraSetup>(),
+        abi_event::<CameraInstructionReceived>(),
         abi_event::<DimensionChanging>(),
         abi_event::<JoinServerResult>(),
         abi_event::<amml_abi::IdleScreenOpen>(),
         abi_event::<amml_abi::BlockBreakStart>(),
         abi_event::<amml_abi::BlockBreakContinue>(),
+        abi_event::<amml_abi::BlockChanged>(),
         abi_event::<amml_abi::ItemUse>(),
         abi_event::<amml_abi::PlayerAttack>(),
         abi_event::<amml_abi::ItemUseOnBlock>(),
@@ -183,6 +187,7 @@ fn every_catalog_event_is_an_abi_event_and_the_other_way_round() {
         abi_event::<amml_abi::LocatorBarIconDraw>(),
         abi_event::<amml_abi::ChatMessageAdded>(),
         abi_event::<amml_abi::TexturesReloaded>(),
+        abi_event::<amml_abi::WorldRendered>(),
     ]
     .into_iter()
     .collect();

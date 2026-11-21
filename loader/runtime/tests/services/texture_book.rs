@@ -323,3 +323,21 @@ fn replacing_the_pixels_checks_the_key_the_owner_and_the_image() {
     book.world_left();
     assert_eq!(book.replace_pixels(OWNER, key, 2, 2, &pixels(2, 2)), Err(TextureRefusal::Stale));
 }
+
+#[test]
+fn with_drawable_runs_only_on_a_ready_held_texture() {
+    let book = TextureBook::new();
+    let key = book.upload(OWNER, 1, 1, &pixels(1, 1)).unwrap();
+    let mut seen = Vec::new();
+
+    assert_eq!(book.with_drawable(key, |held| seen.push(held)), Ok(None));
+    answer(&book, 0);
+    assert_eq!(book.with_drawable(key, |held| seen.push(held)), Ok(None));
+    book.mark_ready(key);
+    assert_eq!(book.with_drawable(key, |held| held + 1), Ok(Some(0x1000 + key.id as usize + 1)));
+    book.world_left();
+
+    assert_eq!(book.with_drawable(key, |held| seen.push(held)), Err(TextureRefusal::Stale));
+    // `read` never ran for a texture that was not ready or was freed.
+    assert!(seen.is_empty());
+}

@@ -4,11 +4,13 @@ use amml_data::{AdapterCatalog, EntryId};
 use amml_runtime::{CacheSource, DeriveSource, EntryTable, HostResolver, ModSpec};
 
 use crate::{
-    ActorAdapter, ChatAdapter, ClientAdapter, FolderRedirect, ForegroundHandback, HeapCheck, HostError, HostInputs,
-    HostPaths, HostProcess, HostStartup, HudAdapter, InlineIconAdapter, InputAdapter, InstanceSettings,
-    InventoryAdapter, ItemDrawAdapter, LevelRendererAdapter, LightingAdapter, LoaderLog, LocatorBarAdapter,
-    NetworkAdapter, OverlayService, PlayerActionAdapter, RequestAdapter, RouterAdapter, ScreenAdapter, SessionActions,
-    SessionAdapter, TestWorld, TextAdapter, TextureAdapter, TextureReloadAdapter, UiDrawAdapter, UiInputAdapter,
+    ActiveCameraAdapter, ActorAdapter, BlockListener, CameraAdapter, ChatAdapter, ClientAdapter, FolderRedirect,
+    ForegroundHandback, FreeCameraAdapter, HeapCheck, HostError, HostInputs, HostPaths, HostProcess, HostStartup,
+    HudAdapter, InlineIconAdapter, InputAdapter, InstanceSettings, InventoryAdapter, ItemDrawAdapter,
+    LevelRendererAdapter, LightingAdapter, LoaderLog, LocatorBarAdapter, NetworkAdapter, OverlayService,
+    PlayerActionAdapter, RequestAdapter, RouterAdapter, ScreenAdapter, SessionActions, SessionAdapter, ShapesAdapter,
+    TestWorld, TextAdapter, TextureAdapter, TextureReloadAdapter, UiDrawAdapter, UiInputAdapter, WorldAdapter,
+    WorldInfoAdapter, WorldRenderAdapter,
 };
 
 /// The host where AMML starts itself, with no LeviLamina: the exe entry-point detour runs `run`
@@ -120,6 +122,9 @@ impl StandaloneHost {
                 TextureAdapter::install(state);
                 TextureReloadAdapter::install(state);
                 ActorAdapter::install(state);
+                WorldAdapter::install(state);
+                WorldInfoAdapter::install(state);
+                BlockListener::install(state, || HostProcess::image_layout(module_base));
                 InventoryAdapter::install(state);
                 ItemDrawAdapter::install(state);
                 RequestAdapter::install(state);
@@ -130,6 +135,11 @@ impl StandaloneHost {
                 LightingAdapter::install(state);
                 PlayerActionAdapter::install(state);
                 LevelRendererAdapter::install(state);
+                WorldRenderAdapter::install(state);
+                CameraAdapter::install(state);
+                ActiveCameraAdapter::install(state);
+                FreeCameraAdapter::install(state);
+                ShapesAdapter::install(state);
                 RouterAdapter::install(state);
                 InputAdapter::install(state);
                 OverlayService::install(state);

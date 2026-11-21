@@ -3,15 +3,16 @@ use std::sync::Mutex;
 
 use amml_abi::{
     AmmlBand, AmmlEvent, AmmlEventContext, AmmlEventHeader, AmmlOrigin, AmmlPhase, AmmlStatus, AmmlThread,
-    ChatMessageAdded, ContainerSlotHover, ContainerSlotUnhover, FrameUpdate, ItemHovertext, LocatorBarIconDraw,
-    PlayerListUpdate, PlayerSkinChanged, ScreenChanged, ScreenRender, UiPointer, UiScroll,
+    BlockChanged, CameraInstructionReceived, CameraSetup, ChatMessageAdded, ContainerSlotHover, ContainerSlotUnhover,
+    FrameUpdate, ItemHovertext, LocatorBarIconDraw, PlayerListUpdate, PlayerSkinChanged, ScreenChanged, ScreenRender,
+    UiPointer, UiScroll, WorldRendered,
 };
 use amml_data::{AdapterCatalog, NeedKind};
 use amml_runtime::{CallOutcome, DispatchReport, EventBus, HeaderStamp, ListenError, ListenerId};
 
 use crate::{
-    Boundary, ChatDetours, CurrentMod, DeferredDisable, GameGate, HovertextDetours, LocatorBarDetours, ModListener,
-    PacketDetours, ScreenDetours, UiInputDetours,
+    BlockListener, Boundary, CameraDetours, ChatDetours, CurrentMod, DeferredDisable, GameGate, HandlerDetours,
+    HovertextDetours, LocatorBarDetours, ModListener, PacketDetours, RenderLevelDetours, ScreenDetours, UiInputDetours,
 };
 
 // The pause of a split raise: the band it follows and what runs there.
@@ -219,6 +220,10 @@ impl EventHub {
         PacketDetours::set_skin_wanted(self.bus.has_listeners(PlayerSkinChanged::ID));
         LocatorBarDetours::set_wanted(self.bus.has_listeners(LocatorBarIconDraw::ID));
         ChatDetours::set_wanted(self.bus.has_listeners(ChatMessageAdded::ID));
+        BlockListener::set_wanted(self.bus.has_listeners(BlockChanged::ID));
+        RenderLevelDetours::set(RenderLevelDetours::LISTENER, self.bus.has_listeners(WorldRendered::ID));
+        CameraDetours::set(CameraDetours::LISTENER, self.bus.has_listeners(CameraSetup::ID));
+        HandlerDetours::set(HandlerDetours::LISTENER, self.bus.has_listeners(CameraInstructionReceived::ID));
     }
 
     /// Like `raise`, for a message the loader passes on whatever the listeners say: a cancel is
@@ -249,6 +254,18 @@ impl EventHub {
     ) -> DispatchReport {
         Self::header_of(value).injected = 1;
         self.dispatch(value, context, None, None, Some(injector), true, None, None)
+    }
+
+    /// `raise_injected` and `raise_keeping` together: `keep` runs after every listener call.
+    pub fn raise_injected_keeping<E: AmmlEvent + Clone>(
+        &self,
+        value: &mut E,
+        context: &AmmlEventContext,
+        injector: usize,
+        keep: &dyn Fn(&mut E),
+    ) -> DispatchReport {
+        Self::header_of(value).injected = 1;
+        self.dispatch(value, context, None, None, Some(injector), true, Some(keep), None)
     }
 
     // `only` and `skip` select listeners by owner; `injector` is set for an injected event; `may_cancel`

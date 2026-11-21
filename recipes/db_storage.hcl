@@ -86,7 +86,7 @@ entry "DBStorage.checkShutdownDone" {
 
 entry "DBStorage.mFullPath" {
   kind  = "field"
-  notes = "draft"
+  notes = "Offset in DBStorage of mFullPath (Core::PathBuffer<std::string>, the world folder): 98h on 6aed1906-b127418e74d2f2f9 (26.63), B0h on 6afa4e47-dadc375797a3d31a (70.26). The fixed amml-game mirror DbStorageLayout (98h) is therefore wrong on 70.26: read this entry. Recipe 0 is in DBStorage.ctor: after the member before it is copied from the config (`mov rax,[cfg+68h]; mov [this+..],rax`) the constructor clears the string and moves the config path into it (`movups [this+..],xmm6` twice, `movups xmm0,[cfg+8]; movups xmm1,[cfg+18h]; movups [this+..],xmm1; movups [this+disp32],xmm0`); offset 40, the displacement of operand 0 of the last store (the start of the string). Recipe 1 is DBStorage::getFullPath, slot 9 of DBStorage.vtable on both builds, a leaf `lea rax,[rcx+disp32]; ret` that returns the member: vtable_slot 9, read_pointer, then the displacement of operand 1 of the lea. Recipe 1 alone would be refused (vtable-only rule); it counts only as agreement with recipe 0. The two recipes are in two functions. Every displacement, immediate and branch byte is a wildcard; the REX and ModRM bytes of recipe 0 too. Range window 60h..140h. Evidence on both builds: the constructor moves the DBStorageConfig path (config+8) into this member, and the getFullPath leaf returns its address (`lea rax,[rcx+98h]` on 26.63, `lea rax,[rcx+0B0h]` on 70.26, each found once in the image). Class: new entry; the member moved by 18h on 70.26."
 
   recipe {
     step "ref" { entry = "DBStorage.ctor" }

@@ -5,14 +5,15 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use amml_data::{EntryKind, Resolved};
 
-use super::{ActivityGame, FakeVtable, Harness, HeapProbe, SessionGame, WorldGame};
+use super::{ActiveCameraGame, ActivityGame, FakeVtable, Harness, HeapProbe, InfoGame, SessionGame, WorldGame};
 
 /// A stand-in `ClientInstance`: only its vtable pointer.
-pub type FakeGameClient = &'static FakeVtable<7>;
+pub type FakeGameClient = &'static FakeVtable<11>;
 
 // The IClientInstance vtable: 0 getLocalPlayer, 1 getMinecraftInput, 2 isWorldActive, 3 isShowingMenu,
-// 4 getTopScreenName, 5 getOptions, 6 getMinecraftGame.
-static CLIENT_VTABLE: FakeVtable<7> = FakeVtable([
+// 4 getTopScreenName, 5 getOptions, 6 getMinecraftGame, 7 getGameConnectionInfo, 8 getLevel, 9 isInRealm,
+// 10 getCameraRegistry.
+static CLIENT_VTABLE: FakeVtable<11> = FakeVtable([
     ClientGame::local_player as *const (),
     ActivityGame::minecraft_input as *const (),
     ClientGame::world_active as *const (),
@@ -20,6 +21,10 @@ static CLIENT_VTABLE: FakeVtable<7> = FakeVtable([
     ClientGame::top_screen_name as *const (),
     ClientGame::options as *const (),
     ClientGame::minecraft_game as *const (),
+    InfoGame::connection_info as *const (),
+    InfoGame::get_level as *const (),
+    InfoGame::is_in_realm as *const (),
+    ActiveCameraGame::camera_registry as *const (),
 ]);
 // The MinecraftGame vtable: 2 update, 3 grabMouse, 4 releaseMouse, 5 getWorldSystem.
 static GAME_VTABLE: FakeVtable<6> = FakeVtable([

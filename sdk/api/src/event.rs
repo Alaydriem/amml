@@ -1,13 +1,13 @@
 use amml_abi::{
-    AmmlEvent, AmmlEventHeader, BlockBreakContinue, BlockBreakStart, CameraFov, ChatMessageAdded, ClientTick,
-    ContainerSlotHover, ContainerSlotUnhover, DimensionChanging, FramePresent, FramePresented, FrameUpdate, GameTick,
-    GamepadPoll, IdleScreenOpen, InjectedInputReleased, InputLeaseLost, InputLeaseResumed, InputLeaseSuspended,
-    InventoryRequestDone, ItemHovertext, ItemUse, ItemUseOnBlock, JoinServerResult, JoinStarted, KeyInput,
-    LocatorBarIconDraw, LookDelta, ModsLoaded, MouseGrab, MouseInput, PlayerAttack, PlayerListUpdate, PlayerMoveInput,
-    PlayerSkinChanged, ProviderGone, ProviderReady, RenderDeviceReset, ScreenChanged, ScreenClosing, ScreenRender,
-    ScreenshotTaken, ScreenshotWritten, Shutdown, SurfaceLost, SwapChainResize, SwapChainResized, TexturesReloaded,
-    UiPointer, UiScroll, WindowChanged, WindowChar, WindowCursor, WindowFocus, WindowPointer, WindowSize, WorldJoined,
-    WorldLeft,
+    AmmlEvent, AmmlEventHeader, BlockBreakContinue, BlockBreakStart, BlockChanged, CameraFov,
+    CameraInstructionReceived, CameraSetup, ChatMessageAdded, ClientTick, ContainerSlotHover, ContainerSlotUnhover,
+    DimensionChanging, FramePresent, FramePresented, FrameUpdate, GameTick, GamepadPoll, IdleScreenOpen,
+    InjectedInputReleased, InputLeaseLost, InputLeaseResumed, InputLeaseSuspended, InventoryRequestDone, ItemHovertext,
+    ItemUse, ItemUseOnBlock, JoinServerResult, JoinStarted, KeyInput, LocatorBarIconDraw, LookDelta, ModsLoaded,
+    MouseGrab, MouseInput, PlayerAttack, PlayerListUpdate, PlayerMoveInput, PlayerSkinChanged, ProviderGone,
+    ProviderReady, RenderDeviceReset, ScreenChanged, ScreenClosing, ScreenRender, ScreenshotTaken, ScreenshotWritten,
+    Shutdown, SurfaceLost, SwapChainResize, SwapChainResized, TexturesReloaded, UiPointer, UiScroll, WindowChanged,
+    WindowChar, WindowCursor, WindowFocus, WindowPointer, WindowSize, WorldJoined, WorldLeft, WorldRendered,
 };
 
 /// An event a mod can listen to.
@@ -102,6 +102,7 @@ abi_events!(
     IdleScreenOpen,
     BlockBreakStart,
     BlockBreakContinue,
+    BlockChanged,
     ItemUse,
     PlayerAttack,
     ItemUseOnBlock,
@@ -119,4 +120,7 @@ abi_events!(
     LocatorBarIconDraw,
     ChatMessageAdded,
     TexturesReloaded,
+    WorldRendered,
+    CameraSetup,
+    CameraInstructionReceived,
 );

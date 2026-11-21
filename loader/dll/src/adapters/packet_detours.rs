@@ -1,7 +1,7 @@
 use std::ffi::c_void;
 use std::sync::atomic::AtomicPtr;
 
-use crate::{Boundary, NetworkAdapter, RequestAdapter, ScreenDetours, SessionHook, UiFlags};
+use crate::{Boundary, HandlerDetours, NetworkAdapter, RequestAdapter, ScreenDetours, SessionHook, UiFlags};
 
 /// `void ClientNetworkHandler::handle(NetworkIdentifier const&, <Packet> const&)`: rcx the handler, rdx the sender
 /// identifier, r8 the packet; no result. The same shape for every packet the loader watches.
@@ -24,6 +24,9 @@ static SKIN_ORIGINAL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 /// listener of `network.player_list` or `network.player_skin` exists), they hand the packet to `NetworkAdapter`, which
 /// raises the event while the packet is live. With the bit clear the whole detour is the original call and one relaxed
 /// load.
+///
+/// Each detour first gives its handler to `HandlerDetours::note`, which captures it for the free camera while the
+/// capture flag is set (one more relaxed load when it is not).
 pub struct PacketDetours;
 
 impl PacketDetours {
@@ -70,6 +73,7 @@ impl PacketDetours {
     }
 
     unsafe extern "C" fn open(this: *mut c_void, source: *mut c_void, packet: *mut c_void) {
+        HandlerDetours::note(Self::OPEN, this, source);
         if UiFlags::load() & UiFlags::REQUEST != 0 {
             let hidden = Boundary::run(false, || {
                 RequestAdapter::with(false, |adapter| adapter.container_open(packet.expose_provenance()))
@@ -85,6 +89,7 @@ impl PacketDetours {
     }
 
     unsafe extern "C" fn close(this: *mut c_void, source: *mut c_void, packet: *mut c_void) {
+        HandlerDetours::note(Self::CLOSE, this, source);
         if UiFlags::load() & UiFlags::REQUEST != 0 {
             let hidden = Boundary::run(false, || {
                 RequestAdapter::with(false, |adapter| adapter.container_close(packet.expose_provenance()))
@@ -100,6 +105,7 @@ impl PacketDetours {
     }
 
     unsafe extern "C" fn response(this: *mut c_void, source: *mut c_void, packet: *mut c_void) {
+        HandlerDetours::note(Self::RESPONSE, this, source);
         if UiFlags::load() & UiFlags::REQUEST != 0 {
             Boundary::run((), || {
                 RequestAdapter::with((), |adapter| adapter.item_stack_response(packet.expose_provenance()));
@@ -112,6 +118,7 @@ impl PacketDetours {
     }
 
     unsafe extern "C" fn list(this: *mut c_void, source: *mut c_void, packet: *mut c_void) {
+        HandlerDetours::note(Self::LIST, this, source);
         // SAFETY: the hook on the PlayerList handler is installed, so its slot holds a `HandleFn`.
         let original = unsafe { ScreenDetours::original::<HandleFn>(&LIST_ORIGINAL) };
         // SAFETY: the game's own arguments, passed on unchanged.
@@ -122,6 +129,7 @@ impl PacketDetours {
     }
 
     unsafe extern "C" fn skin(this: *mut c_void, source: *mut c_void, packet: *mut c_void) {
+        HandlerDetours::note(Self::SKIN, this, source);
         // SAFETY: the hook on the PlayerSkin handler is installed, so its slot holds a `HandleFn`.
         let original = unsafe { ScreenDetours::original::<HandleFn>(&SKIN_ORIGINAL) };
         // SAFETY: the game's own arguments, passed on unchanged.

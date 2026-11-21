@@ -12,8 +12,6 @@ type TerrainLightFn = unsafe extern "C" fn(usize, *mut [u8; 2], *const [i32; 3],
 /// `BrightnessPair* BlockSource::getLightColor(BrightnessPair* out, BlockPos const&, Brightness min)`: the
 /// minimum is passed on as the whole register.
 type EntityLightFn = unsafe extern "C" fn(usize, *mut [u8; 2], *const [i32; 3], u64) -> usize;
-/// `void LevelRenderer::renderLevel(ScreenContext&, FrameRenderObject const&)`.
-type RenderLevelFn = unsafe extern "C" fn(*mut c_void, usize, usize);
 /// `bool LightPropagationCoordinator::propagateForMesh(BlockSource&, SubChunkPos const&, u16 variant, u16
 /// flags, provider, onResult, onEmpty)`: the two words are passed on as whole registers and stack slots.
 type PropagateFn = unsafe extern "C" fn(usize, usize, *const [i32; 3], u64, u64, usize, usize, usize) -> u64;
@@ -25,7 +23,6 @@ type GridFillFn = unsafe extern "C" fn(usize, *const [i32; 3], u64, u64, usize) 
 
 static TERRAIN_LIGHT: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ENTITY_LIGHT: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
-static RENDER_LEVEL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static PROPAGATE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static GRID_FILL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 
@@ -43,17 +40,18 @@ pub struct LightingDetours;
 impl LightingDetours {
     pub const TERRAIN_LIGHT: &'static str = "BlockTessellatorCache.getLightColor";
     pub const ENTITY_LIGHT: &'static str = "BlockSource.getLightColor";
-    pub const RENDER_LEVEL: &'static str = "LevelRenderer.renderLevel";
     pub const PROPAGATE: &'static str = "LightPropagationCoordinator.propagateForMesh";
     pub const GRID_FILL: &'static str = "LightPropagation.fillSubChunkGrid";
     pub const GRID_FILL_NO_MODE: &'static str = "LightPropagation.fillSubChunkGridNoMode";
 
-    pub fn terrain_hooks() -> [SessionHook; 3] {
-        [
-            Self::hook(Self::TERRAIN_LIGHT, Self::terrain_light as TerrainLightFn as *const c_void, &TERRAIN_LIGHT),
-            Self::hook(Self::RENDER_LEVEL, Self::render_level as RenderLevelFn as *const c_void, &RENDER_LEVEL),
-            Self::hook(Self::PROPAGATE, Self::propagate as PropagateFn as *const c_void, &PROPAGATE),
-        ]
+    /// The terrain light getter hook.
+    pub fn terrain_light_hook() -> SessionHook {
+        Self::hook(Self::TERRAIN_LIGHT, Self::terrain_light as TerrainLightFn as *const c_void, &TERRAIN_LIGHT)
+    }
+
+    /// The `propagateForMesh` hook of the static light spread.
+    pub fn propagate_hook() -> SessionHook {
+        Self::hook(Self::PROPAGATE, Self::propagate as PropagateFn as *const c_void, &PROPAGATE)
     }
 
     pub fn entity_hook() -> SessionHook {
@@ -135,14 +133,6 @@ impl LightingDetours {
             }
         });
         result
-    }
-
-    unsafe extern "C" fn render_level(this: *mut c_void, screen: usize, frame: usize) {
-        // SAFETY: the hook on `LevelRenderer.renderLevel` is installed, so its slot holds a `RenderLevelFn`.
-        let original = unsafe { Self::original::<RenderLevelFn>(&RENDER_LEVEL) };
-        Boundary::run((), || LightingAdapter::with((), |adapter| adapter.render_level(this)));
-        // SAFETY: the game's own arguments, passed on unchanged.
-        unsafe { original(this, screen, frame) };
     }
 
     #[allow(clippy::too_many_arguments)]

@@ -1,4 +1,5 @@
 mod amml_version;
+mod camera_kind_names;
 mod collection_names;
 mod emitter_entry;
 mod entry_table;

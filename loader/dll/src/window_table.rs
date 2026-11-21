@@ -1,11 +1,13 @@
-use amml_abi::{AmmlPoint, AmmlSize, AmmlStatus, AmmlStr, AmmlWindowTable};
+use amml_abi::{AmmlCursorClip, AmmlPoint, AmmlSize, AmmlStatus, AmmlStr, AmmlWindowTable};
+
+use amml_runtime::ClipKind;
 
 use crate::{Boundary, LoaderState, WindowService};
 
-const TABLE_VERSION: u32 = 1;
+const TABLE_VERSION: u32 = 2;
 
 pub(crate) static WINDOW: AmmlWindowTable = AmmlWindowTable {
-    size: AmmlWindowTable::SIZE_V1,
+    size: AmmlWindowTable::SIZE_V2,
     version: TABLE_VERSION,
     client_size: WindowTable::client_size,
     buffer_size: WindowTable::buffer_size,
@@ -16,6 +18,7 @@ pub(crate) static WINDOW: AmmlWindowTable = AmmlWindowTable {
     dpi: WindowTable::dpi,
     request_size: WindowTable::request_size,
     replay_focus_loss: WindowTable::replay_focus_loss,
+    clip_cursor: Some(WindowTable::clip_cursor),
 };
 
 /// The window table behind `AmmlServices::window`, and its `extern "C"` functions. Each function checks its
@@ -82,6 +85,29 @@ impl WindowTable {
         Boundary::guard(|| match LoaderState::get() {
             Some(state) => Self::status(state.window().replay_focus_loss()),
             None => AmmlStatus::FAILED,
+        })
+    }
+
+    unsafe extern "C" fn clip_cursor(module: AmmlStr, clip: AmmlCursorClip) -> AmmlStatus {
+        Boundary::guard(|| {
+            let Some(state) = LoaderState::get() else {
+                return AmmlStatus::FAILED;
+            };
+            let clip = match clip {
+                AmmlCursorClip::NONE => None,
+                AmmlCursorClip::CENTRE => Some(ClipKind::Centre),
+                _ => return AmmlStatus::INVALID_ARGUMENT,
+            };
+            // SAFETY: the caller promises `module` is valid for the call.
+            let module = match unsafe { module.as_str() } {
+                Ok(module) => module,
+                Err(status) => return status,
+            };
+            let owner = match state.live_mod(module) {
+                Ok(owner) => owner,
+                Err(status) => return status,
+            };
+            Self::status(state.window().clip_cursor(owner, clip, || state.live_mod(module).is_ok()))
         })
     }
 

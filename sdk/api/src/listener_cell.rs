@@ -6,8 +6,10 @@ use std::sync::Mutex;
 use amml_abi::{AmmlEventContext, AmmlEventHeader, AmmlStatus, AmmlThread};
 
 use crate::client_tables::ClientTables;
+use crate::lent_camera::LentCamera;
 use crate::lent_chat::LentChat;
 use crate::lent_network::LentNetwork;
+use crate::lent_render::LentRender;
 use crate::lent_scope::LentScope;
 use crate::lent_surfaces::LentSurfaces;
 use crate::lent_tables::LentTables;
@@ -93,6 +95,8 @@ impl<F: Send + 'static> ListenerCell<F> {
         let view = LentScope::lend(event.cast::<E>().cast_const(), cell.lent.ui, cell.lent.inventory, cell.module);
         let network = LentNetwork::lend(event.cast::<E>().cast_const(), cell.lent.network);
         let chat = LentChat::lend(event.cast::<E>().cast_const(), cell.lent.ui, cell.module);
+        let render = LentRender::lend(event.cast::<E>().cast_const(), cell.lent.render, cell.module);
+        let camera = LentCamera::lend(event.cast::<E>().cast_const(), cell.lent.camera, cell.module);
         let outcome = catch_unwind(AssertUnwindSafe(|| {
             let mut call = cell.call.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             // SAFETY: the header says the struct holds at least `size_of::<E>()` bytes, and by the
@@ -100,6 +104,8 @@ impl<F: Send + 'static> ListenerCell<F> {
             let event = unsafe { &mut *event.cast::<E>() };
             (call)(event, &context);
         }));
+        drop(camera);
+        drop(render);
         drop(chat);
         drop(network);
         drop(view);

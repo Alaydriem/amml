@@ -1,10 +1,10 @@
-use crate::testing::FakeActivity;
-use crate::{Rotation, Screen, StartWorldOutcome, Vec3};
+use crate::testing::{FakeActivity, FakeWorld};
+use crate::{CameraKind, Rotation, Screen, StartWorldOutcome, Vec3, WorldInfo};
 
 /// The client a `FakeGame` serves after `set_client`: what the `Client` reads give. `mouse_captured`
 /// is `None` until the game grabbed or released the mouse once, as in the loader. `pause_on_focus_lost` is
 /// the game option `pause_menu_on_focus_lost`: with it off, `open_pause_screen` gives `Refused`.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FakeClient {
     pub local_player: bool,
     pub world_active: bool,
@@ -29,6 +29,18 @@ pub struct FakeClient {
     pub rotation: Option<Rotation>,
     /// The id `LocalPlayer::dimension` then `Dimension::id` gives; `None` gives no dimension.
     pub dimension: Option<i32>,
+    /// What `LocalPlayer::head_position` gives.
+    pub head_position: Option<Vec3>,
+    /// What `LocalPlayer::health` gives.
+    pub health: Option<i32>,
+    /// What `Dimension::sky_darken` gives; needs `dimension`.
+    pub sky_darken: Option<u8>,
+    /// The world behind `LocalPlayer::block_source`: `Some` gives a block source, `None` gives none.
+    pub world: Option<FakeWorld>,
+    /// What `Client::world_info` gives; `None` is the loader's refusal (no world joined).
+    pub world_info: Option<WorldInfo>,
+    /// What `CameraControl::active_camera` gives; `None` is a game with no active camera.
+    pub active_camera: Option<CameraKind>,
 }
 
 impl Default for FakeClient {
@@ -51,6 +63,12 @@ impl Default for FakeClient {
             eye_position: None,
             rotation: None,
             dimension: None,
+            head_position: None,
+            health: None,
+            sky_darken: None,
+            world: None,
+            world_info: None,
+            active_camera: None,
         }
     }
 }

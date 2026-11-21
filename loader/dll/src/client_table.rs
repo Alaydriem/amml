@@ -1,13 +1,16 @@
 use std::ffi::c_void;
 
-use amml_abi::{AmmlClientFlag, AmmlClientTable, AmmlMenu, AmmlScreen, AmmlStartWorldOutcome, AmmlStatus, AmmlStr};
+use amml_abi::{
+    AmmlClientFlag, AmmlClientTable, AmmlMenu, AmmlScreen, AmmlStartWorldOutcome, AmmlStatus, AmmlStr, AmmlWorldInfo,
+    AmmlWorldText,
+};
 
-use crate::{Boundary, ClientAdapter, HudAdapter, LoaderState, SessionActions, SessionAdapter};
+use crate::{Boundary, ClientAdapter, HudAdapter, LoaderState, SessionActions, SessionAdapter, WorldInfoAdapter};
 
-const TABLE_VERSION: u32 = 3;
+const TABLE_VERSION: u32 = 4;
 
 pub(crate) static CLIENT: AmmlClientTable = AmmlClientTable {
-    size: AmmlClientTable::SIZE_V3,
+    size: AmmlClientTable::SIZE_V4,
     version: TABLE_VERSION,
     current: ClientTable::current,
     local_player: ClientTable::local_player,
@@ -23,6 +26,8 @@ pub(crate) static CLIENT: AmmlClientTable = AmmlClientTable {
     send_command: Some(ClientTable::send_command),
     select_hotbar_slot: Some(ClientTable::select_hotbar_slot),
     note_activity: Some(ClientTable::note_activity),
+    world_info: Some(ClientTable::world_info),
+    world_text: Some(ClientTable::world_text),
 };
 
 /// The client table behind `AmmlServices::client`, and its `extern "C"` functions. Each function checks
@@ -230,6 +235,50 @@ impl ClientTable {
         Boundary::guard(|| Self::status(Self::adapter().and_then(|adapter| adapter.note_activity(client))))
     }
 
+    unsafe extern "C" fn world_info(client: *const c_void, out: *mut AmmlWorldInfo) -> AmmlStatus {
+        Boundary::guard(|| {
+            if out.is_null() {
+                return AmmlStatus::INVALID_ARGUMENT;
+            }
+            match Self::world().and_then(|world| world.world_info(client)) {
+                Ok(info) => {
+                    // SAFETY: `out` is non-null and the caller promises it is writable.
+                    unsafe { out.write(info) };
+                    AmmlStatus::OK
+                }
+                Err(status) => status,
+            }
+        })
+    }
+
+    unsafe extern "C" fn world_text(
+        client: *const c_void,
+        field: AmmlWorldText,
+        buf: *mut u8,
+        cap: usize,
+        out_len: *mut usize,
+    ) -> AmmlStatus {
+        Boundary::guard(|| {
+            if out_len.is_null() || (buf.is_null() && cap != 0) {
+                return AmmlStatus::INVALID_ARGUMENT;
+            }
+            match Self::world().and_then(|world| world.world_text(client, field)) {
+                Ok(text) => {
+                    let bytes = text.as_bytes();
+                    let copied = bytes.len().min(cap);
+                    if copied > 0 {
+                        // SAFETY: the caller promises `buf` is writable for `cap` bytes, and `copied <= cap`.
+                        unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, copied) };
+                    }
+                    // SAFETY: `out_len` is non-null and the caller promises it is writable.
+                    unsafe { out_len.write(bytes.len()) };
+                    AmmlStatus::OK
+                }
+                Err(status) => status,
+            }
+        })
+    }
+
     unsafe extern "C" fn select_hotbar_slot(client: *const c_void, slot: u8) -> AmmlStatus {
         Boundary::guard(|| {
             let adapter = HudAdapter::get().ok_or(AmmlStatus::NOT_AVAILABLE);
@@ -239,6 +288,10 @@ impl ClientTable {
 
     fn actions() -> Result<&'static SessionActions, AmmlStatus> {
         SessionActions::get().ok_or(AmmlStatus::NOT_AVAILABLE)
+    }
+
+    fn world() -> Result<&'static WorldInfoAdapter, AmmlStatus> {
+        WorldInfoAdapter::get().ok_or(AmmlStatus::NOT_AVAILABLE)
     }
 
     fn adapter() -> Result<&'static ClientAdapter, AmmlStatus> {
