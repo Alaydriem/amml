@@ -8,6 +8,9 @@ pub enum Check {
     // least one `call rel32`. Holds for a leaf without `.pdata` as well as for a `.pdata` start.
     LeafStart,
     InVtableOf { class: String },
+    // the value is held by exactly one vtable, and code stores that table as a vptr at exactly one displacement (the
+    // `vptr_offset` rule); it ties a function to a class without RTTI through the constructors' vptr stores
+    InStoredVtable,
     // the value is the code target of a slot in `min_slot..=max_slot` of the vtable that the named `global` entry gives
     InVtable { vtable: EntryId, min_slot: u32, max_slot: u32 },
     // the value, as an RVA, lies inside the section of this exact name

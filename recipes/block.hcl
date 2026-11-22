@@ -247,3 +247,34 @@ entry "Block.mBlockType" {
     max = 256
   }
 }
+
+entry "Block.mSerializationId" {
+  kind  = "field"
+  notes = "Offset in Block of mSerializationId, the CompoundTag the game builds once for every block state: `name` (the full name of the block type), `version` (an int) and `states` (a compound of the state values). F0h on 6aed1906-b127418e74d2f2f9 (26.63), F8h on 6afa4e47-dadc375797a3d31a (70.26). The tag is the CompoundTag object itself (vtable at +0, the std::map at +8, its size at +10h). The loader reads the `version` int of this tag (through the CompoundTag map mirror) to build a block tag that BlockSerializationUtils.tryGetBlockFromNBT reads with no upgrade. How it was found: on 26.63 only two functions load both the pooled `states` and `version` texts; one is tryGetBlockFromNBT, the other (0x3169970) is Block::buildSerializationId(uint version): it clears the map at Block+F8h, puts `name` (from BlockType+E8h) and `version` (the edx argument) into the tag at Block+F0h, then a `states` compound. Its one caller (0x35a6ad0) makes every Block of a block type (the Block constructor, then this function with the same version), and that caller's one caller (0x31f3890) passes one version for every block type of the registry. On 70.26 `inspect similar` ranks 0x5615d00 first (the same three strings); it holds the same `name` and `version` puts into the tag at Block+F8h (map at +100h). Recipe 0 is the `version` put in that function: `mov qword ptr [rbp+..],imm; mov qword ptr [rbp+..],imm (7, the key length); mov qword ptr [rbp+..],imm;mov eax,[rip+..]; mov [rbp+..],eax; mov eax,[rip+..]; mov [rbp+..],eax; mov byte ptr [rbp+..],imm; lea rdx,[rbp+..]; mov rcx,rdi; mov r8d,ebx; call` (unique on each build), then `lea rdi,[rsi+disp32]` (the tag; once in the function), the displacement of operand 1. Recipe 1 is the Block constructor (26.63 0x3165910, 70.26 0x56121a0; the one caller of recipe 0's caller allocates 128h bytes and calls it with the data index and the BlockType): `mov [rcx+..],r8; test r8,r8; je; mov si,dx; lea rax,[rcx+..]; mov [rbp+..],rax; mov word ptr [rcx+..],imm` (unique on each build), then the store of the CompoundTag vtable into the tag, `lea rax,[rip+..]; mov [rcx+disp32],rax; mov [rbp+..],rcx; movups [rcx+..],xmm0` (once in the function; the lea target is CompoundTag.vtable on both builds), offset 7, the displacement of operand 0. The Block destructor (26.63 0x31700f0, 70.26 0x5641390) stores the same vtable at the same offset. The two recipes are in two functions and share no bytes. Every other displacement, immediate and branch byte is a wildcard. Range window C0h..180h. What changed in 70.26: the members before the tag grew by 8 bytes (a real layout change). Class: new entry."
+
+  recipe {
+    step "pattern" { bytes = "48 C7 45 ?? ?? ?? ?? ?? 48 C7 45 ?? ?? ?? ?? ?? 48 C7 45 ?? ?? ?? ?? ?? 8B 05 ?? ?? ?? ?? 89 45 ?? 8B 05 ?? ?? ?? ?? 89 45 ?? C6 45 ?? ?? 48 8D 55 ?? 48 89 F9 41 89 D8 E8" }
+    step "pattern" { bytes = "48 8D BE ?? ?? ?? ??" }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "pattern" { bytes = "4C 89 41 ?? 4D 85 C0 0F 84 ?? ?? ?? ?? 66 89 D6 48 8D 41 ?? 48 89 45 ?? 66 C7 41 ?? ?? ??" }
+    step "pattern" {
+      bytes  = "48 8D 05 ?? ?? ?? ?? 48 89 81 ?? ?? ?? ?? 48 89 4D ?? 0F 11 81"
+      offset = 7
+    }
+    step "operand" {
+      index = 0
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 192
+    max = 384
+  }
+}

@@ -26,6 +26,10 @@ impl ProtocolValues {
     pub const INVENTORY: u8 = 29;
     /// The carried stack, slot 0.
     pub const CURSOR: u8 = 59;
+    /// The created output container and its slot, where a creative craft puts the stack it made (survey section 7,
+    /// row I5).
+    pub const CREATED_OUTPUT: u8 = 60;
+    pub const CREATED_OUTPUT_SLOT: u8 = 50;
 
     /// `InteractPacketPayload::Action::OpenInventory`.
     pub const OPEN_INVENTORY: u8 = 6;

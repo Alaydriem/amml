@@ -89,3 +89,65 @@ fn a_request_id_of_two_bytes_is_a_varint() {
 
     assert_eq!(bytes, expected);
 }
+
+// One request id as the encoder writes it: the zigzag varint of -100003 (C5 9A 0C) and the created stack's net id,
+// which is the request's own id, as a little-endian signed int.
+const ID_100003: [u8; 3] = [0xC5, 0x9A, 0x0C];
+
+#[test]
+fn craft_creative_action_encodes_the_build_values() {
+    // The CraftCreative action is type 14 at variant index 12 on 26.63 and on 70.26 (survey section 7, I3); the bytes
+    // are those of the old stratum encoder: the creative net id 300 (AC 02) as an unsigned varint and one craft, then
+    // the take of the created stack (container 60, slot 50, the request id as net id) into the empty hotbar slot 4.
+    let mut expected = vec![0x01];
+    expected.extend_from_slice(&ID_100003);
+    expected.extend_from_slice(&[0x02, 12, 14, 0xAC, 0x02, 0x01, 0x00, 0x00, 64, 60, 0x00, 50]);
+    expected.extend_from_slice(&(-100003i32).to_le_bytes());
+    expected.extend_from_slice(&[28, 0x00, 4, 0, 0, 0, 0]);
+    expected.extend_from_slice(&[0x00, 0xFF, 0xFF, 0xFF, 0xFF]);
+
+    let bytes = StackRequestEncoder::batch(&[(
+        -100003,
+        RequestAction::CraftCreative { creative_net_id: 300, count: 64, to: slot(28, 4, 99), replacing: None },
+    )]);
+
+    assert_eq!(bytes, expected);
+}
+
+#[test]
+fn pick_is_one_request() {
+    let bytes = StackRequestEncoder::batch(&[(
+        -100003,
+        RequestAction::CraftCreative { creative_net_id: 300, count: 64, to: slot(28, 4, 0), replacing: None },
+    )]);
+
+    // One request in the packet, with the two actions of the creative craft.
+    assert_eq!(bytes[0], 1);
+    assert_eq!(&bytes[1..4], &ID_100003);
+    assert_eq!(bytes[4], 2);
+}
+
+#[test]
+fn a_pick_over_a_held_stack_destroys_it_first() {
+    // The old stratum encoder's `pick_replacing`: Destroy (variant index 4, type 4) of the held 10 items in hotbar slot 4
+    // with the held net id 77, then the craft and the take; the made stack goes into the slot, now empty (net id 0).
+    let mut expected = vec![0x01];
+    expected.extend_from_slice(&ID_100003);
+    expected.extend_from_slice(&[0x03, 4, 4, 10, 28, 0x00, 4, 77, 0, 0, 0]);
+    expected.extend_from_slice(&[12, 14, 0xAC, 0x02, 0x01, 0x00, 0x00, 64, 60, 0x00, 50]);
+    expected.extend_from_slice(&(-100003i32).to_le_bytes());
+    expected.extend_from_slice(&[28, 0x00, 4, 0, 0, 0, 0]);
+    expected.extend_from_slice(&[0x00, 0xFF, 0xFF, 0xFF, 0xFF]);
+
+    let bytes = StackRequestEncoder::batch(&[(
+        -100003,
+        RequestAction::CraftCreative {
+            creative_net_id: 300,
+            count: 64,
+            to: slot(28, 4, 0),
+            replacing: Some((10, slot(28, 4, 77))),
+        },
+    )]);
+
+    assert_eq!(bytes, expected);
+}

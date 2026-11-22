@@ -1,6 +1,7 @@
 use amml_abi::{
-    BlockBreakContinue, BlockBreakStart, GamepadPoll, IdleScreenOpen, ItemUse, ItemUseOnBlock, KeyInput, LookDelta,
-    MouseGrab, MouseInput, PlayerAttack, UiPointer, UiScroll, WindowChar, WindowFocus, WindowPointer,
+    AppFocusLost, BlockBreakContinue, BlockBreakStart, BuildBlock, GamepadPoll, IdleScreenOpen, ItemUse,
+    ItemUseOnBlock, KeyInput, LookDelta, MouseGrab, MouseInput, PlayerAttack, UiPointer, UiScroll, UsePressed,
+    WindowChar, WindowFocus, WindowPointer,
 };
 
 use crate::Event;
@@ -29,6 +30,7 @@ macro_rules! cancellable {
 }
 
 cancellable!(
+    AppFocusLost,
     GamepadPoll,
     IdleScreenOpen,
     KeyInput,
@@ -43,6 +45,8 @@ cancellable!(
     ItemUse,
     PlayerAttack,
     ItemUseOnBlock,
+    UsePressed,
+    BuildBlock,
     UiPointer,
     UiScroll
 );

@@ -1,4 +1,4 @@
-use amml_msvc::{MsvcMap, MsvcVec};
+use amml_msvc::{MsvcMap, MsvcString, MsvcVec};
 
 use crate::{ObjectRead, TagVariantLayout};
 
@@ -173,6 +173,31 @@ impl TagReader {
             }
         }
         true
+    }
+
+    /// The compound tag under `key` of the compound at `tag`: the address of the nested `CompoundTag`, which the map
+    /// node holds. `None` for a missing key and for a tag of another type.
+    ///
+    /// # Safety
+    /// `tag` is a live `CompoundTag` of the game build the reader was made for.
+    pub unsafe fn compound_at(&self, tag: usize, key: &str) -> Option<usize> {
+        // SAFETY: the caller's guarantee is passed on.
+        let value = unsafe { Self::value(tag, key, Self::COMPOUND) }?;
+        Some(value.tag())
+    }
+
+    /// The text of the string tag under `key` of the compound at `tag`, as bytes. `None` for a missing key and for a
+    /// tag of another type.
+    ///
+    /// # Safety
+    /// `tag` is a live `CompoundTag` of the game build the reader was made for.
+    pub unsafe fn string(&self, tag: usize, key: &str) -> Option<Vec<u8>> {
+        // SAFETY: the caller's guarantee is passed on.
+        let value = unsafe { Self::value(tag, key, TagVariantLayout::STRING) }?;
+        let text = value.tag().checked_add(Self::VALUE)?;
+        // SAFETY: the variant index says the Tag object is a StringTag, whose std::string follows the vtable.
+        let text = unsafe { &*std::ptr::with_exposed_provenance::<MsvcString>(text) };
+        Some(text.as_bytes().to_vec())
     }
 
     /// The int tag under `key` of the compound at `tag`. `None` for a missing key and for a tag of another type.

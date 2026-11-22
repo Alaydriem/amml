@@ -34,6 +34,8 @@ pub(crate) struct FakeInput {
 impl FakeInput {
     /// The owner every lease of the fake belongs to.
     const OWNER: usize = 1;
+    /// The owner of the leases `acquire_other` takes for other mods.
+    const OTHER_OWNER: usize = 2;
 
     pub(crate) fn new(tag: u32) -> Self {
         Self {
@@ -83,6 +85,23 @@ impl FakeInput {
         self.leases.borrow_mut().push(lease);
         self.apply_notices(notices);
         Ok(lease.0)
+    }
+
+    /// The active leases of the owners other than the fake's mod: how many, and their blocks.
+    pub(crate) fn others(&self) -> (u32, AmmlInputBlocks) {
+        self.book.active_of_others(Self::OWNER)
+    }
+
+    /// Takes a lease for another mod (`module`), so the fake's mod sees it in `held_by_others`.
+    pub(crate) fn acquire_other(&self, module: &str, terms: LeaseTerms) -> bool {
+        let lease = self.next_id();
+        match self.book.acquire(lease, Self::OTHER_OWNER, module, terms) {
+            Ok(notices) => {
+                self.apply_notices(notices);
+                true
+            }
+            Err(_) => false,
+        }
     }
 
     pub(crate) fn state(&self, lease: u64) -> AmmlLeaseState {

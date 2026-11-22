@@ -1,14 +1,28 @@
 use core::ffi::c_void;
 
 use amml_abi::{
-    AmmlActorTable, AmmlCameraTable, AmmlCaptureFrame, AmmlCaptureRequest, AmmlClientFlag, AmmlClientTable,
-    AmmlColorQuad, AmmlHand, AmmlInputMode, AmmlInputTable, AmmlInventoryTable, AmmlItemSnapshot, AmmlLeaseRequest,
-    AmmlLeaseState, AmmlLightSource, AmmlLightingTable, AmmlMeshId, AmmlMeshStyle, AmmlModifiers, AmmlMouseButton,
-    AmmlMoveIntent, AmmlNetworkTable, AmmlOverlayTable, AmmlPoint, AmmlPose, AmmlProjection, AmmlRect, AmmlRenderTable,
-    AmmlScreen, AmmlScreenKind, AmmlServices, AmmlShotLayers, AmmlSize, AmmlStatus, AmmlStr, AmmlUiProfile,
-    AmmlUiTable, AmmlVec3, AmmlWindowTable, AmmlWorldInfo, AmmlWorldTable,
+    AmmlActorTable, AmmlBlockEntityGhost, AmmlBlockGrid, AmmlBlockHandle, AmmlCameraTable, AmmlCaptureFrame,
+    AmmlCaptureRequest, AmmlClientFlag, AmmlClientTable, AmmlColorQuad, AmmlHand, AmmlInputMode, AmmlInputTable,
+    AmmlInventoryTable, AmmlItemSnapshot, AmmlLeaseRequest, AmmlLeaseState, AmmlLightSource, AmmlLightingTable,
+    AmmlMeshBuilt, AmmlMeshGroup, AmmlMeshId, AmmlMeshStyle, AmmlMesherOptions, AmmlModifiers, AmmlMouseButton,
+    AmmlMoveIntent, AmmlNetworkTable, AmmlOptionKey, AmmlOptionsTable, AmmlOverlayTable, AmmlPersistence, AmmlPoint,
+    AmmlPose, AmmlProjection, AmmlRect, AmmlRenderTable, AmmlScreen, AmmlScreenKind, AmmlServices, AmmlShotLayers,
+    AmmlSize, AmmlStatus, AmmlStr, AmmlTimeTable, AmmlUiProfile, AmmlUiTable, AmmlVec3, AmmlWindowTable, AmmlWorldInfo,
+    AmmlWorldTable,
 };
 
+unsafe extern "C" fn view_distance_chunks(_: *const c_void, _: *mut u32) -> AmmlStatus {
+    AmmlStatus::OK
+}
+unsafe extern "C" fn get_int(_: AmmlOptionKey, _: *mut i32) -> AmmlStatus {
+    AmmlStatus::OK
+}
+unsafe extern "C" fn set_int(_: AmmlStr, _: AmmlOptionKey, _: i32, _: AmmlPersistence) -> AmmlStatus {
+    AmmlStatus::OK
+}
+unsafe extern "C" fn release_transient(_: AmmlStr, _: AmmlOptionKey) -> AmmlStatus {
+    AmmlStatus::OK
+}
 unsafe extern "C" fn current(_: *mut *const c_void) -> AmmlStatus {
     AmmlStatus::OK
 }
@@ -128,6 +142,15 @@ fn actor_table() -> AmmlActorTable {
         head_position: None,
         block_source: None,
         health: None,
+        view_vector: None,
+        aabb: None,
+        game_type: None,
+        permission_level: None,
+        set_rotation: None,
+        build_at: None,
+        build_delay: None,
+        max_pick_range: None,
+        hit_result: None,
     }
 }
 
@@ -164,6 +187,7 @@ fn inventory_table() -> AmmlInventoryTable {
         item_draw_release: None,
         request_moves: None,
         item_change_stamp: None,
+        request_pick: None,
     }
 }
 
@@ -246,6 +270,11 @@ fn client_table() -> AmmlClientTable {
         note_activity: None,
         world_info: None,
         world_text: None,
+        replay_app_focus_lost: None,
+        in_gameplay: None,
+        join_server_direct: None,
+        title_screen: None,
+        go_to_title: None,
     }
 }
 
@@ -267,6 +296,7 @@ fn input_table() -> AmmlInputTable {
         end_lease,
         set_ranking,
         set_coexist: Some(set_ranking),
+        held_by_others: None,
     }
 }
 
@@ -321,6 +351,8 @@ fn services(size: u32, client: *const AmmlClientTable, input: *const AmmlInputTa
         world: core::ptr::null(),
         render: core::ptr::null(),
         camera: core::ptr::null(),
+        options: core::ptr::null(),
+        time: core::ptr::null(),
     }
 }
 
@@ -338,6 +370,8 @@ struct AreaTables {
     world: AmmlWorldTable,
     render: AmmlRenderTable,
     camera: AmmlCameraTable,
+    options: AmmlOptionsTable,
+    time: AmmlTimeTable,
 }
 
 impl AreaTables {
@@ -367,6 +401,17 @@ impl AreaTables {
                 shapes_target_epoch: None,
                 raycast: None,
                 actors_in: None,
+                block_from_state: None,
+                block_rotated: None,
+                block_handle_name: None,
+                block_handle_item: None,
+                block_at: None,
+                block_info: None,
+                block_built_over: None,
+                block_item: None,
+                block_handle_of: None,
+                block_changed_state: None,
+                kinds_in_box: None,
             },
             render: AmmlRenderTable {
                 size: AmmlRenderTable::SIZE_V1,
@@ -375,6 +420,15 @@ impl AreaTables {
                 mesh_free,
                 mesh_build: None,
                 mesh_draw: None,
+                canvas_clip_matrix: None,
+                mesher_build: None,
+                mesher_group_begin: None,
+                mesher_group_append: None,
+                mesher_group_finish: None,
+                block_entity_create: None,
+                block_entity_free: None,
+                block_entity_draw: None,
+                mesher_group_discard: None,
             },
             camera: AmmlCameraTable {
                 size: AmmlCameraTable::SIZE_V1,
@@ -386,7 +440,17 @@ impl AreaTables {
                 release_free: None,
                 free_available: None,
                 active_camera: None,
+                hide_actor: None,
             },
+            options: AmmlOptionsTable {
+                size: AmmlOptionsTable::SIZE_V1,
+                version: 1,
+                view_distance_chunks,
+                get_int,
+                set_int,
+                release_transient,
+            },
+            time: crate::amml_time_table::table(),
         }
     }
 
@@ -403,6 +467,8 @@ impl AreaTables {
             world: &raw const self.world,
             render: &raw const self.render,
             camera: &raw const self.camera,
+            options: &raw const self.options,
+            time: &raw const self.time,
             ..services(size, &raw const self.client, &raw const self.input)
         }
     }
@@ -723,6 +789,26 @@ fn a_v5_inventory_table_reads_with_no_change_stamp_and_a_v6_table_reads_it() {
     assert!(newer.item_change_stamp.is_some());
 }
 
+#[test]
+fn a_v6_inventory_table_reads_with_no_pick_and_a_v7_table_reads_it() {
+    unsafe extern "C" fn pick(_: AmmlStr, _: *const c_void, _: AmmlBlockHandle, _: u8, _: *mut u64) -> AmmlStatus {
+        AmmlStatus::OK
+    }
+    let mut table = inventory_table();
+    table.request_pick = Some(pick);
+    table.size = AmmlInventoryTable::SIZE_V6;
+
+    // SAFETY: `table` is a live table; its `size` covers the v6 fields only, so `request_pick` is not read.
+    let older = unsafe { AmmlInventoryTable::read(&raw const table) }.unwrap();
+    table.size = AmmlInventoryTable::SIZE_V7;
+    // SAFETY: `table` is a live table whose `size` covers every field.
+    let newer = unsafe { AmmlInventoryTable::read(&raw const table) }.unwrap();
+
+    assert!(older.request_pick.is_none());
+    assert!(newer.request_pick.is_some());
+    assert_eq!(AmmlInventoryTable::SIZE_V7, AmmlInventoryTable::SIZE_V6 + 8);
+}
+
 fn network_table() -> AmmlNetworkTable {
     unsafe extern "C" fn entry(_: u32, _: *mut amml_abi::AmmlPlayerListEntry) -> AmmlStatus {
         AmmlStatus::OK
@@ -762,6 +848,8 @@ fn network_table() -> AmmlNetworkTable {
         skin_geometry_json: string,
         skin_is_premium: flag,
         skin_resource_patch: string,
+        protocol_version: None,
+        set_client_chunk_cache: None,
     }
 }
 
@@ -851,6 +939,98 @@ fn a_v1_render_table_reads_mesh_build_and_draw_as_none() {
     assert!(v2.mesh_build.is_some() && v2.mesh_draw.is_none());
 }
 
+unsafe extern "C" fn clip_matrix(_: u64, _: *mut [[f32; 4]; 4]) -> AmmlStatus {
+    AmmlStatus::OK
+}
+
+#[test]
+fn a_v2_render_table_reads_the_clip_matrix_as_none() {
+    let mut areas = AreaTables::new();
+    areas.render.canvas_clip_matrix = Some(clip_matrix);
+    areas.render.size = AmmlRenderTable::SIZE_V2;
+
+    // SAFETY: the table is live and its `size` is covered; the bytes past v2 are ignored by the reader.
+    let v2 = unsafe { AmmlRenderTable::read(&raw const areas.render) }.unwrap();
+    areas.render.size = AmmlRenderTable::SIZE_V3;
+    // SAFETY: as above, now with the v3 field covered.
+    let v3 = unsafe { AmmlRenderTable::read(&raw const areas.render) }.unwrap();
+
+    assert_eq!(AmmlRenderTable::SIZE_V3, 48);
+    assert!(v2.canvas_clip_matrix.is_none());
+    assert!(v3.canvas_clip_matrix.is_some());
+}
+
+unsafe extern "C" fn mesher_build(
+    _: AmmlStr,
+    _: u64,
+    _: *const AmmlBlockGrid,
+    _: *const AmmlMesherOptions,
+    _: *mut AmmlMeshBuilt,
+    _: *mut u32,
+    _: u32,
+) -> AmmlStatus {
+    AmmlStatus::OK
+}
+
+#[test]
+fn a_v3_render_table_reads_the_mesher_as_none() {
+    let mut areas = AreaTables::new();
+    areas.render.mesher_build = Some(mesher_build);
+    areas.render.size = AmmlRenderTable::SIZE_V3;
+
+    // SAFETY: the table is live and its `size` is covered; the bytes past v3 are ignored by the reader.
+    let v3 = unsafe { AmmlRenderTable::read(&raw const areas.render) }.unwrap();
+    areas.render.size = AmmlRenderTable::SIZE_V4;
+    // SAFETY: as above, now with the v4 fields covered.
+    let v4 = unsafe { AmmlRenderTable::read(&raw const areas.render) }.unwrap();
+
+    assert_eq!(AmmlRenderTable::SIZE_V4, 80);
+    assert!(v3.mesher_build.is_none());
+    assert!(v4.mesher_build.is_some() && v4.mesher_group_begin.is_none());
+}
+
+unsafe extern "C" fn block_entity_free(_: AmmlStr, _: AmmlBlockEntityGhost) -> AmmlStatus {
+    AmmlStatus::OK
+}
+
+#[test]
+fn a_v4_render_table_reads_the_block_entity_calls_as_none() {
+    let mut areas = AreaTables::new();
+    areas.render.block_entity_free = Some(block_entity_free);
+    areas.render.size = AmmlRenderTable::SIZE_V4;
+
+    // SAFETY: the table is live and its `size` is covered; the bytes past v4 are ignored by the reader.
+    let v4 = unsafe { AmmlRenderTable::read(&raw const areas.render) }.unwrap();
+    areas.render.size = AmmlRenderTable::SIZE_V5;
+    // SAFETY: as above, now with the v5 fields covered.
+    let v5 = unsafe { AmmlRenderTable::read(&raw const areas.render) }.unwrap();
+
+    assert_eq!(AmmlRenderTable::SIZE_V5, 104);
+    assert!(v4.block_entity_free.is_none());
+    assert!(v5.block_entity_free.is_some() && v5.block_entity_create.is_none());
+}
+
+unsafe extern "C" fn mesher_group_discard(_: AmmlStr, _: AmmlMeshGroup) -> AmmlStatus {
+    AmmlStatus::OK
+}
+
+#[test]
+fn a_v5_render_table_reads_the_group_discard_as_none() {
+    let mut areas = AreaTables::new();
+    areas.render.mesher_group_discard = Some(mesher_group_discard);
+    areas.render.size = AmmlRenderTable::SIZE_V5;
+
+    // SAFETY: the table is live and its `size` is covered; the bytes past v5 are ignored by the reader.
+    let v5 = unsafe { AmmlRenderTable::read(&raw const areas.render) }.unwrap();
+    areas.render.size = AmmlRenderTable::SIZE_V6;
+    // SAFETY: as above, now with the v6 field covered.
+    let v6 = unsafe { AmmlRenderTable::read(&raw const areas.render) }.unwrap();
+
+    assert_eq!(AmmlRenderTable::SIZE_V6, AmmlRenderTable::SIZE_V5 + 8);
+    assert!(v5.mesher_group_discard.is_none());
+    assert!(v6.mesher_group_discard.is_some());
+}
+
 fn world_of(table: &AmmlServices) -> Option<*const AmmlWorldTable> {
     // SAFETY: the table and the area tables it points to live for the whole test.
     unsafe { AmmlServices::world(table) }
@@ -930,4 +1110,65 @@ fn a_v11_services_table_gives_the_camera_table_unless_it_is_null_or_short() {
     assert!(camera_of(&areas.services(AmmlServices::SIZE_V11)).is_none());
     // SAFETY: the table is live; its `size` is below v1, so the reader refuses it before reading more.
     assert!(unsafe { AmmlCameraTable::read(&raw const areas.camera) }.is_none());
+}
+
+fn options_of(table: &AmmlServices) -> Option<*const AmmlOptionsTable> {
+    // SAFETY: the table and the area tables it points to live for the whole test.
+    unsafe { AmmlServices::options(table) }
+}
+
+#[test]
+fn services_v11_reads_no_options() {
+    let areas = AreaTables::new();
+    // A v11 table is only 128 bytes long: the options field is not part of it, whatever it holds.
+    assert!(options_of(&areas.services(AmmlServices::SIZE_V11)).is_none());
+}
+
+#[test]
+fn a_v12_services_table_gives_the_options_table_unless_it_is_null_or_short() {
+    let mut areas = AreaTables::new();
+    assert_eq!(AmmlServices::SIZE_V12, 136);
+    assert_eq!(options_of(&areas.services(AmmlServices::SIZE_V12)), Some(&raw const areas.options));
+    let null = AmmlServices { options: core::ptr::null(), ..areas.services(AmmlServices::SIZE_V12) };
+    assert!(options_of(&null).is_none());
+    areas.options.size = AmmlOptionsTable::SIZE_V1 - 8;
+    assert!(options_of(&areas.services(AmmlServices::SIZE_V12)).is_none());
+}
+
+fn time_of(table: &AmmlServices) -> Option<*const AmmlTimeTable> {
+    // SAFETY: the table and the area tables it points to live for the whole test.
+    unsafe { AmmlServices::time(table) }
+}
+
+#[test]
+fn services_v12_reads_no_time() {
+    let mut areas = AreaTables::new();
+    // A v12 table is only 136 bytes long: the time field is not part of it, whatever it holds.
+    assert!(time_of(&areas.services(AmmlServices::SIZE_V12)).is_none());
+    assert_eq!(AmmlServices::SIZE_V13, 144);
+    assert_eq!(time_of(&areas.services(AmmlServices::SIZE_V13)), Some(&raw const areas.time));
+    let null = AmmlServices { time: core::ptr::null(), ..areas.services(AmmlServices::SIZE_V13) };
+    assert!(time_of(&null).is_none());
+    areas.time.size = AmmlTimeTable::SIZE_V1 - 8;
+    assert!(time_of(&areas.services(AmmlServices::SIZE_V13)).is_none());
+}
+
+#[test]
+fn a_v1_network_table_reads_with_no_v2_function() {
+    let areas = AreaTables::new();
+    let mut bytes = vec![0xFFu8; core::mem::size_of::<AmmlNetworkTable>()];
+    // SAFETY: `bytes` is as long as the table; the copy writes its first `SIZE_V1` bytes.
+    unsafe {
+        core::ptr::copy_nonoverlapping(
+            (&raw const areas.network).cast::<u8>(),
+            bytes.as_mut_ptr(),
+            AmmlNetworkTable::SIZE_V1 as usize,
+        );
+    }
+    bytes[..4].copy_from_slice(&AmmlNetworkTable::SIZE_V1.to_le_bytes());
+
+    // SAFETY: the buffer holds a whole table; bytes past the claimed size are never read.
+    let read = unsafe { AmmlNetworkTable::read(bytes.as_ptr().cast()) }.unwrap();
+    assert!(read.protocol_version.is_none());
+    assert!(read.set_client_chunk_cache.is_none());
 }

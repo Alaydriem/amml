@@ -32,6 +32,8 @@ pub struct FakeCompound {
     children: Vec<FakeCompound>,
     // the key of each node, by the node's index in `nodes`
     keys: Vec<String>,
+    // the nodes whose value is a string tag, whose text is released with the keys
+    texts: Vec<usize>,
 }
 
 impl FakeCompound {
@@ -45,6 +47,7 @@ impl FakeCompound {
             owned: Vec::new(),
             children: Vec::new(),
             keys: Vec::new(),
+            texts: Vec::new(),
         };
         let head = std::ptr::from_mut(&mut *compound.head) as u64;
         compound.head[FLAGS] = 1 << 8;
@@ -72,6 +75,12 @@ impl FakeCompound {
     pub fn set_byte(&mut self, key: &str, value: i8) {
         let index = self.keys.iter().position(|name| name == key).unwrap();
         self.nodes[index][TAG + 1] = u64::from(value as u8);
+    }
+
+    /// The three words of the `CompoundTag` object (the vtable, the map head and the map size), to place the tag
+    /// inside another fake object; the map stays owned by this fake.
+    pub fn object_words(&self) -> [u64; 3] {
+        *self.object
     }
 
     /// The address of the vtable every fake compound tag has: the `CompoundTag.vtable` value of the fake game.
@@ -108,6 +117,9 @@ impl FakeCompound {
         let text = unsafe { MsvcString::new_in(&TestHeap::heap(), key) }.unwrap();
         // SAFETY: a string is four words and the key slot is four words of the node.
         unsafe { node[KEY..].as_mut_ptr().cast::<MsvcString>().write(text) };
+        if matches!(value, FakeValue::Text(_)) {
+            self.texts.push(self.nodes.len());
+        }
         self.fill_value(&mut node, value);
         let ptr = std::ptr::from_mut(&mut *node) as u64;
         self.nodes.push(node);
@@ -133,6 +145,20 @@ impl FakeCompound {
             FakeValue::Int(int) => {
                 node[TAG + 1] = u64::from(int as u32);
                 node[INDEX] = 3;
+            }
+            FakeValue::Text(text) => {
+                // SAFETY: the test heap is the Rust allocator; the text is released in `drop`.
+                let text = unsafe { MsvcString::new_in(&TestHeap::heap(), &text) }.unwrap();
+                node[TAG] = Self::byte_vtable() as u64;
+                // SAFETY: a StringTag is the vtable, then the string: four words after the vtable word.
+                unsafe { node[TAG + 1..].as_mut_ptr().cast::<MsvcString>().write(text) };
+                node[INDEX] = 8;
+            }
+            FakeValue::Compound(child) => {
+                // the CompoundTag object itself, held in the node: the vtable, the map head and its size
+                node[TAG..TAG + 3].copy_from_slice(&child.object[..]);
+                node[INDEX] = 10;
+                self.children.push(child);
             }
             FakeValue::List(items) => self.fill_list(node, items, false),
             FakeValue::ListWithAByte(items) => self.fill_list(node, items, true),
@@ -166,6 +192,10 @@ impl Drop for FakeCompound {
         for node in &mut self.nodes {
             // SAFETY: the key was made by `new_in` with the test heap in `attach`.
             unsafe { (*node[KEY..].as_mut_ptr().cast::<MsvcString>()).release(&heap) };
+        }
+        for index in &self.texts {
+            // SAFETY: the text was made by `new_in` with the test heap in `fill_value`.
+            unsafe { (*self.nodes[*index][TAG + 1..].as_mut_ptr().cast::<MsvcString>()).release(&heap) };
         }
     }
 }

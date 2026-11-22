@@ -12,5 +12,12 @@ pub struct HashedStringLayout30 {
     _last_match: *const c_void, // 0x28 mLastMatch
 }
 
+impl HashedStringLayout30 {
+    /// A `HashedString` of `text` with the game's hash of it and no last match, for a call that reads it.
+    pub fn new(hash: u64, text: MsvcString) -> Self {
+        Self { hash, text, _last_match: std::ptr::null() }
+    }
+}
+
 const _: () = assert!(offset_of!(HashedStringLayout30, text) == 0x08);
 const _: () = assert!(size_of::<HashedStringLayout30>() == 0x30);

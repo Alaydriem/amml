@@ -2,7 +2,7 @@
 ///
 /// A plain integer so that a value from the other side of the boundary can never be invalid.
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct AmmlInputBlocks(pub u32);
 
 impl AmmlInputBlocks {

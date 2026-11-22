@@ -31,3 +31,37 @@ entry "NetworkConnection.mPeer" {
     max = 512
   }
 }
+
+entry "NetworkConnection.mType" {
+  kind  = "field"
+  notes = "Offset of mType (NetworkConnection::Type, a dword: 0 remote, 1 local) in NetworkConnection: B0h on 6aed1906-b127418e74d2f2f9 (26.63) and on 6afa4e47-dadc375797a3d31a (70.26), right after mId (the B0h-byte NetworkIdentifier at 0). The constructor (26.63 0x2372710, 70.26 0x301ca70; called by NetworkSystem's onNewIncomingConnection and onNewOutgoingConnection, 26.63 0x2381ad0 / 0x2382400, 70.26 0x302bef0 / 0x302c710) takes rcx this, rdx the NetworkIdentifier, r8 the peer and r9b the local flag: it copies the id with `mov r8d,0B0h; call`, clears the weak_ptr peers from B8h, and later writes `mov dword ptr [this+0B0h],0; ...; test bl,bl; je; mov dword ptr [this+0B0h],1` (26.63 0x23729f9 / 0x2372a11, 70.26 0x301cd65 / 0x301cd7e). Recipe 0 is that store pair, a pattern_any with one alternative per build (26.63 stores through rdi after a 49 BE movabs; 70.26 stores through r14 with a 41 REX after a 48 BF movabs; each alternative matches once on its build and not on the other); offset 0, the displacement of operand 0 of the first store. Recipe 1 is the head of the constructor: `mov ebx,r9d; mov [rbp+..],r8; mov rdi,rcx; mov r8d,imm32; call` (26.63 0x237272d, 70.26 0x301ca8d), unique in the image and ending at the copy call; offset 10, the immediate of operand 1 of `mov r8d,0B0h`: the size of the id copy to this+0, so the end of mId and the start of the next member. Both recipes are in the constructor: on 26.63 a ConnectionCallbacks override also reads the type (`cmp dword ptr [r10+0B0h],1`, 0x238190a), but that override is not in the 70.26 callback tables (0x12e89b88, 0x12f457b0, 0x12f48c60), and a decode of every .pdata function in 0x2f00000..0x3100000 on 70.26 finds no other 4-byte access at [reg+0B0h] in a function that also touches the peer (+118h), the close flag (+199h) or the id type with mConnections (+0A8h, +0C0h); so the second recipe uses a second fact of the same function (search: sd-batch survey row N7). The two recipes share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. Range check 80h..200h. Class: new entry; the same value on both builds."
+
+  recipe {
+    step "pattern_any" {
+      patterns = [
+        "C7 87 ?? ?? ?? ?? ?? ?? ?? ?? 49 BE ?? ?? ?? ?? ?? ?? ?? ?? 84 DB 74 ?? C7 87 ?? ?? ?? ?? ?? ?? ?? ?? E9",
+        "41 C7 86 ?? ?? ?? ?? ?? ?? ?? ?? 48 BF ?? ?? ?? ?? ?? ?? ?? ?? 84 DB 74 ?? 41 C7 86 ?? ?? ?? ?? ?? ?? ?? ?? E9",
+      ]
+    }
+    step "operand" {
+      index = 0
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "44 89 CB 4C 89 45 ?? 48 89 CF 41 B8 ?? ?? ?? ?? E8"
+      offset = 10
+    }
+    step "operand" {
+      index = 1
+      kind  = "immediate"
+    }
+  }
+
+  check "range" {
+    min = 128
+    max = 512
+  }
+}

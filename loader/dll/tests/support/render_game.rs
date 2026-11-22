@@ -27,6 +27,7 @@ impl RenderGame {
     const PLAYER_AT: u64 = 0x20;
     const CAMERA_AT: u64 = 0x40;
     const WIREFRAME_AT: usize = 0x2F0;
+    const ATLAS_AT: usize = 0x1D0;
 
     /// The session entries, the options entries of the `render.world_rendered` row and the entries of the
     /// `render.world_canvas` row (the mirror anchors with the values of the gate builds, the functions pointing to the
@@ -66,6 +67,9 @@ impl RenderGame {
             ("RenderMaterial.mBlendDestination", field(0x181)),
             ("RenderMaterial.mDepthWriteMask", field(0x193)),
             ("BaseActorRenderer.size", field(0xB8)),
+            ("ClientInstance.getItemInHandRenderer", slot(2)),
+            ("ItemInHandRenderer.mMatBlendBlock", field(MeshGame::BLEND_AT as u64)),
+            ("LevelRenderer.mAtlasTexture", field(Self::ATLAS_AT as u64)),
         ]);
         entries.extend(MeshGame::entries());
         entries.into_iter().filter(|(id, _)| !without.contains(id)).collect()
@@ -106,9 +110,26 @@ impl RenderGame {
         player[wireframe_at] = info as u32;
         player[wireframe_at + 1] = (info >> 32) as u32;
         // The renderer: the player pointer at `PLAYER_AT`.
-        let renderer: &'static mut [usize; 8] = Box::leak(Box::new([0; 8]));
+        let renderer: &'static mut [usize; 0x80] = Box::leak(Box::new([0; 0x80]));
         renderer[Self::PLAYER_AT as usize / size_of::<usize>()] = std::ptr::from_mut(player) as usize;
         RENDERER.store(std::ptr::from_mut(renderer) as usize, Ordering::SeqCst);
+    }
+
+    /// Gives the renderer of the next `render` its atlas `TexturePtr` (`LevelRenderer.mAtlasTexture`): the stand-in
+    /// texture and location words with the control blocks `controls`, or an empty pointer for `None`. Call it after
+    /// `set_camera` or `set_views`, which make the renderer.
+    pub fn set_atlas(controls: Option<[usize; 2]>) {
+        let words = match controls {
+            Some([texture, location]) => [MeshGame::ATLAS_WORDS[0], texture, MeshGame::ATLAS_WORDS[1], location],
+            None => [0; 4],
+        };
+        let renderer = RENDERER.load(Ordering::SeqCst);
+        for (index, word) in words.into_iter().enumerate() {
+            // SAFETY: the renderer is a leaked block of 400h bytes; the atlas sits inside it.
+            unsafe {
+                std::ptr::with_exposed_provenance_mut::<usize>(renderer + Self::ATLAS_AT + index * 8).write(word)
+            };
+        }
     }
 
     /// Calls (through its address) `renderLevel(renderer, screen, frame_object)`.

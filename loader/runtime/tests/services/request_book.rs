@@ -361,7 +361,8 @@ fn a_request_that_cannot_run_is_refused_when_it_starts() {
         book.start(1, &[RequestMove::Place { from: 0, to: 1, count: 0 }], false, false, false),
         Err(RequestRefusal::BadMove)
     );
-    assert_eq!(book.start(1, &[RequestMove::Pick], false, false, false), Err(RequestRefusal::Unsupported));
+    assert_eq!(book.start(1, &[pick(9, 300, 64)], false, false, false), Err(RequestRefusal::BadMove));
+    assert_eq!(book.start(1, &[pick(4, 300, 0)], false, false, false), Err(RequestRefusal::BadMove));
     // None of them took the book.
     assert!(book.start(1, &swaps(1), false, false, false).is_ok());
 }
@@ -465,4 +466,129 @@ fn the_slots_are_wanted_only_when_the_moves_go_out_at_the_next_tick() {
     let mut plain = RequestBook::new();
     plain.start(1, &swaps(1), false, false, false).unwrap();
     assert!(plain.wants_slots());
+}
+
+fn pick(slot: u8, creative_net_id: u32, count: u8) -> RequestMove {
+    RequestMove::Pick { slot, creative_net_id, count }
+}
+
+// A pick request, run to the point where its request is sent; no hidden open, so the first tick sends it.
+// The slots of the stand-in game with the hotbar slot 4 empty.
+fn pick_slots() -> Vec<Option<RequestSlot>> {
+    let mut slots = slots();
+    slots[4] = None;
+    slots
+}
+
+fn pick_tick(book: &mut RequestBook, now: f64) -> RequestTick {
+    book.tick(now, false, &mut || Some(pick_slots()))
+}
+
+fn pick_sent(book: &mut RequestBook, slot: u8) -> (u64, Vec<RequestStep>) {
+    let id = book.start(1, &[pick(slot, 300, 64)], false, true, false).unwrap();
+    (id, pick_tick(book, 0.0).steps)
+}
+
+// The wire id of the one pick request: the zigzag varint after the request count byte.
+fn pick_wire_id(steps: &[RequestStep]) -> i32 {
+    let bytes = steps
+        .iter()
+        .find_map(|step| match step {
+            RequestStep::SendRequests(bytes) => Some(bytes.clone()),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(bytes[0], 1);
+    let (value, _) = varint(&bytes[1..]);
+    ((value >> 1) as i32) ^ -((value & 1) as i32)
+}
+
+#[test]
+fn a_pick_sends_one_request_and_predicts_the_slot() {
+    let mut book = RequestBook::new();
+
+    let (_, steps) = pick_sent(&mut book, 4);
+    assert!(!book.wants_slots());
+    book.on_responses(&[(pick_wire_id(&steps), true)]);
+
+    assert!(matches!(steps[0], RequestStep::SendRequests(_)), "{steps:?}");
+    assert_eq!(steps[1], RequestStep::PredictPick { slot: 4, creative_net_id: 300, count: 64 });
+    assert_eq!(steps.len(), 2);
+}
+
+#[test]
+fn a_pick_into_an_occupied_slot_destroys_the_held_stack_and_predicts() {
+    let mut book = RequestBook::new();
+    book.start(1, &[pick(4, 300, 64)], false, true, false).unwrap();
+
+    // Slot 4 holds 8 items with the net id 104 in the stand-in game.
+    let steps = tick(&mut book, 0.0, false).steps;
+
+    let RequestStep::SendRequests(bytes) = &steps[0] else { panic!("{steps:?}") };
+    let (_, used) = varint(&bytes[1..]);
+    // After the request count and the id: three actions, the first the destroy of the held 8 items of slot 4.
+    assert_eq!(&bytes[1 + used..1 + used + 1 + 3 + 7], &[3, 4, 4, 8, 28, 0, 4, 104, 0, 0, 0]);
+    assert_eq!(steps[1], RequestStep::PredictPick { slot: 4, creative_net_id: 300, count: 64 });
+}
+
+#[test]
+fn a_refused_pick_over_a_held_stack_takes_the_prediction_back() {
+    let mut book = RequestBook::new();
+    book.start(1, &[pick(4, 300, 64)], false, true, false).unwrap();
+    let steps = tick(&mut book, 0.0, false).steps;
+    book.on_responses(&[(pick_wire_id(&steps), false)]);
+
+    let end = tick(&mut book, 0.1, false);
+
+    // The loader keeps the replaced stack when it predicts, and gives it back at this step.
+    assert_eq!(end.steps, vec![RequestStep::UnpredictPick { slot: 4 }]);
+}
+
+#[test]
+fn an_accepted_pick_that_names_no_slot_says_so() {
+    let mut book = RequestBook::new();
+    let (_, steps) = pick_sent(&mut book, 4);
+    book.on_responses(&[(pick_wire_id(&steps), true)]);
+
+    let end = pick_tick(&mut book, 0.1);
+
+    assert_eq!(end.steps, vec![RequestStep::NetIdMissing { slot: 4 }]);
+}
+
+#[test]
+fn an_accepted_pick_adopts_the_net_id_the_server_gave_the_slot() {
+    let mut book = RequestBook::new();
+    let (id, steps) = pick_sent(&mut book, 4);
+    let wire = pick_wire_id(&steps);
+    // An answer for a slot the pick did not name is not adopted.
+    book.on_slot_net_ids(&[(wire, 5, 900), (wire, 4, 901)]);
+    book.on_responses(&[(wire, true)]);
+
+    let end = pick_tick(&mut book, 0.1);
+
+    assert_eq!(end.steps, vec![RequestStep::AdoptNetId { slot: 4, net_id: 901 }]);
+    assert_eq!(end.done, vec![done(id, AmmlRequestOutcome::DONE, 1, 1)]);
+}
+
+#[test]
+fn a_refused_pick_takes_the_prediction_back() {
+    let mut book = RequestBook::new();
+    let (id, steps) = pick_sent(&mut book, 4);
+    book.on_responses(&[(pick_wire_id(&steps), false)]);
+
+    let end = pick_tick(&mut book, 0.1);
+
+    assert_eq!(end.steps, vec![RequestStep::UnpredictPick { slot: 4 }]);
+    assert_eq!(end.done, vec![done(id, AmmlRequestOutcome::REFUSED, 0, 1)]);
+}
+
+#[test]
+fn a_pick_with_no_answer_takes_the_prediction_back() {
+    let mut book = RequestBook::new();
+    let (id, _) = pick_sent(&mut book, 4);
+
+    let end = pick_tick(&mut book, RequestBook::BATCH_TIMEOUT_SECONDS + 0.1);
+
+    assert_eq!(end.steps, vec![RequestStep::UnpredictPick { slot: 4 }]);
+    assert_eq!(end.done, vec![done(id, AmmlRequestOutcome::NO_ANSWER, 0, 1)]);
 }

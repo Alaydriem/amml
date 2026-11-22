@@ -225,7 +225,12 @@ impl<L: Clone + Send + Sync> EventBus<L> {
             entry.end_call();
             match outcome {
                 Ok(CallOutcome::Done) => {}
-                Ok(CallOutcome::Cancelled) => report.cancelled = true,
+                Ok(CallOutcome::Cancelled) => {
+                    if !report.cancelled {
+                        report.cancelled_by = Some(entry.owner);
+                    }
+                    report.cancelled = true;
+                }
                 Ok(CallOutcome::Panicked) | Err(_) => {
                     *value = before;
                     report.panicked_owners.push(entry.owner);

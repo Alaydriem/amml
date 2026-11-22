@@ -11,6 +11,4 @@ pub enum RequestRefusal {
     TooMany,
     #[error("a move names a slot that does not exist, or has no effect")]
     BadMove,
-    #[error("the kind of move is not run yet")]
-    Unsupported,
 }

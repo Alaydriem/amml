@@ -208,6 +208,7 @@ impl ReportWriter {
             Check::LeafStart => "leaf_start".to_string(),
             Check::InVtableOf { class } => format!("in_vtable_of {class}"),
             Check::InVtable { vtable, min_slot, max_slot } => format!("in_vtable {vtable} {min_slot}..={max_slot}"),
+            Check::InStoredVtable => "in_stored_vtable".to_string(),
             Check::Section { name } => format!("section {name}"),
             Check::Range { min, max } => format!("range {min:#x}..{max:#x}"),
             Check::EntryIs { entry, value } => format!("entry_is {entry} = {value:#x}"),

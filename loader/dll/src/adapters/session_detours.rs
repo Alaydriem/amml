@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 use amml_abi::AmmlPhase;
 use amml_data::AdapterCatalog;
 
-use crate::{Boundary, SessionAdapter, SessionHook};
+use crate::{Boundary, JoinNames, SessionAdapter, SessionHook};
 
 /// `void IMinecraftGame::update()`: rcx the MinecraftGame.
 type GameUpdateFn = unsafe extern "C" fn(*mut c_void);
@@ -13,8 +13,9 @@ type GameUpdateFn = unsafe extern "C" fn(*mut c_void);
 type ClientUpdateFn = unsafe extern "C" fn(*mut c_void, u64, u64) -> u8;
 /// `void ClientInstance::onTick(int nTick, int maxTick)`: rcx the GameCallbacks subobject, edx, r8d.
 type OnTickFn = unsafe extern "C" fn(*mut c_void, i32, i32);
-/// `void IClientInstance::onStartJoinGame(...)`: rcx the ClientInstance, rdx, r8, r9 and the stack arguments at
-/// entry+28h, +30h, +38h and +40h, each passed on as the whole 8-byte register or stack slot.
+/// `void IClientInstance::onStartJoinGame(...)`: rcx the ClientInstance, rdx the local flag in its low byte, r8 and r9
+/// two `std::string const&`, and the stack arguments at entry+28h (a third `std::string const&`), +30h, +38h and +40h, each passed on as the whole
+/// 8-byte register or stack slot.
 type StartJoinFn = unsafe extern "C" fn(*mut c_void, u64, u64, u64, u64, u64, u64, u64);
 /// `void ClientInstance::onLevelExit()`: rcx the GameCallbacks subobject.
 type ExitLevelFn = unsafe extern "C" fn(*mut c_void);
@@ -115,9 +116,12 @@ impl SessionDetours {
     unsafe extern "C" fn start_join(this: *mut c_void, a: u64, b: u64, c: u64, d: u64, e: u64, f: u64, g: u64) {
         // SAFETY: the hook on `ClientInstance.onStartJoinGame` is installed, so its slot holds a `StartJoinFn`.
         let original = unsafe { Self::original::<StartJoinFn>(&START_JOIN) };
+        // SAFETY: rdx holds the local flag in its low byte, and r8, r9 and the stack word at entry+28h are the
+        // addresses of the three live `std::string const&` arguments of the call, which the caller keeps alive until the call returns.
+        let names = Boundary::run(JoinNames::default(), || unsafe { JoinNames::read(a, b, c, d) });
         // SAFETY: the game's own registers and stack slots, passed on unchanged.
         unsafe { original(this, a, b, c, d, e, f, g) };
-        Boundary::run((), || SessionAdapter::with(SessionAdapter::join_started));
+        Boundary::run((), || SessionAdapter::with(|adapter| adapter.join_started(&names)));
     }
 
     unsafe extern "C" fn exit_level(this: *mut c_void) {

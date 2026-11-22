@@ -462,3 +462,78 @@ fn note_activity_without_its_area_is_not_available() {
     assert_eq!(results, [Err(ApiError::NotAvailable)]);
     assert!(writes.is_empty());
 }
+
+#[test]
+fn a_direct_join_reaches_the_game_on_the_title_screen_and_is_refused_in_a_world_or_without_its_area() {
+    let target = amml_api::JoinTarget { host: "127.0.0.1", port: 28231, name: Some("DejaVu replay") };
+    let join = move |client: &amml_api::Client<'_>| client.join_server_direct(target);
+
+    let title = FakeGame::new();
+    title.set_client(FakeClient::default());
+    let joined = with_client(&title, &[Area::CLIENT_JOIN_SERVER_DIRECT], join);
+    assert_eq!(title.client_writes(), ["join_server_direct 127.0.0.1:28231 DejaVu replay"]);
+    drop(title);
+    let world = FakeGame::new();
+    world.set_client(in_world());
+    let in_world = with_client(&world, &[Area::CLIENT_JOIN_SERVER_DIRECT], join);
+    assert!(world.client_writes().is_empty());
+    drop(world);
+    let without = FakeGame::new();
+    without.set_client(FakeClient::default());
+    let not_offered = with_client(&without, &[], join);
+    drop(without);
+    let named = FakeGame::new();
+    named.set_client(FakeClient::default());
+    let host_name = with_client(&named, &[Area::CLIENT_JOIN_SERVER_DIRECT], |client| {
+        client.join_server_direct(amml_api::JoinTarget { host: "replay.example", port: 28231, name: None })
+    });
+
+    assert_eq!(
+        (joined, in_world, not_offered, host_name),
+        (
+            Ok(amml_api::JoinId(1)),
+            Err(ApiError::Refused),
+            Err(ApiError::NotAvailable),
+            Err(ApiError::Loader(amml_abi::AmmlStatus::INVALID_ARGUMENT))
+        )
+    );
+}
+
+#[test]
+fn the_title_read_and_the_call_back_to_the_title_reach_the_fake() {
+    let areas = [Area::CLIENT_TITLE_SCREEN, Area::CLIENT_GO_TO_TITLE];
+    let title = FakeGame::new();
+    title.set_client(FakeClient { title_screen: true, ..FakeClient::default() });
+    let on_title = with_client(&title, &areas, |client| (client.on_title_screen(), client.go_to_title()));
+    assert_eq!(title.client_writes(), ["go_to_title"]);
+    drop(title);
+    let world = FakeGame::new();
+    world.set_client(FakeClient { title_screen: true, ..in_world() });
+    let in_world = with_client(&world, &areas, |client| (client.on_title_screen(), client.go_to_title()));
+    drop(world);
+    let without = FakeGame::new();
+    without.set_client(FakeClient::default());
+    let not_offered = with_client(&without, &[], |client| (client.on_title_screen(), client.go_to_title()));
+
+    assert_eq!(
+        (on_title, in_world, not_offered),
+        ((Some(true), Ok(())), (Some(false), Err(ApiError::Refused)), (None, Err(ApiError::NotAvailable)))
+    );
+}
+
+#[test]
+fn the_hit_result_comes_from_the_fake_local_player() {
+    let fake = FakeGame::new();
+    let hit = amml_api::BlockHit {
+        pos: amml_api::BlockPos { x: 4, y: 70, z: -2 },
+        point: amml_api::Vec3 { x: 4.5, y: 70.25, z: -1.0 },
+        face: amml_api::Face::Up,
+    };
+    fake.set_client(FakeClient { hit_result: Some(amml_api::HitResult::Block(hit)), ..in_world() });
+
+    let read = with_client(&fake, &[Area::CLIENT_READ, Area::PLAYER_HIT_RESULT], |client| {
+        client.local_player().and_then(|player| player.hit_result())
+    });
+
+    assert_eq!(read, Some(amml_api::HitResult::Block(hit)));
+}

@@ -8,6 +8,32 @@ static CLIENT_GAME_TICK: [AdapterShape; 1] =
     AdapterShape::single("default", &["ClientInstance.onTick", "ClientInstance.gameCallbacksOffset"]);
 static JOIN_STARTED: [AdapterShape; 1] =
     AdapterShape::single("default", &["ClientInstance.onStartJoinGame", AdapterCatalog::CLIENT_INSTANCE_VTABLE]);
+// Every server join: `MinecraftGame::joinMultiplayerWithAddress`, which the game's server joins (the Servers tab, the
+// loader's `joinExternalServer`, Realms) reach, and `startExternalNetworkWorld` (the direct join). The connection info is
+// passed by value: its size selects the layout of the host and port, and two members are read at derived offsets.
+// Version 2 is raised for the game's joins too; version 1 was raised only through `startExternalNetworkWorld`.
+static SERVER_JOIN_STARTING: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &[
+        "ClientInstance.startExternalNetworkWorld",
+        AdapterCatalog::CLIENT_INSTANCE_VTABLE,
+        "MinecraftGame.joinMultiplayerWithAddress",
+        AdapterCatalog::MINECRAFT_GAME_VTABLE,
+        "GameConnectionInfo.mUnresolvedUrl",
+        "GameConnectionInfo.mExternalServerName",
+        "GameConnectionInfo.size",
+    ],
+);
+// The level's own hit result, through the local player's level: what the crosshair points at.
+static PLAYER_HIT_RESULT: [AdapterShape; 1] = AdapterShape::single("default", &["Actor.mLevel", "Level.getHitResult"]);
+// The direct join: the game's own `ClientInstance.connectByAddress`, which builds the connection info and the join
+// context and passes them to `startExternalNetworkWorld`, called through the client subobject at the derived offset.
+static CLIENT_JOIN_SERVER_DIRECT: [AdapterShape; 1] =
+    AdapterShape::single("default", &["ClientInstance.connectByAddress", "ClientInstance.connectByAddressThis"]);
+static WORLD_STORAGE: [AdapterShape; 1] =
+    AdapterShape::single("default", &["DBStorage.ctor", "DBStorage.checkShutdownDone", "DBStorage.mFullPath"]);
+// `MinecraftGame::isInGame`, a slot of the MinecraftGame vtable called on the game of the last frame.
+static CLIENT_IN_GAMEPLAY: [AdapterShape; 1] = AdapterShape::single("default", &["MinecraftGame.isInGame"]);
 static JOINED: [AdapterShape; 1] =
     AdapterShape::single("default", &["ClientInstance.update", "ClientInstance.getLocalPlayer"]);
 // A world is left only after it was joined, so `world.left` needs the entries of `world.joined` too.
@@ -52,6 +78,20 @@ static CLIENT_PAUSE: [AdapterShape; 1] = AdapterShape::single(
         "OptionRegistry.getIfValid",
     ],
 );
+// The game's handler of an app focus loss (`MinecraftGame::onAppFocusLost`), hooked by the loader.
+static CLIENT_APP_FOCUS_LOST: [AdapterShape; 1] = AdapterShape::single("default", &["MinecraftGame.onAppFocusLost"]);
+// The game's handler of an app focus gain: slot `onAppFocusGained` of the AppPlatformListener vtable, on the subobject
+// at `appPlatformListenerOffset` of the MinecraftGame.
+static CLIENT_APP_FOCUS_GAINED: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &[
+        "MinecraftGame.onAppFocusGained",
+        "MinecraftGame.AppPlatformListener.vtable",
+        "MinecraftGame.appPlatformListenerOffset",
+    ],
+);
+// `Client::replay_app_focus_lost`: the loader calls the game's handler of the loss past its own detour.
+static CLIENT_FOCUS_REPLAY: [AdapterShape; 1] = AdapterShape::single("default", &["MinecraftGame.onAppFocusLost"]);
 static CLIENT_LEAVE_WORLD: [AdapterShape; 1] = AdapterShape::single("default", &["ClientInstance.requestLeaveGame"]);
 static CLIENT_CAN_JOIN: [AdapterShape; 1] = AdapterShape::single(
     "default",
@@ -169,7 +209,9 @@ static RENDER_WORLD_RENDERED: [AdapterShape; 1] = AdapterShape::single(
 // The world canvas: the camera position of the view of the running level renderer (the views of the frame object and
 // the renderer's own camera position), and the world mesh path of `build` and `draw` (the tessellator, the mesh, the
 // camera world matrix, the actor constants, the wireframe material and its four patched bytes, the name tag material
-// of a loader-owned `BaseActorRenderer`). The mirrors of the path are checked against their entries at install. The
+// of a loader-owned `BaseActorRenderer`). Version 3 adds the ghost draw of a block mesh: the renderer's atlas
+// `TexturePtr` and the client's blend-block `MaterialPtr` (`ClientInstance.getItemInHandRenderer`,
+// `ItemInHandRenderer.mMatBlendBlock`); the clip matrix reads the camera of the screen context. The mirrors of the path are checked against their entries at install. The
 // optional entries are the per-call needs of `WorldCanvas::draw`: the loader's white texture goes through `ui.textures`;
 // without them the area stays offered and `draw` gives `NotAvailable`.
 static RENDER_WORLD_CANVAS: [AdapterShape; 1] = [AdapterShape {
@@ -207,9 +249,170 @@ static RENDER_WORLD_CANVAS: [AdapterShape; 1] = [AdapterShape {
         "RenderMaterial.mDepthWriteMask",
         "BaseActorRenderer.ctor",
         "BaseActorRenderer.size",
+        "LevelRenderer.mAtlasTexture",
+        "ClientInstance.getItemInHandRenderer",
+        "ItemInHandRenderer.mMatBlendBlock",
     ],
     optional: &UI_TEXTURES_ENTRIES,
 }];
+// The block mesher: a loader-owned `BlockTessellator` (game heap, constructor, `setRegion` to the block source of the
+// local player, the cache window at `mBlockCache` filled from the mod's grid, `tessellateInWorld` once per render layer
+// of a cell: `Block::getRenderLayer` and the `getExtraRenderLayers` slot), the shape of a cell's graphics for the back
+// faces, `BlockSource::getBlock` for the cells that match the world, the registry's `minecraft:air` for the empty cells
+// (`BlockTypeRegistry`, `HashedString.layout`), and the frame's tessellator to end the mesh. The
+// loader offers it only while `render.world_canvas` version 3 (the draw of a block mesh) is offered. The mesh groups
+// keep a game `MeshData` buffer (`MeshData.clear` builds it, `moveAssign` hands it to the frame tessellator at the
+// finish, `dtor` frees it, also for a group the mod discards, on the `renderLevel` thread); the biome tint takes the tessellation policy of the block type's tint method
+// (`getTessellationPolicy`, the virtual `get`).
+static RENDER_BLOCK_MESHER: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &[
+        "BlockTessellator.ctor",
+        "BlockTessellator.dtor",
+        "BlockTessellator.setRegion",
+        "BlockTessellator.tessellateInWorld",
+        "BlockTessellator.mBlockCache",
+        "BlockGraphics.getForBlock",
+        "BlockGraphics.mBlockShape",
+        "Block.getRenderLayer",
+        "BlockType.getExtraRenderLayers",
+        "Block.mBlockType",
+        "BlockSource.getBlock",
+        "Tessellator.begin",
+        "Tessellator.end",
+        "Tessellator.clear",
+        "Tessellator.mTessellating",
+        "Mesh.isValid",
+        "Mesh.dtor",
+        "ClientInstance.getLocalPlayer",
+        "Actor.getDimension",
+        "Dimension.getBlockSourceFromMainChunkSource",
+        "BlockTypeRegistry.instance",
+        "BlockTypeRegistry.lookupByName",
+        "HashedString.layout",
+        "MeshData.clear",
+        "MeshData.dtor",
+        "MeshData.moveAssign",
+        "BiomeColorSampling.getTessellationPolicy",
+        "TessellationPolicy.get",
+        "BlockType.mTintMethod",
+    ],
+);
+// Water cells of a block mesh take the biome colour: the chunk of the block source (`BlockSource::getChunk`), its biome at
+// the cell (`LevelChunk::getBiome`) and the biome's water colour (`BiomeColorSampling::getWaterColor`). The loader offers
+// it only with `render.block_mesher`.
+static RENDER_WATER_TINT: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &["BlockSource.getChunk", "LevelChunk.getBiome", "BiomeColorSampling.getWaterColor"],
+);
+// `BlockEntityPass`: the hook on the body every level renderer camera shares for its block entities, and the vtable of
+// the local player's camera, which the loader compares to tell the player's camera from the others.
+static RENDER_BLOCK_ENTITY_PASS: [AdapterShape; 1] =
+    AdapterShape::single("default", &["LevelRendererCamera.renderBlockEntitiesBody", "LevelRendererPlayer.vtable"]);
+// Block entity ghosts: the pass, the block actor of a block (the factory, or `loadStatic` with NBT read through
+// `NbtIo::read` over a `StringByteInput` and a `DefaultDataLoadHelper`, on the level of the local player), and its draw
+// through the dispatcher of the pass context (`_getRenderComponent`, `BlockActorRenderDispatcher::render` with a
+// disengaged `optional<RenderMetadata>` and the block source of the local player); the actors are released before the
+// game's `renderLevel`. 26.63 has the factory without a flag;
+// 70.x gives it the byte of the level's flag slot, as `loadStatic` does.
+static RENDER_BLOCK_ENTITIES: [AdapterShape; 2] = [
+    AdapterShape {
+        name: AdapterCatalog::BLOCK_ENTITIES_FACTORY_SHAPE,
+        entries: &[
+            "LevelRendererCamera.renderBlockEntitiesBody",
+            "LevelRendererPlayer.vtable",
+            "BlockActor.loadStatic",
+            "BlockActor._getRenderComponent",
+            "DefaultDataLoadHelper.vtable",
+            "BlockActorRenderDispatcher.render",
+            "RenderMetadata.engaged",
+            "BaseActorRenderContext.mBlockEntityRenderDispatcher",
+            "BaseActorRenderContext.mImpl",
+            "BaseActorRenderContext.Impl.mCameraTargetPosition",
+            "NbtIo.read",
+            "StringByteInput.vtable",
+            "CompoundTag.dtor",
+            "Actor.mLevel",
+            "ClientInstance.getLocalPlayer",
+            "Actor.getDimension",
+            "Dimension.getBlockSourceFromMainChunkSource",
+            "Block.mBlockType",
+            "LevelRenderer.renderLevel",
+            "VanillaBlockActorFactory.createBlockActor",
+        ],
+        optional: &[],
+    },
+    AdapterShape {
+        name: AdapterCatalog::BLOCK_ENTITIES_FLAG_SHAPE,
+        entries: &[
+            "LevelRendererCamera.renderBlockEntitiesBody",
+            "LevelRendererPlayer.vtable",
+            "BlockActor.loadStatic",
+            "BlockActor._getRenderComponent",
+            "DefaultDataLoadHelper.vtable",
+            "BlockActorRenderDispatcher.render",
+            "RenderMetadata.engaged",
+            "BaseActorRenderContext.mBlockEntityRenderDispatcher",
+            "BaseActorRenderContext.mImpl",
+            "BaseActorRenderContext.Impl.mCameraTargetPosition",
+            "NbtIo.read",
+            "StringByteInput.vtable",
+            "CompoundTag.dtor",
+            "Actor.mLevel",
+            "ClientInstance.getLocalPlayer",
+            "Actor.getDimension",
+            "Dimension.getBlockSourceFromMainChunkSource",
+            "Block.mBlockType",
+            "LevelRenderer.renderLevel",
+            "VanillaBlockActorFactory.createBlockActorWithFlag",
+            "Level.isClientSide",
+        ],
+        optional: &[],
+    },
+];
+// The lead of a large chest ghost: the game's chest type test, the actor's position and the chest's pair members.
+static RENDER_CHEST_PAIR: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &[
+        "BlockActor.isType",
+        "BlockActor.mPosition",
+        "ChestBlockActor.mPairFlags",
+        "ChestBlockActor.mLargeChestPaired",
+        "ChestBlockActor.mLargeChestPairedPosition",
+    ],
+);
+// A skull ghost drawn by the dispatcher's skull renderer with the name of the ghost's block type (a `HashedString` of a
+// known layout) after the game's own skull type test. 26.63 has `renderSkull` with the face and the turn; 70.x has only
+// `renderSkullUpright`, so the loader pushes the camera's world matrix stack (`ScreenContext.camera`, the camera mirror
+// anchored by `Camera.mForward`) and multiplies the face and turn transform first.
+static RENDER_SKULL_POSE: [AdapterShape; 2] = [
+    AdapterShape {
+        name: AdapterCatalog::SKULL_RENDER_SHAPE,
+        entries: &[
+            "SkullBlockRenderer.renderSkull",
+            "BlockActorRenderDispatcher.mSkullRenderer",
+            "BlockType.mNameInfo.mFullName",
+            "HashedString.layout",
+            "BlockActor.isType",
+        ],
+        optional: &[],
+    },
+    AdapterShape {
+        name: AdapterCatalog::SKULL_UPRIGHT_SHAPE,
+        entries: &[
+            "SkullBlockRenderer.renderSkullUpright",
+            "BlockActorRenderDispatcher.mSkullRenderer",
+            "MatrixStack.push",
+            "MatrixStackRef.dtor",
+            "BlockType.mNameInfo.mFullName",
+            "HashedString.layout",
+            "BlockActor.isType",
+            "ScreenContext.camera",
+            "Camera.mForward",
+        ],
+        optional: &[],
+    },
+];
 // `CameraSetup` Before and After the game's camera setup of a rendered frame.
 static CAMERA_SETUP: [AdapterShape; 1] = AdapterShape::single("default", &["LevelRendererPlayer.setupCamera"]);
 // `Camera::set_pose`: the rotation written into the `mce::Camera` after `setupCamera` (mirror anchored by
@@ -310,6 +513,28 @@ static CAMERA_ACTIVE: [AdapterShape; 2] = [
         optional: &[],
     },
 ];
+// `camera.hide_actor`: the local player is erased from the actor render queue after `queueRenderEntities` and its
+// dispatcher draw is skipped. The queue is the member of `LevelRendererCamera` the erase works on.
+static CAMERA_HIDE_ACTOR: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &[
+        "LevelRendererPlayer.vtable",
+        "LevelRendererPlayer.queueRenderEntities",
+        "LevelRendererCamera.mActorRenderQueue",
+        "ActorRenderDispatcher.render",
+        "ClientInstance.getLocalPlayer",
+    ],
+);
+// `PlayerMoved` After the game's handler of a `MovePlayerPacket` whose runtime id is the local player's.
+static PLAYER_MOVED: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &[
+        "LegacyClientNetworkHandler.vtable",
+        "ClientNetworkHandler.handle.MovePlayerPacket",
+        "Actor.getRuntimeID",
+        "ClientInstance.getLocalPlayer",
+    ],
+);
 // `CameraInstructionReceived` Before the game's handler of a `CameraInstructionPacket`; its set and clear parts are read
 // through the `CameraInstruction` mirror (checked against the packet size and the spline offset).
 static CAMERA_INSTRUCTION_RECEIVED: [AdapterShape; 1] = AdapterShape::single(
@@ -329,13 +554,27 @@ static CLIENT_ACTIVITY: [AdapterShape; 1] = AdapterShape::single(
     "default",
     &["ClientInstance.getMinecraftInput", "MinecraftInputHandler.mInputHandler", "InputHandler.mAnyInputHandler"],
 );
+// `Options::view_distance_chunks`: the client's option registry and its `getViewDistanceChunks` slot.
+static OPTIONS_VIEW_DISTANCE: [AdapterShape; 1] =
+    AdapterShape::single("default", &["ClientInstance.getOptions", "IOptionRegistry.getViewDistanceChunks"]);
+// `Options::{get_int, set_int, release_transient}`: the option registry, an option by id (the scan for the save tag of
+// vsync), the effective max frame rate option and the int option's setter.
+static OPTIONS_INT: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &[
+        "ClientInstance.getOptions",
+        "OptionRegistry.getIfValid",
+        "OptionRegistry.getEffectiveMaxFramerateOption",
+        "IntOption.set",
+    ],
+);
 static IDLE_SCREEN_OPEN: [AdapterShape; 1] =
     AdapterShape::single("default", &["OreUIRouter.pushRoute", "OreUIRouter.replaceRoute"]);
 
 // The local player of the primary client, read through its Actor vtable. Later appends to the actor table raise the
 // row's version (`AdapterNeed::area_at`).
 // Version 2 adds the position, eye position, rotation and dimension reads; version 3 the head position and the block
-// source of the dimension.
+// source of the dimension; version 4 the view vector (the box reads the shape component version 2 already names).
 static ACTOR_READ: [AdapterShape; 1] = AdapterShape::single(
     "default",
     &[
@@ -350,7 +589,30 @@ static ACTOR_READ: [AdapterShape; 1] = AdapterShape::single(
         "Dimension.getDimensionId",
         "Actor.getAttachPos",
         "Dimension.getBlockSourceFromMainChunkSource",
+        "Actor.getViewVector",
     ],
+);
+// The game mode of the local player: `Player::getPlayerGameType`.
+static ACTOR_GAME_TYPE: [AdapterShape; 1] = AdapterShape::single("default", &["Player.getPlayerGameType"]);
+// The player permission level of the local player: 26.63 has the getter, 70.x reads the byte of the abilities
+// component the getter `Player.getAbilitiesComponent` gives. The shape holds the entries that resolve on the build.
+static ACTOR_PERMISSION: [AdapterShape; 2] = [
+    AdapterShape {
+        name: AdapterCatalog::PERMISSION_GETTER_SHAPE,
+        entries: &["Player.getPlayerPermissionLevel"],
+        optional: &[],
+    },
+    AdapterShape {
+        name: AdapterCatalog::PERMISSION_ABILITIES_SHAPE,
+        entries: &["Player.getAbilitiesComponent", "AbilitiesComponent.mPlayerPermissions"],
+        optional: &[],
+    },
+];
+// The rotation of the local player written in place: the current and previous rotation of the rotation component,
+// and the head yaw call.
+static ACTOR_LOOK_WRITE: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &["Actor.actorRotationComponent", "ActorRotationComponent.mRot", "Actor.setYHeadRotations"],
 );
 // The health of the local player: the attribute read of the entity context the actor holds.
 static ACTOR_HEALTH: [AdapterShape; 1] =
@@ -370,6 +632,78 @@ static WORLD_ACTORS_IN: [AdapterShape; 1] = AdapterShape::single(
         "BlockSource.fetchEntities",
         "BlockSource.fetchEntitiesSpanOrder",
         "Actor.aabbShapeComponent",
+        "ClientInstance.getLocalPlayer",
+        "Actor.getDimension",
+        "Dimension.getBlockSourceFromMainChunkSource",
+    ],
+);
+// The block states of the game, as owned block handles: the registry lookup by name (the registry is
+// `BlockTypeRegistry.instance` + 18h, the address both instance recipes subtract 18h from) for the type, its default
+// state and the `version` of that state's serialization tag (`Block.mSerializationId`, read through the `CompoundTag`
+// map mirror); the block tag the loader writes, read by `NbtIo::read` over a loader-made `StringByteInput` and looked up
+// by `tryGetBlockFromNBT`, then destroyed; the five transform utils for a turn; the name of the block type; the item of
+// a block (`asItemInstance`, read through the item stack mirror of `inventory.read`, then destroyed).
+static WORLD_BLOCK_STATES: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &[
+        "BlockTypeRegistry.instance",
+        "BlockTypeRegistry.lookupByName",
+        "Block.mSerializationId",
+        "Block.mBlockType",
+        "BlockType.mNameInfo.mFullName",
+        "HashedString.layout",
+        "CompoundTag.nodeVariantIndex",
+        "CompoundTag.vtable",
+        "StringByteInput.vtable",
+        "NbtIo.read",
+        "BlockSerializationUtils.tryGetBlockFromNBT",
+        "CompoundTag.dtor",
+        "VanillaBlockStateTransformUtils.transformBlock",
+        "VanillaBlockStateTransformUtils.transformConnectionStates",
+        "VanillaBlockStateTransformUtils.transformWallConnectionTypes",
+        "VanillaBlockStateTransformUtils.hasTransformableConnectionStates",
+        "VanillaBlockStateTransformUtils.hasTransformableWallStates",
+        "BlockType.asItemInstance",
+        "ItemStackBase.dtor",
+    ],
+);
+// The block at a position of the block source of the local player (`BlockSource::getBlock`), the type of the block
+// (`Block.mBlockType`, its name and material as the chunk reads do, so the ids are the ones of `world.chunk_read`), and
+// the type's `canBeBuiltOver`, `isInteractiveBlock` and `asItemInstance` slots; the item stack is destroyed after the
+// read (`ItemStackBase.dtor`). The block source comes from the actor chain.
+static WORLD_BLOCKS: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &[
+        "BlockSource.getBlock",
+        "Block.mBlockType",
+        "BlockType.canBeBuiltOver",
+        "BlockType.isInteractiveBlock",
+        "BlockType.asItemInstance",
+        "BlockType.mNameInfo.mFullName",
+        "BlockType.mMaterialInline",
+        "ItemStackBase.dtor",
+        "HashedString.layout",
+        "ClientInstance.getLocalPlayer",
+        "Actor.getDimension",
+        "Dimension.getBlockSourceFromMainChunkSource",
+    ],
+);
+// The distinct block types of a box of the block source of the local player: the chunk and its load state to know the box
+// is loaded (`BlockSource::getChunk`, the chunk layout), the block of each cell (`BlockSource::getBlock`) and its type id
+// as the chunk reads give it, so the ids are the ones of `world.chunk_read`.
+static WORLD_KINDS_IN_BOX: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &[
+        "BlockSource.getChunk",
+        "BlockSource.getBlock",
+        "LevelChunk.mSubChunks",
+        "LevelChunk.getBlock",
+        "SubChunk.size",
+        "SubChunk.isPlaceHolderSubChunk",
+        "Block.mBlockType",
+        "BlockType.mNameInfo.mFullName",
+        "BlockType.mMaterialInline",
+        "HashedString.layout",
         "ClientInstance.getLocalPlayer",
         "Actor.getDimension",
         "Dimension.getBlockSourceFromMainChunkSource",
@@ -627,6 +961,30 @@ static PLAYER_ATTACK: [AdapterShape; 1] = AdapterShape::single(
 );
 static ITEM_USE_ON_BLOCK: [AdapterShape; 1] =
     AdapterShape::single("default", &["Item.useOn", "ClientInstance.getLocalPlayer"]);
+// The use press: a loader hook on the static `ClientInputCallbacks::handleBuildAction`.
+static USE_PRESSED: [AdapterShape; 1] = AdapterShape::single("default", &["ClientInputCallbacks.handleBuildAction"]);
+// The build: a loader hook on the base body in slot 6 of the GameMode table, which every game mode's build reaches; the
+// owner is GameMode::mPlayer, compared with the local player.
+static BUILD_BLOCK: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &["GameMode.vtable", "GameMode.buildBlock", "GameMode.mPlayer", "ClientInstance.getLocalPlayer"],
+);
+// A mod's own build: the game mode of the player, the level's hit result that the build reads, the build slot, and the
+// build repeat delay of the game mode.
+static PLAYER_BUILD: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &["Player.mGameMode", "Actor.mLevel", "Level.getHitResult", "GameMode.buildBlock", "GameMode.buildingTickDelay"],
+);
+// The pick range: 26.63 has GameMode::getMaxPickRange; 70.x inlines it, so the loader calls Player::isCreative and
+// takes one of the two constants the game loads.
+static PLAYER_PICK_RANGE: [AdapterShape; 2] = [
+    AdapterShape {
+        name: AdapterCatalog::PICK_RANGE_GETTER_SHAPE,
+        entries: &["Player.mGameMode", "GameMode.getMaxPickRange"],
+        optional: &[],
+    },
+    AdapterShape { name: AdapterCatalog::PICK_RANGE_CREATIVE_SHAPE, entries: &["Player.isCreative"], optional: &[] },
+];
 
 // The screen views: the detour on the view draw, and the render context the draw writes to.
 static UI_SCREEN_RENDER: [AdapterShape; 1] =
@@ -716,6 +1074,44 @@ static INVENTORY_REQUEST: [AdapterShape; 1] = AdapterShape::single(
         "ClientNetworkHandler.handle.ContainerOpenPacket",
         "ClientNetworkHandler.handle.ContainerClosePacket",
         "ClientNetworkHandler.handle.ItemStackResponsePacket",
+    ],
+);
+// The creative pick, version 2 of `inventory.request`: everything the moves need, then the creative item list of the
+// player's level (the level from the player, its item registry, the creative registry and its entries), the item of a
+// block (`asItemInstance`), the stack constructors and `reinit`, the slot write (`setItem`) that shows the prediction, the
+// stack limit and the game mode, which must be creative.
+static INVENTORY_REQUEST_PICK: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &[
+        "MinecraftPackets.createPacket",
+        "ClientInstance.getPacketSender",
+        "PacketSender.send",
+        "Packet.read",
+        "ReadOnlyBinaryStream.vtable",
+        "ReadOnlyBinaryStream.dtor",
+        "Actor.getRuntimeID",
+        "FillingContainer.swapSlots",
+        "ItemStack.mNetIdVariant",
+        "ClientInstance.getLocalPlayer",
+        "Player.playerInventory",
+        "PlayerInventory.mInventory",
+        "FillingContainer.mItems",
+        "LegacyClientNetworkHandler.vtable",
+        "ClientNetworkHandler.handle.ContainerOpenPacket",
+        "ClientNetworkHandler.handle.ContainerClosePacket",
+        "ClientNetworkHandler.handle.ItemStackResponsePacket",
+        "Actor.mLevel",
+        "Level.getItemRegistry",
+        "ItemRegistryRef.getCreativeItemRegistry",
+        "CreativeItemRegistry.mCreativeItems",
+        "ItemStack.emptyCtor",
+        "ItemStack.copyCtor",
+        "ItemStack.reinit",
+        "ItemStack.vtable",
+        "ItemStackBase.getMaxStackSize",
+        "BlockType.asItemInstance",
+        "Player.getPlayerGameType",
+        "FillingContainer.setItem",
     ],
 );
 // The destructor that every screen controller reaches; the HUD adapter hooks the same function.
@@ -935,11 +1331,74 @@ static NETWORK_SKIN_DETAILS: [AdapterShape; 1] = AdapterShape::single(
     &["SerializedSkinImpl.mIsPersona", "SerializedSkinImpl.mIsPremium", "SerializedSkinImpl.mResourcePatch"],
 );
 
-static NEEDS: [AdapterNeed; 115] = [
+// The chunk cache switch: the client's `NetworkSystem::send` (hooked before the packet is serialized), the vtable that
+// tells a `ClientCacheStatusPacket`, and the offset of its `mEnabled` byte.
+static NETWORK_CHUNK_CACHE: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &["NetworkSystem.send", "ClientCacheStatusPacket.vtable", "ClientCacheStatusPacket.mEnabled"],
+);
+// The network protocol number of the build.
+static NETWORK_PROTOCOL: [AdapterShape; 1] =
+    AdapterShape::single("default", &["SharedConstants.NetworkProtocolVersion"]);
+
+// The game clock hold: the hooked `Timer::advanceTime` and the four client timers it writes while held (the
+// `MinecraftGame` pointers to its sim and real timers, and the client's own sim and real timers), the particle engine
+// (the hooked tick and its valid byte, last tick time and particle count) and the predicted movement (the hooked tick
+// and the `mNow` of its uniforms), which follow the held clock.
+static TIME_CONTROL: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &[
+        "Timer.advanceTime",
+        "MinecraftGame.mSimTimer",
+        "MinecraftGame.mRealTimer",
+        "ClientInstance.mSimTimer",
+        "ClientInstance.mRealTimer",
+        "ParticleSystemEngine.tick",
+        "ParticleSystemEngine.mValid",
+        "ParticleSystemEngine.mLastTickTime",
+        "ParticleSystemEngine.mParticleCount",
+        "PredictedMovementSystem.tickPredictedMovement",
+        "SystemUniforms.mNow",
+    ],
+);
+// `FrameEnd` Before the hooked `MinecraftGame::endFrame`.
+static TIME_FRAME_END: [AdapterShape; 1] = AdapterShape::single("default", &["MinecraftGame.endFrame"]);
+// `LatencyBarrier` After the game's handler of a `NetworkStackLatencyPacket`: the hooked slot of the client's network
+// handler.
+static TIME_LATENCY_BARRIER: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &["LegacyClientNetworkHandler.vtable", "ClientNetworkHandler.handle.NetworkStackLatencyPacket"],
+);
+
+// The packet wire: the client's send (`_sendInternal`) and the outer peer's receive (`PacketTraceNetworkPeer`) hooks,
+// the server test of a network system, the connection walk (`mConnections`, the connection's peer and type), the receive
+// slot of a peer for the coverage compare, the protocol number of the build, and the client's connection info for the host
+// and port of a remote connection.
+static NETWORK_PACKET_WIRE: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &[
+        "NetworkSystem.sendInternal",
+        "NetworkSystem.isServer",
+        "NetworkSystem.mConnections",
+        "NetworkConnection.mPeer",
+        "NetworkConnection.mType",
+        "PacketTraceNetworkPeer.receivePacket",
+        "NetworkPeer.receivePacket",
+        "SharedConstants.NetworkProtocolVersion",
+        "ClientInstance.getGameConnectionInfo",
+        "GameConnectionInfo.size",
+        "GameConnectionInfo.dtor",
+    ],
+);
+
+static NEEDS: [AdapterNeed; 154] = [
     AdapterNeed::event("frame.update", &FRAME_UPDATE),
     AdapterNeed::event("client.tick", &CLIENT_TICK),
     AdapterNeed::event_at("client.game_tick", 2, &CLIENT_GAME_TICK),
-    AdapterNeed::event("world.join_started", &JOIN_STARTED),
+    AdapterNeed::event_at("world.join_started", 2, &JOIN_STARTED),
+    AdapterNeed::event_at("world.server_join_starting", 2, &SERVER_JOIN_STARTING),
+    AdapterNeed::event("world.storage_opened", &WORLD_STORAGE),
+    AdapterNeed::event("world.storage_closed", &WORLD_STORAGE),
     AdapterNeed::event("world.joined", &JOINED),
     AdapterNeed::event("world.left", &WORLD_LEFT),
     AdapterNeed::event("mods.loaded", &LOADER_ONLY),
@@ -952,12 +1411,19 @@ static NEEDS: [AdapterNeed; 115] = [
     AdapterNeed::area("client.mouse", &CLIENT_MOUSE),
     AdapterNeed::area("client.pause", &CLIENT_PAUSE),
     AdapterNeed::event("client.mouse_grab", &CLIENT_MOUSE),
+    AdapterNeed::event("client.app_focus_lost", &CLIENT_APP_FOCUS_LOST),
+    AdapterNeed::event("client.app_focus_gained", &CLIENT_APP_FOCUS_GAINED),
+    AdapterNeed::area("client.focus_replay", &CLIENT_FOCUS_REPLAY),
+    AdapterNeed::area("client.in_gameplay", &CLIENT_IN_GAMEPLAY),
     AdapterNeed::area("client.leave_world", &CLIENT_LEAVE_WORLD),
     AdapterNeed::area("client.can_join", &CLIENT_CAN_JOIN),
     AdapterNeed::area("client.start_local_world", &CLIENT_START_LOCAL_WORLD),
     AdapterNeed::area("client.join_server", &CLIENT_JOIN_SERVER),
+    AdapterNeed::area("client.join_server_direct", &CLIENT_JOIN_SERVER_DIRECT),
+    AdapterNeed::area("player.hit_result", &PLAYER_HIT_RESULT),
     AdapterNeed::event("client.join_server_result", &CLIENT_JOIN_SERVER),
     AdapterNeed::area("client.open_menu", &CLIENT_OPEN_MENU),
+    AdapterNeed::area("client.go_to_title", &CLIENT_OPEN_MENU),
     AdapterNeed::area("client.send_command", &CLIENT_SEND_COMMAND),
     AdapterNeed::area("hud.select_hotbar", &HUD_SELECT_HOTBAR),
     AdapterNeed::event("input.key", &INPUT_KEY),
@@ -997,15 +1463,26 @@ static NEEDS: [AdapterNeed; 115] = [
     AdapterNeed::event("camera.fov", &CAMERA_FOV),
     AdapterNeed::event("world.dimension_changing", &DIMENSION_CHANGING),
     AdapterNeed::event("render.world_rendered", &RENDER_WORLD_RENDERED),
-    AdapterNeed::area_at("render.world_canvas", 2, &RENDER_WORLD_CANVAS),
+    AdapterNeed::area_at("render.world_canvas", 3, &RENDER_WORLD_CANVAS),
+    AdapterNeed::area("render.block_mesher", &RENDER_BLOCK_MESHER),
+    AdapterNeed::area("render.water_tint", &RENDER_WATER_TINT),
+    AdapterNeed::event("render.block_entity_pass", &RENDER_BLOCK_ENTITY_PASS),
+    AdapterNeed::area("render.block_entities", &RENDER_BLOCK_ENTITIES),
+    AdapterNeed::area("render.chest_pair", &RENDER_CHEST_PAIR),
+    AdapterNeed::area("render.skull_pose", &RENDER_SKULL_POSE),
     AdapterNeed::event("camera.setup", &CAMERA_SETUP),
     AdapterNeed::area("camera.pose", &CAMERA_POSE),
     AdapterNeed::area("camera.projection", &CAMERA_PROJECTION),
     AdapterNeed::area("camera.free", &CAMERA_FREE),
     AdapterNeed::area("camera.active", &CAMERA_ACTIVE),
+    AdapterNeed::area("camera.hide_actor", &CAMERA_HIDE_ACTOR),
+    AdapterNeed::event("player.moved", &PLAYER_MOVED),
     AdapterNeed::event("camera.instruction_received", &CAMERA_INSTRUCTION_RECEIVED),
-    AdapterNeed::area_at("actor.read", 3, &ACTOR_READ),
+    AdapterNeed::area_at("actor.read", 4, &ACTOR_READ),
     AdapterNeed::area("actor.health", &ACTOR_HEALTH),
+    AdapterNeed::area("actor.game_type", &ACTOR_GAME_TYPE),
+    AdapterNeed::area("actor.permission", &ACTOR_PERMISSION),
+    AdapterNeed::area("actor.look_write", &ACTOR_LOOK_WRITE),
     AdapterNeed::area("world.sky_darken", &WORLD_SKY_DARKEN),
     AdapterNeed::area("world.chunk_read", &WORLD_CHUNK_READ),
     AdapterNeed::area("world.map_color", &WORLD_MAP_COLOR),
@@ -1014,10 +1491,13 @@ static NEEDS: [AdapterNeed; 115] = [
     AdapterNeed::area("world.shapes", &WORLD_SHAPES),
     AdapterNeed::area("world.raycast", &WORLD_RAYCAST),
     AdapterNeed::area("world.actors_in", &WORLD_ACTORS_IN),
-    AdapterNeed::event("world.block_changed", &BLOCK_CHANGED),
+    AdapterNeed::area("world.block_states", &WORLD_BLOCK_STATES),
+    AdapterNeed::area("world.blocks", &WORLD_BLOCKS),
+    AdapterNeed::area("world.kinds_in_box", &WORLD_KINDS_IN_BOX),
+    AdapterNeed::event_at("world.block_changed", 2, &BLOCK_CHANGED),
     AdapterNeed::area("client.world_info", &CLIENT_WORLD_INFO),
     AdapterNeed::area_at("inventory.read", 4, &INVENTORY_READ),
-    AdapterNeed::area("inventory.request", &INVENTORY_REQUEST),
+    AdapterNeed::area_at("inventory.request", 2, &INVENTORY_REQUEST_PICK),
     AdapterNeed::event("inventory.request_done", &INVENTORY_REQUEST),
     AdapterNeed::area("lighting.terrain", &LIGHTING_TERRAIN),
     AdapterNeed::area("lighting.entity", &LIGHTING_ENTITY),
@@ -1027,8 +1507,15 @@ static NEEDS: [AdapterNeed; 115] = [
     AdapterNeed::event("player.item_use", &ITEM_USE),
     AdapterNeed::event("player.attack", &PLAYER_ATTACK),
     AdapterNeed::event("player.item_use_on_block", &ITEM_USE_ON_BLOCK),
+    AdapterNeed::event("player.use_pressed", &USE_PRESSED),
+    AdapterNeed::event("player.build_block", &BUILD_BLOCK),
+    AdapterNeed::area("player.build", &PLAYER_BUILD),
+    AdapterNeed::area("player.pick_range", &PLAYER_PICK_RANGE),
     AdapterNeed::area("client.activity", &CLIENT_ACTIVITY),
+    AdapterNeed::area("options.view_distance", &OPTIONS_VIEW_DISTANCE),
+    AdapterNeed::area("options.int", &OPTIONS_INT),
     AdapterNeed::event("client.idle_screen_open", &IDLE_SCREEN_OPEN),
+    AdapterNeed::area("client.title_screen", &IDLE_SCREEN_OPEN),
     AdapterNeed::event("ui.screen_render", &UI_SCREEN_RENDER),
     AdapterNeed::area_at("ui.screen", 2, &UI_SCREEN),
     AdapterNeed::event("ui.screen_closing", &UI_SCREEN_CLOSING),
@@ -1048,6 +1535,14 @@ static NEEDS: [AdapterNeed; 115] = [
     AdapterNeed::area("network.skin_animated", &NETWORK_SKIN_ANIMATED),
     AdapterNeed::area("network.skin_geometry", &NETWORK_SKIN_GEOMETRY),
     AdapterNeed::area("network.skin_details", &NETWORK_SKIN_DETAILS),
+    AdapterNeed::area("network.chunk_cache", &NETWORK_CHUNK_CACHE),
+    AdapterNeed::area("network.protocol", &NETWORK_PROTOCOL),
+    AdapterNeed::event("network.packet_wire", &NETWORK_PACKET_WIRE),
+    AdapterNeed::event("network.connection_started", &NETWORK_PACKET_WIRE),
+    AdapterNeed::area("time.control", &TIME_CONTROL),
+    AdapterNeed::event("time.step_applied", &TIME_CONTROL),
+    AdapterNeed::event("time.frame_end", &TIME_FRAME_END),
+    AdapterNeed::event("time.latency_barrier", &TIME_LATENCY_BARRIER),
     AdapterNeed::event("ui.locator_bar_icon", &UI_LOCATOR_BAR_ICON),
     AdapterNeed::event("ui.chat_message", &UI_CHAT_MESSAGE),
     AdapterNeed::area("ui.inline_icons", &UI_INLINE_ICONS),
@@ -1085,6 +1580,22 @@ impl AdapterCatalog {
     pub const SURFACE_SUPPORT_SHAPE: &'static str = "support";
     /// The `world.scan_surfaces` shape of 70.x: `Block::canProvideFullSupport(face, flag)`.
     pub const SURFACE_SUPPORT_FLAG_SHAPE: &'static str = "support_flag";
+    /// The `actor.permission` shape of 26.63: `Player::getPlayerPermissionLevel`.
+    pub const PERMISSION_GETTER_SHAPE: &'static str = "getter";
+    /// The `actor.permission` shape of 70.x: the byte of the abilities component of `Player::getAbilitiesComponent`.
+    pub const PERMISSION_ABILITIES_SHAPE: &'static str = "abilities";
+    /// The `player.pick_range` shape of 26.63: `GameMode::getMaxPickRange` on the player's game mode.
+    pub const PICK_RANGE_GETTER_SHAPE: &'static str = "getter";
+    /// The `player.pick_range` shape of 70.x: `Player::isCreative` picks one of the game's two range constants.
+    pub const PICK_RANGE_CREATIVE_SHAPE: &'static str = "creative";
+    /// The `render.block_entities` shape of 26.63: `VanillaBlockActorFactory::createBlockActor(pos, type)`.
+    pub const BLOCK_ENTITIES_FACTORY_SHAPE: &'static str = "factory";
+    /// The `render.block_entities` shape of 70.x: the factory takes the byte of the level's flag slot.
+    pub const BLOCK_ENTITIES_FLAG_SHAPE: &'static str = "factory_flag";
+    /// The `render.skull_pose` shape of 26.63: `SkullBlockRenderer::renderSkull` with the face and the turn.
+    pub const SKULL_RENDER_SHAPE: &'static str = "render_skull";
+    /// The `render.skull_pose` shape of 70.x: `renderSkullUpright` inside a pushed face and turn transform.
+    pub const SKULL_UPRIGHT_SHAPE: &'static str = "upright";
 
     pub fn needs() -> &'static [AdapterNeed] {
         &NEEDS

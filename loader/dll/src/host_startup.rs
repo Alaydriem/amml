@@ -116,8 +116,11 @@ impl HostStartup {
         heap_check: HeapCheck,
         before_mods: impl FnOnce(&'static LoaderState),
     ) -> Result<(), HostError> {
+        let dirs = paths.loader_dirs();
+        let mod_data = dirs.mod_data.as_deref().map(|path| path.display().to_string()).unwrap_or_default();
         // SAFETY: the caller guarantees the table matches the module base.
-        let state = unsafe { LoaderState::init(LoaderConfig::new(module_base, table, paths.loader_dirs())) }?;
+        let state = unsafe { LoaderState::init(LoaderConfig::new(module_base, table, dirs)) }?;
+        curia::info!("shared mod data root", { path: mod_data });
         match heap_check {
             HeapCheck::AtLoad => state.heap().check(),
             HeapCheck::Deferred => {

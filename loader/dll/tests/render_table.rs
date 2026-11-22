@@ -1,9 +1,11 @@
 use std::ffi::c_void;
+use std::mem::MaybeUninit;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use amml::{
-    ModListener, ModLoader, RenderLevelDetours, SessionAdapter, TextureAdapter, TextureCalls, WorldRenderAdapter,
+    MeshLayout, ModListener, ModLoader, RenderLevelDetours, SessionAdapter, TextureAdapter, TextureCalls,
+    WorldRenderAdapter,
 };
 use amml_abi::{
     AmmlApi, AmmlBand, AmmlBlockPos, AmmlColorQuad, AmmlEventContext, AmmlEventHeader, AmmlMeshId, AmmlMeshStyle,
@@ -234,6 +236,19 @@ fn overlay() -> AmmlMeshStyle {
     AmmlMeshStyle { blend: AmmlMeshStyle::BLEND_ALPHA, depth_test: 1, ..AmmlMeshStyle::default() }
 }
 
+// The style of `MeshStyle::GHOST`: the blend-block material with the terrain atlas.
+fn ghost() -> AmmlMeshStyle {
+    AmmlMeshStyle {
+        blend: AmmlMeshStyle::BLEND_ALPHA,
+        depth_test: 1,
+        depth_write: 1,
+        two_sided: 0,
+        light: AmmlMeshStyle::LIGHT_FULL,
+        texture: AmmlMeshStyle::TEXTURE_TERRAIN_ATLAS,
+        _reserved: [0; 2],
+    }
+}
+
 fn build(frame: u64, quads: &[AmmlColorQuad], style: AmmlMeshStyle) -> AmmlStatus {
     let mut out = AmmlMeshId::default();
     // SAFETY: the table is live; the module, the quads and `out` live for the call.
@@ -262,6 +277,7 @@ unsafe extern "C" fn on_rendered_build(
         build(frame, &quads(1), AmmlMeshStyle { texture: AmmlMeshStyle::TEXTURE_TERRAIN_ATLAS, ..overlay() }),
         build(frame, &quads(0), overlay()),
         build(frame + 1, &quads(1), overlay()),
+        build(frame, &quads(1), ghost()),
     ];
     BUILDS.lock().unwrap().extend(statuses.map(|status| status.0));
     AmmlStatus::OK
@@ -306,7 +322,7 @@ fn quad_count_above_max_is_refused() {
     // No quad was read and no game function was called.
     assert!(MeshGame::log().is_empty(), "{:?}", MeshGame::log());
     // An empty build is an invalid argument, a build for another frame is refused.
-    assert_eq!(builds[3..], [AmmlStatus::INVALID_ARGUMENT.0, AmmlStatus::REFUSED.0]);
+    assert_eq!(builds[3..5], [AmmlStatus::INVALID_ARGUMENT.0, AmmlStatus::REFUSED.0]);
 }
 
 #[test]
@@ -582,4 +598,306 @@ fn two_sided_writes_one_winding_for_the_vibrant_material() {
 
     // The wireframe material shows both sides of each quad already.
     assert!(built_vertices().starts_with("end upload=0 vertices=8 "), "{}", built_vertices());
+}
+
+#[test]
+fn color_quads_with_ghost_style_are_not_available() {
+    let _harness = start_with_mod();
+    join();
+    RenderGame::set_camera(Some(POSITION));
+
+    RenderGame::render();
+
+    // Colour quads carry no UV, so the terrain atlas cannot be drawn on them: only the block mesher makes such a mesh.
+    let builds = BUILDS.lock().unwrap().clone();
+    assert_eq!(builds[5], AmmlStatus::NOT_AVAILABLE.0);
+    assert!(MeshGame::log().is_empty(), "{:?}", MeshGame::log());
+}
+
+// The ghost mesh the listener adopted, as `id`, `generation`; 0 before the first frame.
+static GHOST: Mutex<(u64, u32)> = Mutex::new((0, 0));
+
+// A zeroed game mesh that the loader destroys with the game destructor; its first word is the stand-in vertex count.
+fn ghost_handle() -> usize {
+    let mut mesh = Box::new(MaybeUninit::<MeshLayout>::zeroed());
+    // SAFETY: the box holds the zeroed bytes of a mesh, larger than one word.
+    unsafe { mesh.as_mut_ptr().cast::<u64>().write(6) };
+    Box::into_raw(mesh) as usize
+}
+
+// At the first frame adopts one block mesh for the mod at owner 0 (what the block mesher does); at each later frame
+// draws it once: `ghost draw=<status>`.
+unsafe extern "C" fn on_rendered_ghost(
+    event: *mut AmmlEventHeader,
+    _: *const AmmlEventContext,
+    _: *mut c_void,
+) -> AmmlStatus {
+    // SAFETY: the loader raises `render.world_rendered` with a `WorldRendered`.
+    let frame = unsafe { &*event.cast::<WorldRendered>() }.frame_id;
+    let mut ghost = GHOST.lock().unwrap();
+    if ghost.0 == 0 {
+        let mesh = WorldRenderAdapter::get().unwrap().adopt_block_mesh(0, ghost_handle());
+        *ghost = (mesh.id, mesh.generation);
+        return AmmlStatus::OK;
+    }
+    let mesh = AmmlMeshId { id: ghost.0, generation: ghost.1, _reserved: 0 };
+    let transform = AmmlTransform {
+        origin: AmmlBlockPos { x: 10, y: 64, z: -3 },
+        offset: AmmlVec3 { x: 0.5, y: 0.0, z: 0.0 },
+        scale: 1.0,
+        yaw_degrees: 0.0,
+    };
+    // SAFETY: the table is live; the module and the transform live for the call.
+    let status = unsafe { (table().mesh_draw.unwrap())(AmmlStr::from_str(MODULE), frame, mesh, &transform) };
+    DRAWN.lock().unwrap().push(format!("ghost draw={}", status.0));
+    AmmlStatus::OK
+}
+
+// The render adapters over the stand-ins with one loaded mod and the ghost listener. The item renderer holds a blend
+// material.
+fn start_ghosting() -> Harness {
+    let harness = Harness::start_with_entries(&RenderGame::entries(&[]));
+    SessionAdapter::install(harness.state);
+    WorldRenderAdapter::install(harness.state);
+    let plain = EventsMod::build("plain", &[]);
+    harness.install_mod("events", "events", &plain, "events.dll", 3);
+    let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
+    assert!(ModLoader::new(harness.state).load_all(&scan.mods).iter().all(|report| report.is_ok()));
+    // SAFETY: the loader's tables live for the process.
+    let services = unsafe { AmmlApi::services(harness.state.api()) }.unwrap();
+    // SAFETY: as above.
+    let render = unsafe { AmmlServices::render(services) }.unwrap();
+    TABLE.store(render.expose_provenance(), Ordering::SeqCst);
+    let listener = ModListener { owner: 0, callback: on_rendered_ghost, user: 0 };
+    assert!(harness.state.events().listen("render.world_rendered", 1, AmmlBand::NORMAL, listener).is_ok());
+    MeshGame::set_material(MeshGame::GAME_BYTES);
+    MeshGame::set_blend_ready(true);
+    harness
+}
+
+// A joined world whose renderer holds the atlas `controls`; the first `render` adopts the mesh.
+fn ghost_scene(controls: Option<[usize; 2]>) {
+    join();
+    RenderGame::set_camera(Some(POSITION));
+    RenderGame::set_atlas(controls);
+}
+
+fn renders() -> Vec<String> {
+    MeshGame::log().into_iter().filter(|line| line.starts_with("render ")).collect()
+}
+
+fn dtors() -> usize {
+    MeshGame::log().iter().filter(|line| line.starts_with("dtor")).count()
+}
+
+fn ghost_ok() -> String {
+    format!("ghost draw={}", AmmlStatus::OK.0)
+}
+
+fn ghost_status(status: AmmlStatus) -> String {
+    format!("ghost draw={}", status.0)
+}
+
+#[test]
+fn ghost_draw_copies_the_atlas_texture() {
+    let _harness = start_ghosting();
+    let controls = [control_block(3), control_block(3)];
+    ghost_scene(Some(controls));
+
+    RenderGame::render();
+    RenderGame::render();
+    RenderGame::render();
+
+    assert_eq!(drawn(), [ghost_ok(), ghost_ok()]);
+    let renders = renders();
+    assert_eq!(renders.len(), 2, "{renders:?}");
+    // Element 0 of the list is the renderer's atlas, and it holds a use of its own on each control block.
+    for line in &renders {
+        assert!(line.contains(" count=1 index=1 "), "{line}");
+        assert!(line.contains(" atlas=true held=4"), "{line}");
+    }
+    // The game destroyed each list; the renderer's own uses are all that is left.
+    assert_eq!(controls.map(uses), [3, 3]);
+}
+
+#[test]
+fn ghost_draw_uses_the_blend_block_material() {
+    let _harness = start_ghosting();
+    ghost_scene(Some([control_block(1), control_block(1)]));
+
+    RenderGame::render();
+    RenderGame::render();
+
+    assert_eq!(drawn(), [ghost_ok()]);
+    let log = MeshGame::log();
+    assert!(log.iter().any(|line| line == "item in hand renderer"), "{log:?}");
+    assert!(renders()[0].starts_with("render vertices=6 context=0x10 material=blend "), "{:?}", renders());
+    // The world's own materials are not touched or made.
+    assert!(!log.iter().any(|line| line == "name tag renderer"), "{log:?}");
+    assert_eq!(MeshGame::material(), MeshGame::GAME_BYTES);
+    assert_eq!(log.iter().filter(|line| *line == "push flag=1").count(), 1);
+    assert_eq!(log.iter().filter(|line| *line == "pop").count(), 1);
+}
+
+#[test]
+fn ghost_draw_in_vibrant_visuals_uses_the_same_material() {
+    let _harness = start_ghosting();
+    WorldRenderAdapter::get().unwrap().set_vibrant(true);
+    ghost_scene(Some([control_block(1), control_block(1)]));
+
+    RenderGame::render();
+    RenderGame::render();
+
+    assert_eq!(drawn(), [ghost_ok()]);
+    assert!(renders()[0].contains("material=blend "), "{:?}", renders());
+    assert_eq!(MeshGame::material(), MeshGame::GAME_BYTES);
+}
+
+#[test]
+fn ghost_draw_without_an_atlas_is_not_ready() {
+    let _harness = start_ghosting();
+    ghost_scene(None);
+
+    RenderGame::render();
+    RenderGame::render();
+
+    assert_eq!(drawn(), [ghost_status(AmmlStatus::NOT_READY)]);
+    assert!(renders().is_empty());
+}
+
+#[test]
+fn ghost_draw_with_an_empty_blend_material_fails_and_keeps_the_atlas_uses() {
+    let _harness = start_ghosting();
+    MeshGame::set_blend_ready(false);
+    let controls = [control_block(3), control_block(3)];
+    ghost_scene(Some(controls));
+
+    RenderGame::render();
+    RenderGame::render();
+
+    assert_eq!(drawn(), [ghost_status(AmmlStatus::FAILED)]);
+    assert!(renders().is_empty());
+    assert_eq!(controls.map(uses), [3, 3]);
+}
+
+#[test]
+fn ghost_style_meshes_follow_the_canvas_free_rules() {
+    let _harness = start_ghosting();
+    ghost_scene(Some([control_block(3), control_block(3)]));
+    RenderGame::render();
+    RenderGame::render();
+    let (id, generation) = *GHOST.lock().unwrap();
+    let mesh = AmmlMeshId { id, generation, _reserved: 0 };
+    let free = || {
+        // SAFETY: the table is live; the module lives for the call.
+        unsafe { (table().mesh_free)(AmmlStr::from_str(MODULE), mesh) }
+    };
+
+    let first = free();
+    let second = free();
+    // The game object waits for the render thread: nothing is destroyed at the free, and once at the next level pass.
+    let before = dtors();
+    RenderGame::render();
+    let after = dtors();
+    RenderGame::render();
+    let last = dtors();
+
+    assert_eq!((first, second), (AmmlStatus::OK, AmmlStatus::STALE));
+    assert_eq!((before, after, last), (0, 1, 1));
+    // The draw before the free was fine; the two after it are stale.
+    assert_eq!(drawn(), [ghost_ok(), ghost_status(AmmlStatus::STALE), ghost_status(AmmlStatus::STALE)]);
+    assert_eq!(renders().len(), 1);
+}
+
+#[test]
+fn ghost_style_meshes_are_stale_after_the_world_is_left() {
+    let _harness = start_ghosting();
+    ghost_scene(Some([control_block(3), control_block(3)]));
+    RenderGame::render();
+    RenderGame::render();
+
+    WorldRenderAdapter::get().unwrap().world_left();
+    RenderGame::render();
+
+    assert_eq!(drawn(), [ghost_ok(), ghost_status(AmmlStatus::STALE)]);
+    assert_eq!(dtors(), 1);
+}
+
+// What the clip listener saw: the statuses of the calls and the matrix of the own frame.
+static CLIPS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+unsafe extern "C" fn on_rendered_clip(
+    event: *mut AmmlEventHeader,
+    _: *const AmmlEventContext,
+    _: *mut c_void,
+) -> AmmlStatus {
+    // SAFETY: the loader raises `render.world_rendered` with a `WorldRendered`.
+    let frame = unsafe { &*event.cast::<WorldRendered>() }.frame_id;
+    let clip = |frame: u64, out: *mut [[f32; 4]; 4]| {
+        // SAFETY: the table is live; `out` is null or writable for the call.
+        unsafe { (table().canvas_clip_matrix.unwrap())(frame, out) }
+    };
+    let mut matrix = [[f32::NAN; 4]; 4];
+    let own = clip(frame, &raw mut matrix);
+    let mut scratch = [[0.0; 4]; 4];
+    let other = clip(frame + 1, &raw mut scratch);
+    let null = clip(frame, std::ptr::null_mut());
+    CLIPS.lock().unwrap().push(format!("own={} other={} null={} matrix={matrix:?}", own.0, other.0, null.0));
+    AmmlStatus::OK
+}
+
+fn start_clipping() -> Harness {
+    let harness = Harness::start_with_entries(&RenderGame::entries(&[]));
+    SessionAdapter::install(harness.state);
+    WorldRenderAdapter::install(harness.state);
+    // SAFETY: the loader's tables live for the process.
+    let services = unsafe { AmmlApi::services(harness.state.api()) }.unwrap();
+    // SAFETY: as above.
+    let render = unsafe { AmmlServices::render(services) }.unwrap();
+    TABLE.store(render.expose_provenance(), Ordering::SeqCst);
+    let listener = ModListener { owner: 0, callback: on_rendered_clip, user: 0 };
+    assert!(harness.state.events().listen("render.world_rendered", 1, AmmlBand::NORMAL, listener).is_ok());
+    harness
+}
+
+#[test]
+fn clip_matrix_is_projection_times_view() {
+    let _harness = start_clipping();
+    // Columns: the view moves the world by (-2, -6, 0.25); the projection scales x and y and divides by depth.
+    let view = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [-2.0, -6.0, 0.25, 1.0]];
+    let projection = [[2.0, 0.0, 0.0, 0.0], [0.0, 3.0, 0.0, 0.0], [0.0, 0.0, -1.0, -1.0], [0.0, 0.0, -0.5, 0.0]];
+    MeshGame::set_stacks(Some([view, projection]));
+    join();
+    RenderGame::set_camera(Some(POSITION));
+
+    RenderGame::render();
+
+    // Projection times view, by columns, as the old mod reads it; another frame and a null pointer are refused.
+    let expected = [[2.0, 0.0, 0.0, 0.0], [0.0, 3.0, 0.0, 0.0], [0.0, 0.0, -1.0, -1.0], [-4.0, -18.0, -0.75, -0.25]];
+    assert_eq!(
+        *CLIPS.lock().unwrap(),
+        [format!(
+            "own={} other={} null={} matrix={expected:?}",
+            AmmlStatus::OK.0,
+            AmmlStatus::REFUSED.0,
+            AmmlStatus::INVALID_ARGUMENT.0
+        )]
+    );
+    // After the dispatch the frame is refused.
+    let mut out = [[0.0; 4]; 4];
+    // SAFETY: the table is live; `out` is writable.
+    assert_eq!(unsafe { (table().canvas_clip_matrix.unwrap())(1, &raw mut out) }, AmmlStatus::REFUSED);
+}
+
+#[test]
+fn clip_matrix_with_an_empty_stack_gives_failed() {
+    let _harness = start_clipping();
+    MeshGame::set_stacks(None);
+    join();
+    RenderGame::set_camera(Some(POSITION));
+
+    RenderGame::render();
+
+    let line = CLIPS.lock().unwrap()[0].clone();
+    assert!(line.starts_with(&format!("own={} ", AmmlStatus::FAILED.0)), "{line}");
 }

@@ -1,6 +1,8 @@
 use std::ffi::c_void;
 
-use amml_abi::{AmmlCameraKind, AmmlCameraTable, AmmlPose, AmmlProjection, AmmlStatus, AmmlStr, AmmlVec3};
+use amml_abi::{
+    AmmlActorTarget, AmmlCameraKind, AmmlCameraTable, AmmlPose, AmmlProjection, AmmlStatus, AmmlStr, AmmlVec3,
+};
 
 unsafe extern "C" fn set_pose(_: AmmlStr, _: u64, _: *const AmmlPose) -> AmmlStatus {
     AmmlStatus::OK
@@ -30,10 +32,14 @@ unsafe extern "C" fn active_camera(_: *const c_void, _: *mut AmmlCameraKind) -> 
     AmmlStatus::OK
 }
 
+unsafe extern "C" fn hide_actor(_: AmmlStr, _: AmmlActorTarget, _: u8) -> AmmlStatus {
+    AmmlStatus::OK
+}
+
 fn table() -> AmmlCameraTable {
     AmmlCameraTable {
-        size: AmmlCameraTable::SIZE_V3,
-        version: 3,
+        size: AmmlCameraTable::SIZE_V4,
+        version: 4,
         set_pose,
         rendered_position,
         projection,
@@ -41,6 +47,7 @@ fn table() -> AmmlCameraTable {
         release_free: Some(release_free),
         free_available: Some(free_available),
         active_camera: Some(active_camera),
+        hide_actor: Some(hide_actor),
     }
 }
 
@@ -79,4 +86,27 @@ fn a_v3_camera_table_reads_the_free_camera_and_active_camera_functions() {
     assert_eq!(AmmlCameraTable::SIZE_V3, 64);
     assert!(read.set_free.is_some() && read.release_free.is_some() && read.free_available.is_some());
     assert!(read.active_camera.is_some());
+}
+
+#[test]
+fn a_v3_camera_table_reads_none_for_the_hide_actor_function() {
+    let mut table = table();
+    table.size = AmmlCameraTable::SIZE_V3;
+
+    // SAFETY: the table lives for the call and the v4 bytes past `size` are never trusted.
+    let read = unsafe { AmmlCameraTable::read(&raw const table) }.unwrap();
+
+    assert!(read.active_camera.is_some());
+    assert!(read.hide_actor.is_none());
+}
+
+#[test]
+fn a_v4_camera_table_reads_the_hide_actor_function() {
+    let table = table();
+
+    // SAFETY: the table lives for the call.
+    let read = unsafe { AmmlCameraTable::read(&raw const table) }.unwrap();
+
+    assert_eq!(AmmlCameraTable::SIZE_V4, 72);
+    assert!(read.hide_actor.is_some());
 }

@@ -15,6 +15,9 @@ static STARTER: AtomicUsize = AtomicUsize::new(0);
 static RESULTS: Mutex<VecDeque<u32>> = Mutex::new(VecDeque::new());
 static IDS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static THIS_SEEN: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+// A stand-in World::NetworkWorldJoiner; its ServerWorldJoiner member is at `SERVER_JOINER_AT`.
+static NETWORK_JOINER: [AtomicUsize; 8] = [const { AtomicUsize::new(0) }; 8];
+static EXTERNAL_JOINS: AtomicUsize = AtomicUsize::new(0);
 
 /// Stand-ins for the world start path: `MinecraftGame::getWorldSystem` (slot 5 of the `ClientGame`
 /// MinecraftGame vtable), a WorldSystem that holds a LocalWorldStarter pointer, and
@@ -46,6 +49,43 @@ impl WorldGame {
         ];
         entries.extend(world.into_iter().filter(|(id, _)| !without.contains(id)));
         entries
+    }
+
+    /// The offset of `mNetworkWorldJoiner` in the stand-in WorldSystem.
+    pub const NETWORK_JOINER_OFFSET: usize = 0x88;
+    /// The offset of `mServerWorldJoiner` in the stand-in NetworkWorldJoiner.
+    pub const SERVER_JOINER_AT: u64 = 0x10;
+
+    /// The entries of `client.join_server`: the client's MinecraftGame, the joiner chain and a `joinExternalServer`
+    /// that never answers.
+    pub fn join_entries() -> Vec<(&'static str, Resolved)> {
+        WORLD_SYSTEM[Self::NETWORK_JOINER_OFFSET / 8]
+            .store(std::ptr::from_ref(&NETWORK_JOINER) as usize, Ordering::SeqCst);
+        let field = |value| Resolved { kind: EntryKind::Field, value, recipes_agreeing: 2 };
+        vec![
+            ("WorldSystem.mNetworkWorldJoiner", field(Self::NETWORK_JOINER_OFFSET as u64)),
+            ("NetworkWorldJoiner.mServerWorldJoiner", field(Self::SERVER_JOINER_AT)),
+            (
+                "ServerWorldJoiner.joinExternalServer",
+                Resolved {
+                    kind: EntryKind::Function,
+                    value: Self::join_external as *const () as usize as u64 - Harness::BASE,
+                    recipes_agreeing: 2,
+                },
+            ),
+        ]
+    }
+
+    /// How many times `joinExternalServer` ran.
+    pub fn external_joins() -> usize {
+        EXTERNAL_JOINS.load(Ordering::SeqCst)
+    }
+
+    // `joinExternalServer(host, port, name, std::function onResult)`: counts the call and never calls the function.
+    #[inline(never)]
+    extern "C" fn join_external(this: *mut c_void, host: usize, port: u16, name: usize, on_result: usize) {
+        black_box((this, host, port, name, on_result));
+        EXTERNAL_JOINS.fetch_add(1, Ordering::SeqCst);
     }
 
     /// The address of the stand-in LocalWorldStarter.

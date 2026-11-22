@@ -163,7 +163,7 @@ impl PlayerActionDetours {
     // The original behind `slot`, as a function of type `F`.
     //
     // Safety: the hook of `slot` is installed and its target has the signature `F`.
-    unsafe fn original<F: Copy>(slot: &AtomicPtr<c_void>) -> F {
+    pub(crate) unsafe fn original<F: Copy>(slot: &AtomicPtr<c_void>) -> F {
         const { assert!(std::mem::size_of::<F>() == std::mem::size_of::<*mut c_void>()) };
         let address = slot.load(Ordering::Acquire);
         // SAFETY: the engine set the slot before it moved the thunk to the detour that calls this; the caller
@@ -172,7 +172,7 @@ impl PlayerActionDetours {
     }
 
     // `pos` as a value; the origin for a null pointer.
-    fn position(pos: *const AmmlBlockPos) -> AmmlBlockPos {
+    pub(crate) fn position(pos: *const AmmlBlockPos) -> AmmlBlockPos {
         if pos.is_null() {
             return AmmlBlockPos::default();
         }

@@ -12,16 +12,18 @@ use crate::input_table::INPUT;
 use crate::inventory_table::INVENTORY;
 use crate::lighting_table::LIGHTING;
 use crate::network_table::NETWORK;
+use crate::options_table::OPTIONS;
 use crate::overlay_table::OVERLAY;
 use crate::render_table::RENDER;
+use crate::time_table::TIME;
 use crate::ui_table::UI;
 use crate::window_table::WINDOW;
 use crate::world_table::WORLD;
 use crate::{Boundary, LoaderLog, LoaderState};
 
 const TABLE_VERSION: u32 = 1;
-// The services table is at v11: v10 plus the `camera` table (`AmmlServices::SIZE_V11`).
-const SERVICES_VERSION: u32 = 11;
+// The services table is at v13: v12 plus the `time` table (`AmmlServices::SIZE_V13`).
+const SERVICES_VERSION: u32 = 13;
 
 static EVENTS: AmmlEventsTable = AmmlEventsTable {
     size: std::mem::size_of::<AmmlEventsTable>() as u32,
@@ -47,7 +49,7 @@ static REGISTRY: AmmlRegistryTable = AmmlRegistryTable {
 };
 
 static SERVICES: ServicesTable = ServicesTable(AmmlServices {
-    size: AmmlServices::SIZE_V11,
+    size: AmmlServices::SIZE_V13,
     version: SERVICES_VERSION,
     events: &EVENTS,
     core: &CORE,
@@ -64,9 +66,11 @@ static SERVICES: ServicesTable = ServicesTable(AmmlServices {
     world: &WORLD,
     render: &RENDER,
     camera: &CAMERA,
+    options: &OPTIONS,
+    time: &TIME,
 });
 
-/// The v11 service tables (events, core, registry, client, input, window, overlay, actor, inventory, lighting, ui, network, world, render, camera) behind `AmmlApi::services`, and their
+/// The v13 service tables (events, core, registry, client, input, window, overlay, actor, inventory, lighting, ui, network, world, render, camera, options, time) behind `AmmlApi::services`, and their
 /// `extern "C"` functions. Each function is a thin delegator into `LoaderState` inside
 /// `Boundary::guard`, so a panic becomes `AmmlStatus::PANICKED`.
 pub struct ServicesTable(AmmlServices);

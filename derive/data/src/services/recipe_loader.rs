@@ -127,6 +127,7 @@ impl RecipeLoader {
             "pattern_any" => &["patterns", "offset", "literal_ok"],
             "function_start_of" => &[],
             "vtable_holding" => &[],
+            "vptr_offset" => &[],
             "string_xref" => &["text", "nth"],
             "rtti_vtable" => &["class", "slot"],
             "ref" => &["entry"],
@@ -163,6 +164,7 @@ impl RecipeLoader {
             }
             "function_start_of" => Ok(Step::FunctionStartOf),
             "vtable_holding" => Ok(Step::VtableHolding),
+            "vptr_offset" => Ok(Step::VptrOffset),
             "string_xref" => {
                 let text = reader.string("text")?;
                 if text.is_empty() || text.contains(char::from(0)) {
@@ -235,6 +237,7 @@ impl RecipeLoader {
             "function_start" | "leaf_start" => &[],
             "in_vtable_of" => &["class"],
             "in_vtable" => &["vtable", "min_slot", "max_slot"],
+            "in_stored_vtable" => &[],
             "range" => &["min", "max"],
             "section" => &["name"],
             "entry_is" => &["entry", "value"],
@@ -245,6 +248,7 @@ impl RecipeLoader {
             "function_start" => Ok(Check::FunctionStart),
             "leaf_start" => Ok(Check::LeafStart),
             "in_vtable_of" => Ok(Check::InVtableOf { class: reader.string("class")? }),
+            "in_stored_vtable" => Ok(Check::InStoredVtable),
             "in_vtable" => {
                 let (min_slot, max_slot) = (reader.u32("min_slot")?, reader.u32("max_slot")?);
                 if min_slot > max_slot {

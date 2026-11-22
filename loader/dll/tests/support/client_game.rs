@@ -1,19 +1,21 @@
 use std::ffi::c_void;
 use std::hint::black_box;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize, Ordering};
 
 use amml_data::{EntryKind, Resolved};
 
-use super::{ActiveCameraGame, ActivityGame, FakeVtable, Harness, HeapProbe, InfoGame, SessionGame, WorldGame};
+use super::{
+    ActiveCameraGame, ActivityGame, FakeVtable, Harness, HeapProbe, InfoGame, RouterGame, SessionGame, WorldGame,
+};
 
 /// A stand-in `ClientInstance`: only its vtable pointer.
-pub type FakeGameClient = &'static FakeVtable<11>;
+pub type FakeGameClient = &'static FakeVtable<12>;
 
 // The IClientInstance vtable: 0 getLocalPlayer, 1 getMinecraftInput, 2 isWorldActive, 3 isShowingMenu,
 // 4 getTopScreenName, 5 getOptions, 6 getMinecraftGame, 7 getGameConnectionInfo, 8 getLevel, 9 isInRealm,
-// 10 getCameraRegistry.
-static CLIENT_VTABLE: FakeVtable<11> = FakeVtable([
+// 10 getCameraRegistry, 11 getCurrentUIRouter.
+static CLIENT_VTABLE: FakeVtable<12> = FakeVtable([
     ClientGame::local_player as *const (),
     ActivityGame::minecraft_input as *const (),
     ClientGame::world_active as *const (),
@@ -25,6 +27,7 @@ static CLIENT_VTABLE: FakeVtable<11> = FakeVtable([
     InfoGame::get_level as *const (),
     InfoGame::is_in_realm as *const (),
     ActiveCameraGame::camera_registry as *const (),
+    RouterGame::current_router as *const (),
 ]);
 // The MinecraftGame vtable: 2 update, 3 grabMouse, 4 releaseMouse, 5 getWorldSystem.
 static GAME_VTABLE: FakeVtable<6> = FakeVtable([
@@ -35,17 +38,27 @@ static GAME_VTABLE: FakeVtable<6> = FakeVtable([
     ClientGame::release_mouse as *const (),
     WorldGame::world_system as *const (),
 ]);
-// The AppPlatformListener vtable of MinecraftGame: 0 onAppFocusLost.
-static LISTENER_VTABLE: FakeVtable<1> = FakeVtable([ClientGame::focus_lost as *const ()]);
-// The IOptionRegistry vtable: 0 getHideHud, 1 setHideGUI, 2 getIfValid.
-static OPTIONS_VTABLE: FakeVtable<3> = FakeVtable([
+// The AppPlatformListener vtable of MinecraftGame: 0 onAppFocusLost, 1 onAppFocusGained.
+static LISTENER_VTABLE: FakeVtable<2> =
+    FakeVtable([ClientGame::focus_lost as *const (), ClientGame::focus_gained as *const ()]);
+// The IOptionRegistry vtable: 0 getHideHud, 1 setHideGUI, 2 getIfValid, 3 getEffectiveMaxFramerateOption,
+// 4 getViewDistanceChunks.
+static OPTIONS_VTABLE: FakeVtable<5> = FakeVtable([
     ClientGame::get_hide_hud as *const (),
     ClientGame::set_hide_gui as *const (),
     ClientGame::get_if_valid as *const (),
+    ClientGame::effective_max_framerate as *const (),
+    ClientGame::view_distance as *const (),
 ]);
-static OPTIONS: &FakeVtable<3> = &OPTIONS_VTABLE;
+static OPTIONS: &FakeVtable<5> = &OPTIONS_VTABLE;
+// The view distance `getViewDistanceChunks` gives.
+static VIEW_DISTANCE: AtomicI32 = AtomicI32::new(12);
+// The `IntOption::set` calls: (the option, the value, the save flag).
+static INT_SETS: Mutex<Vec<(usize, i32, bool)>> = Mutex::new(Vec::new());
 // The options `getIfValid` gives: (id, the address of a stand-in `Option`).
 static OPTION_LIST: Mutex<Vec<(i32, usize)>> = Mutex::new(Vec::new());
+// The answer of the registry's slot 13 that `getEffectiveMaxFramerateOption` reads: 2 selects option F7h.
+static FRAMERATE_SLOT_13: AtomicI32 = AtomicI32::new(0);
 // The stand-in `Option` of `pause_menu_on_focus_lost`, 0 while there is none.
 static PAUSE_OPTION: AtomicUsize = AtomicUsize::new(0);
 
@@ -66,7 +79,7 @@ static SCREEN: Mutex<String> = Mutex::new(String::new());
 static HUD_SETS: Mutex<Vec<bool>> = Mutex::new(Vec::new());
 static FOCUS_LOST_THIS: Mutex<Vec<usize>> = Mutex::new(Vec::new());
 // Calls of each stand-in, in the order of `ClientGame::calls`.
-static CALLS: [AtomicUsize; 9] = [const { AtomicUsize::new(0) }; 9];
+static CALLS: [AtomicUsize; 10] = [const { AtomicUsize::new(0) }; 10];
 
 /// Stand-ins for the game functions the client adapter calls and hooks: a client with its vtable, a
 /// `MinecraftGame` with an `AppPlatformListener` subobject, and an option registry.
@@ -75,13 +88,20 @@ pub struct ClientGame;
 impl ClientGame {
     /// The offset of the listener subobject in the derived entry.
     pub const LISTENER_OFFSET: usize = 0x88;
+    /// The id of the stand-in effective max frame rate option.
+    pub const MAX_FRAMERATE_ID: i32 = 0xF6;
+    /// The id of the other max frame rate option, effective while slot 13 of the registry answers 2.
+    pub const MAX_FRAMERATE_OTHER_ID: i32 = 0xF7;
+    /// The id of the stand-in `gfx_vsync` option.
+    pub const VSYNC_ID: i32 = 3;
     /// The id of the stand-in `pause_menu_on_focus_lost` option (its 26.63 id).
     pub const PAUSE_OPTION_ID: i32 = 0x32F;
     // The game's `Option` and `Option::Impl` offsets the loader reads.
-    const OPTION_SIZE: usize = 0x18;
+    const OPTION_SIZE: usize = 0x30;
     const IMPL_SIZE: usize = 0x240;
     const IMPL_AT: usize = 0x8;
     const BOOL_VALUE_AT: usize = 0x10;
+    const INT_VALUE_AT: usize = 0x18;
     const SAVE_TAG_AT: usize = 0x188;
     const ID_AT: usize = 0x1CC;
     const TYPE_AT: usize = 0x1D4;
@@ -95,6 +115,7 @@ impl ClientGame {
     const GRAB: usize = 6;
     const RELEASE: usize = 7;
     const FOCUS_LOST: usize = 8;
+    const FOCUS_GAINED: usize = 9;
 
     /// The session entries and every client entry, pointing to the stand-ins; `without` names entries to
     /// leave out. The listener subobject is placed at `LISTENER_OFFSET`.
@@ -128,10 +149,14 @@ impl ClientGame {
             ("IOptionRegistry.getHideHud", slot(0)),
             ("IOptionRegistry.setHideGUI", slot(1)),
             ("OptionRegistry.getIfValid", slot(2)),
+            ("OptionRegistry.getEffectiveMaxFramerateOption", slot(3)),
+            ("IOptionRegistry.getViewDistanceChunks", slot(4)),
+            ("IntOption.set", function(Self::int_option_set as *const () as usize)),
             ("IMinecraftGame.grabMouse", slot(3)),
             ("IMinecraftGame.releaseMouse", slot(4)),
             ("MinecraftGame.grabMouse", function(Self::grab_mouse as *const () as usize)),
             ("MinecraftGame.onAppFocusLost", function(Self::focus_lost as *const () as usize)),
+            ("MinecraftGame.onAppFocusGained", slot(1)),
             ("MinecraftGame.AppPlatformListener.vtable", global(std::ptr::from_ref(&LISTENER_VTABLE) as usize)),
             ("MinecraftGame.appPlatformListenerOffset", field(Self::LISTENER_OFFSET as u64)),
         ]);
@@ -161,9 +186,15 @@ impl ClientGame {
     /// `pause_menu_on_focus_lost` (id `PAUSE_OPTION_ID`), on.
     pub fn place_options(with_pause: bool) {
         let mut list = vec![
-            (3, Self::make_option(3, "gfx_vsync", 0, 1)),
+            (3, Self::make_option(3, "gfx_vsync", 6, 1)),
             (0x40, Self::make_option(0x40, "ctrl_sensitivity_value", 5, 0)),
+            (Self::MAX_FRAMERATE_ID, Self::make_option(Self::MAX_FRAMERATE_ID, "gfx_max_framerate", 5, 60)),
+            (
+                Self::MAX_FRAMERATE_OTHER_ID,
+                Self::make_option(Self::MAX_FRAMERATE_OTHER_ID, "gfx_max_framerate_b", 5, 30),
+            ),
         ];
+        FRAMERATE_SLOT_13.store(0, Ordering::SeqCst);
         let pause = if with_pause {
             let option = Self::make_option(Self::PAUSE_OPTION_ID, "pause_menu_on_focus_lost", 0, 1);
             list.push((Self::PAUSE_OPTION_ID, option));
@@ -189,6 +220,45 @@ impl ClientGame {
             let implementation = ((option + Self::IMPL_AT) as *const usize).read();
             ((implementation + Self::ID_AT) as *mut i32).write_unaligned(own_id);
         }
+    }
+
+    /// The int value of the option with id `id`, as the game holds it.
+    pub fn int_option(id: i32) -> i32 {
+        let option = Self::option_address(id);
+        // SAFETY: `option` is a leaked stand-in `Option` of `OPTION_SIZE` bytes.
+        unsafe { ((option + Self::INT_VALUE_AT) as *const i32).read_unaligned() }
+    }
+
+    /// Changes the int value of the option with id `id`, as the user does in the settings screen.
+    pub fn set_int_option(id: i32, value: i32) {
+        let option = Self::option_address(id);
+        // SAFETY: `option` is a leaked stand-in `Option` of `OPTION_SIZE` bytes.
+        unsafe { ((option + Self::INT_VALUE_AT) as *mut i32).write_unaligned(value) };
+    }
+
+    /// The `IntOption::set` calls so far, in order: (the option id, the value, the save flag).
+    pub fn int_sets() -> Vec<(i32, i32, bool)> {
+        let sets = INT_SETS.lock().unwrap().clone();
+        sets.into_iter()
+            .map(|(option, value, save)| {
+                let id = OPTION_LIST.lock().unwrap().iter().find(|(_, held)| *held == option).map(|(id, _)| *id);
+                (id.unwrap_or(-1), value, save)
+            })
+            .collect()
+    }
+
+    /// The answer of the registry's slot 13 from now on: 2 makes option F7h the effective max frame rate option.
+    pub fn set_framerate_slot_13(answer: i32) {
+        FRAMERATE_SLOT_13.store(answer, Ordering::SeqCst);
+    }
+
+    /// The view distance `getViewDistanceChunks` gives from now on.
+    pub fn set_view_distance(chunks: i32) {
+        VIEW_DISTANCE.store(chunks, Ordering::SeqCst);
+    }
+
+    fn option_address(id: i32) -> usize {
+        OPTION_LIST.lock().unwrap().iter().find(|(known, _)| *known == id).unwrap().1
     }
 
     /// The value of `pause_menu_on_focus_lost`.
@@ -223,6 +293,7 @@ impl ClientGame {
         unsafe {
             ((option + Self::IMPL_AT) as *mut usize).write(implementation);
             ((option + Self::BOOL_VALUE_AT) as *mut u8).write(value);
+            ((option + Self::INT_VALUE_AT) as *mut i32).write_unaligned(i32::from(value));
             ((implementation + Self::SAVE_TAG_AT) as *mut [usize; 4]).write(words);
             ((implementation + Self::ID_AT) as *mut i32).write_unaligned(id);
             ((implementation + Self::TYPE_AT) as *mut i32).write_unaligned(option_type);
@@ -276,6 +347,18 @@ impl ClientGame {
         // SAFETY: slot 0 holds `focus_lost`, an `extern "C" fn(*mut c_void)`.
         let focus_lost = unsafe { Self::slot_fn(&LISTENER_VTABLE.0, 0) };
         focus_lost(black_box((Self::game() + Self::LISTENER_OFFSET) as *mut c_void));
+    }
+
+    /// The app gains focus: `onAppFocusGained` through the listener vtable, on the listener subobject.
+    pub fn game_focus_gained() {
+        // SAFETY: slot 1 holds `focus_gained`, an `extern "C" fn(*mut c_void)`.
+        let focus_gained = unsafe { Self::slot_fn(&LISTENER_VTABLE.0, 1) };
+        focus_gained(black_box((Self::game() + Self::LISTENER_OFFSET) as *mut c_void));
+    }
+
+    /// How many times the game's `onAppFocusGained` ran.
+    pub fn focus_gains() -> usize {
+        CALLS[Self::FOCUS_GAINED].load(Ordering::SeqCst)
     }
 
     /// Calls of the stand-ins: isWorldActive, isShowingMenu, getTopScreenName, getOptions,
@@ -393,6 +476,36 @@ impl ClientGame {
         out
     }
 
+    // `Option* getEffectiveMaxFramerateOption()`: writes the `Option*` of option F6h, or F7h while slot 13 answers 2, to
+    // `out`.
+    #[inline(never)]
+    extern "C" fn effective_max_framerate(this: *mut c_void, out: *mut usize) -> *mut usize {
+        black_box(this);
+        let wanted = if FRAMERATE_SLOT_13.load(Ordering::SeqCst) == 2 {
+            Self::MAX_FRAMERATE_OTHER_ID
+        } else {
+            Self::MAX_FRAMERATE_ID
+        };
+        let option = OPTION_LIST.lock().unwrap().iter().find(|(id, _)| *id == wanted).map(|(_, o)| *o);
+        // SAFETY: the caller passes room for one pointer.
+        unsafe { out.write(option.unwrap_or(0)) };
+        out
+    }
+
+    #[inline(never)]
+    extern "C" fn view_distance(this: *mut c_void) -> i32 {
+        black_box(this);
+        VIEW_DISTANCE.load(Ordering::SeqCst)
+    }
+
+    // `void IntOption::set(int value, bool save)`: records the call and stores the value in the option.
+    #[inline(never)]
+    extern "C" fn int_option_set(this: *mut c_void, value: i32, save: u8) {
+        INT_SETS.lock().unwrap().push((this as usize, value, save != 0));
+        // SAFETY: `this` is a stand-in `Option` of `OPTION_SIZE` bytes.
+        unsafe { ((this as usize + Self::INT_VALUE_AT) as *mut i32).write_unaligned(value) };
+    }
+
     #[inline(never)]
     extern "C" fn game_update(this: *mut c_void) {
         black_box(this);
@@ -409,6 +522,12 @@ impl ClientGame {
     extern "C" fn release_mouse(this: *mut c_void) {
         black_box(this);
         Self::count(Self::RELEASE);
+    }
+
+    #[inline(never)]
+    extern "C" fn focus_gained(this: *mut c_void) {
+        black_box(this);
+        Self::count(Self::FOCUS_GAINED);
     }
 
     #[inline(never)]

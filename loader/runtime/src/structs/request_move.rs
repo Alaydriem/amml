@@ -7,6 +7,7 @@ pub enum RequestMove {
     Place { from: u8, to: u8, count: u8 },
     /// `count` items of `from` are thrown out.
     Drop { from: u8, count: u8 },
-    /// The pick of a creative item. The kind has its place, the loader does not run it yet.
-    Pick,
+    /// A full stack of the creative item `creative_net_id` made into the empty hotbar slot `slot` (0 to 8); `count`
+    /// items.
+    Pick { slot: u8, creative_net_id: u32, count: u8 },
 }

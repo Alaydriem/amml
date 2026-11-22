@@ -1,15 +1,15 @@
 use std::ffi::c_void;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
-use amml_abi::{AmmlBlockPos, AmmlEvent, AmmlPhase, AmmlThread, BlockChanged};
+use amml_abi::{AmmlBlockHandle, AmmlBlockPos, AmmlEvent, AmmlPhase, AmmlStatus, AmmlThread, BlockChanged};
 use amml_data::{AdapterCatalog, Availability, EntryId, NeedKind};
 use amml_msvc::MemberCall;
 use amml_runtime::{BlockChange, BlockChangeQueue, BlockTypeBook, ImageLayout};
 
 use crate::{
-    ActorAdapter, BlockListenerAttach, BlockListenerDetours, BlockListenerObject, EventHub, LoaderState, ThreadNote,
-    WorldAdapter,
+    ActorAdapter, BlockHandles, BlockListenerAttach, BlockListenerDetours, BlockListenerObject, EventHub, LoaderState,
+    ThreadNote, WorldAdapter,
 };
 
 static ADAPTER: OnceLock<BlockListener> = OnceLock::new();
@@ -34,6 +34,11 @@ type ListenerFn = unsafe extern "C" fn(usize, usize);
 /// A change on the game thread is raised at once, after the game's own change. A change on another thread goes to the
 /// `BlockChangeQueue` and is raised at the next `FrameUpdate` After. The block types of a change are read through the
 /// column reads' `BlockTypeReader`, on the game thread only.
+///
+/// The game `Block` of the change is the event's `new_state` token while the listeners run: the event holds a number
+/// that the loader made for this raise, and `new_state` of the world table gives the owned handle of the block for the
+/// mod that asks, only while that raise runs. The token is cleared after the dispatch (and a nested raise puts the
+/// outer one back), so a copy of the event kept past the call names nothing.
 pub struct BlockListener {
     state: &'static LoaderState,
     // The absolute address of `BlockSourceListener.vtable`, and the slots the loader replaces.
@@ -60,6 +65,9 @@ pub struct BlockListener {
     attached: Mutex<Option<BlockListenerAttach>>,
     queue: BlockChangeQueue,
     thread: ThreadNote,
+    // The last token made, and the token and block of the raise that runs now (0 and 0 outside a raise).
+    last_token: AtomicU32,
+    running: Mutex<(u32, usize)>,
 }
 
 impl BlockListener {
@@ -130,6 +138,8 @@ impl BlockListener {
             attached: Mutex::new(None),
             queue: BlockChangeQueue::new(),
             thread: ThreadNote::new(),
+            last_token: AtomicU32::new(0),
+            running: Mutex::new((0, 0)),
         })
     }
 
@@ -277,6 +287,7 @@ impl BlockListener {
                 .and_then(|types| unsafe { types.walk_block(block, epoch) })
                 .map_or(BlockTypeBook::NONE, |walk| walk.id)
         };
+        let token = if change.new_block == 0 { 0 } else { self.next_token() };
         let mut event = BlockChanged {
             header: EventHub::header::<BlockChanged>(AmmlPhase::AFTER),
             dimension: change.dimension,
@@ -284,9 +295,40 @@ impl BlockListener {
             layer: change.layer,
             new: id(change.new_block),
             old: id(change.old_block),
+            new_state: token,
         };
         let hub = self.state.events();
+        let outer = std::mem::replace(&mut *self.lock_running(), (token, change.new_block));
         hub.raise(&mut event, &hub.loader_context());
+        *self.lock_running() = outer;
+    }
+
+    /// The block of the `BlockChanged` event whose `new_state` is `token`, as an owned handle of the mod at `owner`.
+    /// `STALE` for a token that no running raise holds (an event kept past its listener call, a token never given, 0);
+    /// `REFUSED` off the game thread.
+    pub fn new_state(&self, owner: usize, token: u64) -> Result<AmmlBlockHandle, AmmlStatus> {
+        if !self.state.events().gate().on_game_thread() {
+            return Err(AmmlStatus::REFUSED);
+        }
+        let (running, block) = *self.lock_running();
+        if token == 0 || running == 0 || u64::from(running) != token || block == 0 {
+            return Err(AmmlStatus::STALE);
+        }
+        BlockHandles::handle(self.state, owner, block)
+    }
+
+    // A token no raise holds: the counter's next value, skipping 0.
+    fn next_token(&self) -> u32 {
+        loop {
+            let token = self.last_token.fetch_add(1, Ordering::AcqRel).wrapping_add(1);
+            if token != 0 {
+                return token;
+            }
+        }
+    }
+
+    fn lock_running(&self) -> MutexGuard<'_, (u32, usize)> {
+        self.running.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     // Makes the listener object, attaches it to `source` and records it; `None` with a log line when the game's calls

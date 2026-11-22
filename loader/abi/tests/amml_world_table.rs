@@ -1,8 +1,8 @@
 use core::ffi::c_void;
 
 use amml_abi::{
-    AmmlAabb, AmmlActorBox, AmmlApplyStats, AmmlChunkLoad, AmmlShapeOp, AmmlStatus, AmmlStr, AmmlSurfaceSample,
-    AmmlWorldTable,
+    AmmlAabb, AmmlActorBox, AmmlApplyStats, AmmlBlockHandle, AmmlBlockPos, AmmlChunkLoad, AmmlKindsResult, AmmlShapeOp,
+    AmmlStatus, AmmlStr, AmmlSurfaceSample, AmmlWorldTable,
 };
 
 unsafe extern "C" fn sky_darken(_: *const c_void, _: *mut u8) -> AmmlStatus {
@@ -48,10 +48,29 @@ unsafe extern "C" fn actors_in(_: *const c_void, _: AmmlAabb, _: *mut AmmlActorB
     AmmlStatus::OK
 }
 
+unsafe extern "C" fn block_at(_: *const c_void, _: *const AmmlBlockPos, _: *mut *const c_void) -> AmmlStatus {
+    AmmlStatus::OK
+}
+
+unsafe extern "C" fn block_changed_state(_: AmmlStr, _: u64, _: *mut AmmlBlockHandle) -> AmmlStatus {
+    AmmlStatus::OK
+}
+
+unsafe extern "C" fn kinds_in_box(
+    _: *const c_void,
+    _: *const AmmlBlockPos,
+    _: *const AmmlBlockPos,
+    _: *mut u32,
+    _: u32,
+    _: *mut AmmlKindsResult,
+) -> AmmlStatus {
+    AmmlStatus::OK
+}
+
 fn table() -> AmmlWorldTable {
     AmmlWorldTable {
-        size: AmmlWorldTable::SIZE_V6,
-        version: 6,
+        size: AmmlWorldTable::SIZE_V9,
+        version: 9,
         sky_darken,
         chunk: Some(chunk),
         chunk_load_state: Some(load_state),
@@ -64,6 +83,17 @@ fn table() -> AmmlWorldTable {
         shapes_target_epoch: None,
         raycast: None,
         actors_in: Some(actors_in),
+        block_from_state: None,
+        block_rotated: None,
+        block_handle_name: None,
+        block_handle_item: None,
+        block_at: Some(block_at),
+        block_info: None,
+        block_built_over: None,
+        block_item: None,
+        block_handle_of: None,
+        block_changed_state: Some(block_changed_state),
+        kinds_in_box: Some(kinds_in_box),
     }
 }
 
@@ -157,4 +187,45 @@ fn a_v5_world_table_reads_none_for_the_ray_functions_and_a_v6_reads_them() {
     let full = self::table();
     // SAFETY: the table lives for the call.
     assert!(unsafe { AmmlWorldTable::read(&raw const full) }.unwrap().actors_in.is_some());
+}
+
+#[test]
+fn world_table_v6_reads_none_for_v7() {
+    let mut table = table();
+    table.size = AmmlWorldTable::SIZE_V6;
+
+    // SAFETY: the table lives for the call and the v7 bytes past `size` are never trusted.
+    let read = unsafe { AmmlWorldTable::read(&raw const table) }.unwrap();
+
+    assert!(read.actors_in.is_some());
+    assert!(read.block_from_state.is_none() && read.block_rotated.is_none());
+    assert!(read.block_handle_name.is_none() && read.block_handle_item.is_none());
+    assert_eq!(AmmlWorldTable::SIZE_V7, 136);
+}
+
+#[test]
+fn world_table_v7_reads_none_for_v8() {
+    let mut table = table();
+    table.size = AmmlWorldTable::SIZE_V7;
+
+    // SAFETY: the table lives for the call and the v8 bytes past `size` are never trusted.
+    let read = unsafe { AmmlWorldTable::read(&raw const table) }.unwrap();
+
+    assert!(read.block_handle_item.is_none());
+    assert!(read.block_at.is_none() && read.block_changed_state.is_none());
+    assert_eq!(AmmlWorldTable::SIZE_V8, 184);
+}
+
+#[test]
+fn world_table_v8_reads_none_for_v9() {
+    let mut table = table();
+    table.size = AmmlWorldTable::SIZE_V8;
+
+    // SAFETY: the table lives for the call and the v9 bytes past `size` are never trusted.
+    let read = unsafe { AmmlWorldTable::read(&raw const table) }.unwrap();
+
+    assert!(read.block_changed_state.is_some());
+    assert!(read.kinds_in_box.is_none());
+    assert_eq!(AmmlWorldTable::SIZE_V9, 192);
+    assert_eq!(core::mem::size_of::<AmmlWorldTable>(), 192);
 }

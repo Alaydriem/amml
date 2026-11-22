@@ -1,4 +1,7 @@
-use crate::{AmmlLeaseRequest, AmmlLeaseState, AmmlModifiers, AmmlMouseButton, AmmlMoveIntent, AmmlStatus, AmmlStr};
+use crate::{
+    AmmlLeaseRequest, AmmlLeaseState, AmmlModifiers, AmmlMouseButton, AmmlMoveIntent, AmmlOtherLeases, AmmlStatus,
+    AmmlStr,
+};
 
 /// Gives the held modifier keys.
 pub type InputModifiersFn = unsafe extern "C" fn() -> AmmlModifiers;
@@ -30,6 +33,10 @@ pub type InputEndLeaseFn = unsafe extern "C" fn(lease: u64) -> AmmlStatus;
 pub type InputSetRankingFn = unsafe extern "C" fn(module: AmmlStr, ids: *const AmmlStr, count: usize) -> AmmlStatus;
 /// Sets the coexist pairs of `module`: `count` mod ids in `ids`, two per pair, so `count` is even.
 pub type InputSetCoexistFn = unsafe extern "C" fn(module: AmmlStr, ids: *const AmmlStr, count: usize) -> AmmlStatus;
+/// Gives in `out` the active input leases of every live mod but `module` (the caller never counts): how many, and the
+/// union of the real input they block. A suspended lease does not count. `INVALID_ARGUMENT` for a module that is not a
+/// live mod.
+pub type InputHeldByOthersFn = unsafe extern "C" fn(module: AmmlStr, out: *mut AmmlOtherLeases) -> AmmlStatus;
 
 /// The input functions of `AmmlServices`.
 ///
@@ -55,6 +62,8 @@ pub struct AmmlInputTable {
     pub set_ranking: InputSetRankingFn,
     /// From v2.
     pub set_coexist: Option<InputSetCoexistFn>,
+    /// From v3.
+    pub held_by_others: Option<InputHeldByOthersFn>,
 }
 
 impl AmmlInputTable {
@@ -62,6 +71,8 @@ impl AmmlInputTable {
     pub const SIZE_V1: u32 = 112;
     /// `size` of a v2 input table: v1 plus `set_coexist`.
     pub const SIZE_V2: u32 = 120;
+    /// `size` of a v3 input table: v2 plus `held_by_others`.
+    pub const SIZE_V3: u32 = 128;
 
     /// Copies the table at `table`: the bytes its `size` covers, with every later field `None`. A null
     /// table, or one shorter than v1, gives `None`.
@@ -89,4 +100,4 @@ impl AmmlInputTable {
     }
 }
 
-const _: () = assert!(core::mem::size_of::<AmmlInputTable>() == AmmlInputTable::SIZE_V2 as usize);
+const _: () = assert!(core::mem::size_of::<AmmlInputTable>() == AmmlInputTable::SIZE_V3 as usize);

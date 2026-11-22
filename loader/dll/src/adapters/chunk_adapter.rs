@@ -170,6 +170,21 @@ impl ChunkAdapter {
         Ok(unsafe { function(std::ptr::with_exposed_provenance_mut(source), x, z) }.expose_provenance())
     }
 
+    /// Whether the chunk at chunk position (`x`, `z`) of the live block source `source` is loaded (`load_state` is
+    /// `LOADED`); false when the game has no chunk there. The chunk is not given out as a handle.
+    ///
+    /// # Safety
+    /// `source` is the live block source of the local player of the primary client, called on the game thread.
+    pub unsafe fn is_loaded(&self, source: usize, x: i32, z: i32) -> Result<bool, AmmlStatus> {
+        // SAFETY: as the function's contract.
+        let chunk = unsafe { self.chunk_address(source, x, z) }?;
+        if chunk == 0 {
+            return Ok(false);
+        }
+        // SAFETY: `chunk` is the live chunk the game just gave, on the game thread.
+        Ok(unsafe { self.load_state(chunk) } == AmmlChunkLoad::LOADED)
+    }
+
     /// The address of the chunk `handle` names, when it was given in the game frame `frame`; `REFUSED` otherwise.
     pub fn open(&self, handle: usize, frame: u64) -> Result<usize, AmmlStatus> {
         let chunk = HandleStamp::open(handle, frame).ok_or(AmmlStatus::REFUSED)?;
@@ -505,6 +520,31 @@ impl ChunkAdapter {
         let function = unsafe { std::mem::transmute::<usize, PlaceholderFn>(self.is_placeholder) };
         // SAFETY: `at` is a sub-chunk inside the vector of a live chunk; called on the game thread.
         Some(unsafe { function(std::ptr::with_exposed_provenance_mut(at)) } != 0)
+    }
+
+    /// Whether the build has `LevelChunk.getBiome`, which `biome_at_world` needs.
+    pub(crate) fn reads_biomes(&self) -> bool {
+        self.get_biome.is_some()
+    }
+
+    /// The biome at the world block position `pos` of the live block source `source`: the chunk of the column
+    /// (`BlockSource::getChunk`), then `LevelChunk::getBiome` at the column and the y relative to the chunk's lowest block
+    /// (the y clamped into the chunk). 0 for no chunk, no biome entry or a reversed height range.
+    ///
+    /// # Safety
+    /// `source` is the live block source of the local player of the primary client, called on the game thread.
+    pub(crate) unsafe fn biome_at_world(&self, source: usize, pos: [i32; 3]) -> usize {
+        // SAFETY: as the function's contract; the arithmetic shift floors a negative position to its chunk.
+        let Ok(chunk) = (unsafe { self.chunk_address(source, pos[0] >> 4, pos[2] >> 4) }) else { return 0 };
+        if chunk == 0 {
+            return 0;
+        }
+        // SAFETY: `chunk` is the live chunk the game just gave, on the game thread.
+        let Some((min_y, end_y)) = (unsafe { self.height_range(chunk) }) else { return 0 };
+        let y = pos[1].clamp(min_y, end_y - 1) - min_y;
+        let column = ChunkBlockPos { x: (pos[0] & 15) as u8, z: (pos[2] & 15) as u8, y: Self::clamp_y(y) };
+        // SAFETY: the live chunk, on the game thread.
+        unsafe { self.biome_at(chunk, column) }
     }
 
     // The block at `pos` of the live chunk; 0 for none.

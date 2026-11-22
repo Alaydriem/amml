@@ -34,6 +34,12 @@ pub struct MeshCalls {
     pub material_info_material: usize,
     /// The offsets in `RenderMaterial` of blend enable, blend source, blend destination and depth write.
     pub material_bytes: [usize; 4],
+    /// The slot of `ClientInstance::getItemInHandRenderer` in the `ClientInstance` vtable.
+    pub item_in_hand_renderer_slot: usize,
+    /// The offset of the blend-block `MaterialPtr` in `ItemInHandRenderer`.
+    pub blend_material: usize,
+    /// The offset of the atlas `TexturePtr` in `LevelRenderer`.
+    pub atlas_texture: usize,
 }
 
 impl MeshCalls {
@@ -99,6 +105,9 @@ impl MeshCalls {
                 offset("RenderMaterial.mBlendDestination")?,
                 offset("RenderMaterial.mDepthWriteMask")?,
             ],
+            item_in_hand_renderer_slot: offset("ClientInstance.getItemInHandRenderer")?,
+            blend_material: offset("ItemInHandRenderer.mMatBlendBlock")?,
+            atlas_texture: offset("LevelRenderer.mAtlasTexture")?,
         })
     }
 }

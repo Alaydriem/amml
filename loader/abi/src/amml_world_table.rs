@@ -1,8 +1,9 @@
 use core::ffi::c_void;
 
 use crate::{
-    AmmlAabb, AmmlActorBox, AmmlApplyStats, AmmlBlockHit, AmmlChunkLoad, AmmlColumnReadStats, AmmlColumnRequest,
-    AmmlColumnSample, AmmlRayOptions, AmmlShapeOp, AmmlStatus, AmmlStr, AmmlSurfaceSample, AmmlVec3,
+    AmmlAabb, AmmlActorBox, AmmlApplyStats, AmmlBlockHandle, AmmlBlockHit, AmmlBlockInfo, AmmlBlockMatch, AmmlBlockPos,
+    AmmlChunkLoad, AmmlColumnReadStats, AmmlColumnRequest, AmmlColumnSample, AmmlItemSnapshot, AmmlKindsResult,
+    AmmlRayOptions, AmmlShapeOp, AmmlStateEntry, AmmlStatus, AmmlStr, AmmlSurfaceSample, AmmlVec3,
 };
 
 /// Gives the sky darkness of `dimension` in `out` (0 for full daylight, up to 15). `dimension` is a handle that
@@ -109,6 +110,113 @@ pub type WorldActorsInFn = unsafe extern "C" fn(
     out_count: *mut u32,
 ) -> AmmlStatus;
 
+/// Finds the block state of the block type `name` (such as `minecraft:oak_stairs`) with the `count` states at
+/// `states`, as the game reads a block tag, and writes it to `out` as a handle owned by the mod `module` and bound to
+/// the current world. A name the game does not know gives `OK` with `out.block` `AmmlBlockHandle::NONE`. A state the
+/// block type does not have, or a value that does not fit it, is left out by the game; `out.exact` is then 0. The same
+/// block gives the same handle to the same mod in the same world. `NOT_READY` before a world is joined; `REFUSED` off
+/// the game thread; `INVALID_ARGUMENT` for a null `out`, a null `states` with a non-zero `count`, a name or text that
+/// is not UTF-8 or longer than 65535 bytes, or an unknown value kind. Version 7, area `world.block_states`.
+pub type WorldBlockFromStateFn = unsafe extern "C" fn(
+    module: AmmlStr,
+    name: AmmlStr,
+    states: *const AmmlStateEntry,
+    count: u32,
+    out: *mut AmmlBlockMatch,
+) -> AmmlStatus;
+
+/// Turns `block` by `quarters` clockwise quarter turns seen from above (taken modulo 4), as the game turns a block of a
+/// structure: its rotatable states, then its connection states, then its wall states. Writes the handle of the turned
+/// block, owned by `module`, to `out`; a block with no rotatable state gives `block` again. `STALE` for a handle of an
+/// earlier world or a disabled mod; `REFUSED` off the game thread. Version 7, area `world.block_states`.
+pub type WorldBlockRotatedFn = unsafe extern "C" fn(
+    module: AmmlStr,
+    block: AmmlBlockHandle,
+    quarters: u8,
+    out: *mut AmmlBlockHandle,
+) -> AmmlStatus;
+
+/// Copies the full name of the block type of `block` (such as `minecraft:stone`) to `buf` (up to `cap` bytes) and
+/// gives its full length in `out_len`; a name longer than `cap` is cut. `STALE` for a handle that was taken back;
+/// `REFUSED` off the game thread. Version 7, area `world.block_states`.
+pub type WorldBlockHandleNameFn =
+    unsafe extern "C" fn(block: AmmlBlockHandle, buf: *mut u8, cap: usize, out_len: *mut usize) -> AmmlStatus;
+
+/// Fills `out` (as far as its `size` covers) with the item stack the game makes for `block` (`asItemInstance`), copies
+/// its type name to `name_buf` (up to `name_cap` bytes) and gives the name's full length in `name_len` (0 for a name
+/// that could not be read). `NOT_AVAILABLE` when the loader cannot read item stacks on this build; `STALE` and
+/// `REFUSED` as `WorldBlockHandleNameFn`. Version 7, area `world.block_states`.
+pub type WorldBlockHandleItemFn = unsafe extern "C" fn(
+    block: AmmlBlockHandle,
+    out: *mut AmmlItemSnapshot,
+    name_buf: *mut u8,
+    name_cap: usize,
+    name_len: *mut usize,
+) -> AmmlStatus;
+
+/// Gives the game block at `pos` of `source` in `out`, as a handle for the block calls of this game frame; null when
+/// the game has no block there. `source` is a block source handle that `ActorBlockSourceFn` gave in the same frame. The
+/// block handle is valid in the game frame of this call only: an older handle gives `REFUSED`. `INVALID_ARGUMENT` for a
+/// null `pos` or `out`; `REFUSED` for a block source that is not the current one and off the game thread. Version 8,
+/// area `world.blocks`.
+pub type WorldBlockAtFn =
+    unsafe extern "C" fn(source: *const c_void, pos: *const AmmlBlockPos, out: *mut *const c_void) -> AmmlStatus;
+
+/// Reads the type id, the air flag and the interactive flag of `block`, a block handle of this game frame, into `out`.
+/// The air flag compares the block type with the registry's air and calls no game function; air is not asked whether it
+/// is interactive. `REFUSED` for a handle of an older frame, a handle the loader did not give and off the game thread.
+/// Version 8, area `world.blocks`.
+pub type WorldBlockInfoFn = unsafe extern "C" fn(block: *const c_void, out: *mut AmmlBlockInfo) -> AmmlStatus;
+
+/// Asks the game whether `block` can be built over (`BlockType::canBeBuiltOver(block, source, pos)`) and writes 0 or 1 to
+/// `out`. `source` and `block` are handles of this game frame, `pos` is the position of the block. `REFUSED` as
+/// `WorldBlockAtFn` and `WorldBlockInfoFn`. Version 8, area `world.blocks`.
+pub type WorldBlockBuiltOverFn = unsafe extern "C" fn(
+    source: *const c_void,
+    block: *const c_void,
+    pos: *const AmmlBlockPos,
+    out: *mut u8,
+) -> AmmlStatus;
+
+/// As `WorldBlockHandleItemFn`, for a block handle of this game frame (`WorldBlockAtFn`). Version 8, area
+/// `world.blocks`.
+pub type WorldBlockItemFn = unsafe extern "C" fn(
+    block: *const c_void,
+    out: *mut AmmlItemSnapshot,
+    name_buf: *mut u8,
+    name_cap: usize,
+    name_len: *mut usize,
+) -> AmmlStatus;
+
+/// Gives `block`, a block handle of this game frame, as an owned handle of the mod `module` bound to the current world,
+/// as `WorldBlockFromStateFn` does: the same block gives the same handle to the same mod. `NOT_READY` before a world is
+/// joined; `REFUSED` as `WorldBlockInfoFn`. Version 8, area `world.blocks`.
+pub type WorldBlockHandleOfFn =
+    unsafe extern "C" fn(module: AmmlStr, block: *const c_void, out: *mut AmmlBlockHandle) -> AmmlStatus;
+
+/// Gives the block of the `BlockChanged` event whose `new_state` is `token`, as an owned handle of the mod `module`.
+/// Only a listener call that is running for that event can ask: `STALE` for a token of an event that was raised
+/// before, after the listener calls ended or never. `REFUSED` off the game thread. Version 8, area `world.blocks`.
+pub type WorldBlockChangedStateFn =
+    unsafe extern "C" fn(module: AmmlStr, token: u64, out: *mut AmmlBlockHandle) -> AmmlStatus;
+
+/// Lists the distinct block type ids of the box from `min` to `max` (both included) of `source` in `ids` (up to `cap`
+/// entries, the order the scan met them: x, then z, then y, each upward; air is a kind) and describes the answer in
+/// `out`. A chunk of the box that is not loaded gives `OK` with `out.kind` `AmmlKindsResult::NOT_LOADED` before any
+/// cell is read; more kinds than `cap` gives `OK` with `TOO_MANY`; neither lists anything. `source` is a block source
+/// handle that `ActorBlockSourceFn` gave in the same frame. `REFUSED` for a box with a `min` above its `max` on an axis,
+/// a box of more than 65536 cells, a block source that is not the current one and off the game thread;
+/// `INVALID_ARGUMENT` for a null `min`, `max` or `out`, or a null `ids` with a `cap` above 0; `NOT_READY` before a world
+/// is joined. Version 9, area `world.kinds_in_box`.
+pub type WorldKindsInBoxFn = unsafe extern "C" fn(
+    source: *const c_void,
+    min: *const AmmlBlockPos,
+    max: *const AmmlBlockPos,
+    ids: *mut u32,
+    cap: u32,
+    out: *mut AmmlKindsResult,
+) -> AmmlStatus;
+
 /// The world functions of `AmmlServices` (areas `world.*`). Every function but `block_type_name`, `biome_name`,
 /// `shapes_max_batch` and `shapes_target_epoch` runs on the game thread; a function that takes a handle checks that it
 /// is the current handle of the local player of the primary client (`REFUSED` otherwise). The table only grows: a
@@ -131,6 +239,17 @@ pub struct AmmlWorldTable {
     pub shapes_target_epoch: Option<WorldShapesTargetEpochFn>,
     pub raycast: Option<WorldRaycastFn>,
     pub actors_in: Option<WorldActorsInFn>,
+    pub block_from_state: Option<WorldBlockFromStateFn>,
+    pub block_rotated: Option<WorldBlockRotatedFn>,
+    pub block_handle_name: Option<WorldBlockHandleNameFn>,
+    pub block_handle_item: Option<WorldBlockHandleItemFn>,
+    pub block_at: Option<WorldBlockAtFn>,
+    pub block_info: Option<WorldBlockInfoFn>,
+    pub block_built_over: Option<WorldBlockBuiltOverFn>,
+    pub block_item: Option<WorldBlockItemFn>,
+    pub block_handle_of: Option<WorldBlockHandleOfFn>,
+    pub block_changed_state: Option<WorldBlockChangedStateFn>,
+    pub kinds_in_box: Option<WorldKindsInBoxFn>,
 }
 
 impl AmmlWorldTable {
@@ -146,6 +265,14 @@ impl AmmlWorldTable {
     pub const SIZE_V5: u32 = 88;
     /// `size` of a v6 world table: v5 plus `raycast` and `actors_in`.
     pub const SIZE_V6: u32 = 104;
+    /// `size` of a v7 world table: v6 plus `block_from_state`, `block_rotated`, `block_handle_name` and
+    /// `block_handle_item`.
+    pub const SIZE_V7: u32 = 136;
+    /// `size` of a v8 world table: v7 plus `block_at`, `block_info`, `block_built_over`, `block_item`,
+    /// `block_handle_of` and `block_changed_state`.
+    pub const SIZE_V8: u32 = 184;
+    /// `size` of a v9 world table: v8 plus `kinds_in_box`.
+    pub const SIZE_V9: u32 = 192;
 
     /// A copy of the table at `table`, read as far as its own `size` covers; a field a later version adds reads
     /// as zero bytes (`None`). A null table, or one shorter than v1, gives `None`.
@@ -173,4 +300,4 @@ impl AmmlWorldTable {
     }
 }
 
-const _: () = assert!(core::mem::size_of::<AmmlWorldTable>() == AmmlWorldTable::SIZE_V6 as usize);
+const _: () = assert!(core::mem::size_of::<AmmlWorldTable>() == AmmlWorldTable::SIZE_V9 as usize);

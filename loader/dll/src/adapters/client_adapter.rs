@@ -49,6 +49,8 @@ pub struct ClientAdapter {
     top_screen_name: Option<usize>,
     options: Option<usize>,
     minecraft_game: Option<usize>,
+    // The slot of the MinecraftGame vtable that holds `isInGame`.
+    is_in_game: Option<usize>,
     // Slots of the IOptionRegistry vtable.
     get_hide_hud: Option<usize>,
     set_hide_gui: Option<usize>,
@@ -85,6 +87,7 @@ impl ClientAdapter {
     pub const MOUSE: &'static str = "client.mouse";
     pub const PAUSE: &'static str = "client.pause";
     pub const ACTIVITY: &'static str = "client.activity";
+    pub const IN_GAMEPLAY: &'static str = "client.in_gameplay";
     const AREA_VERSION: u32 = 1;
     // Loader hooks run before every mod hook on the same function.
     const PRIORITY: i32 = i32::MAX;
@@ -116,6 +119,7 @@ impl ClientAdapter {
             top_screen_name: slot("ClientInstance.getTopScreenName"),
             options: slot("ClientInstance.getOptions"),
             minecraft_game: slot("ClientInstance.getMinecraftGame"),
+            is_in_game: slot("MinecraftGame.isInGame"),
             get_hide_hud: slot("IOptionRegistry.getHideHud"),
             set_hide_gui: slot("IOptionRegistry.setHideGUI"),
             get_if_valid: slot("OptionRegistry.getIfValid"),
@@ -171,7 +175,8 @@ impl ClientAdapter {
     fn is_client_row(row: &Availability) -> bool {
         match row.kind {
             NeedKind::Area => {
-                [Self::READ, Self::TOP_SCREEN, Self::HUD, Self::MOUSE, Self::PAUSE, Self::ACTIVITY].contains(&row.id)
+                [Self::READ, Self::TOP_SCREEN, Self::HUD, Self::MOUSE, Self::PAUSE, Self::ACTIVITY, Self::IN_GAMEPLAY]
+                    .contains(&row.id)
             }
             NeedKind::Event => row.id == MouseGrab::ID,
         }
@@ -241,6 +246,14 @@ impl ClientAdapter {
         self.check(client)
     }
 
+    /// Whether the game says a world is being played (`MinecraftGame::isInGame` on the game of the last frame), asked
+    /// for the primary `client`. `NOT_AVAILABLE` without area `client.in_gameplay`; `NOT_READY` before the first frame.
+    pub fn in_gameplay(&self, client: *const c_void) -> Result<bool, AmmlStatus> {
+        self.enter(client, Self::IN_GAMEPLAY)?;
+        let game = SessionAdapter::minecraft_game().ok_or(AmmlStatus::NOT_AVAILABLE)?;
+        Self::call_bool(game, self.is_in_game)
+    }
+
     /// The local player of `client`, 0 for none; 0 with no game call while no world is joined.
     pub fn local_player(&self, client: *const c_void) -> Result<usize, AmmlStatus> {
         let client = self.enter(client, Self::READ)?;
@@ -254,8 +267,18 @@ impl ClientAdapter {
     /// closed, the caller is not on the game thread, no world is joined, there is no primary client or the
     /// read gives null. Needs no client area: only the `getLocalPlayer` slot.
     pub(crate) fn primary_local_player(&self) -> Option<usize> {
+        if self.gate().epoch().0 == 0 {
+            return None;
+        }
+        self.primary_local_player_any_epoch()
+    }
+
+    /// The local player of the primary client, also before the loader's world join (after the game's `StartGame` the
+    /// player exists before the first client update that joins): `None` when the gate is closed, off the game thread,
+    /// without a primary client or a player.
+    pub(crate) fn primary_local_player_any_epoch(&self) -> Option<usize> {
         self.gate().require_open().ok()?;
-        if !self.gate().on_game_thread() || self.gate().epoch().0 == 0 {
+        if !self.gate().on_game_thread() {
             return None;
         }
         let client = SessionAdapter::primary_client()?;
@@ -372,6 +395,23 @@ impl ClientAdapter {
     /// cannot be read (see `PauseOption`) gives `NOT_AVAILABLE`.
     pub fn open_pause_screen(&self, client: *const c_void) -> Result<(), AmmlStatus> {
         let client = self.enter(client, Self::PAUSE)?;
+        let listener = self.listener_of(client)?;
+        let options = self.options_of(client)?;
+        let get_if_valid = Self::virtual_fn(options, self.get_if_valid).ok_or(AmmlStatus::NOT_AVAILABLE)?;
+        // SAFETY: `options` is the live option registry of the primary client, on the game thread, and
+        // `get_if_valid` is the function in its `OptionRegistry.getIfValid` slot.
+        let enabled = unsafe { self.pause_option.read(options, get_if_valid) }?;
+        if !enabled {
+            curia::info!("pause screen refused: the game option is off", { option: PauseOption::SAVE_TAG });
+            return Err(AmmlStatus::REFUSED);
+        }
+        self.run_focus_lost(listener)
+    }
+
+    /// The AppPlatformListener subobject of the MinecraftGame of `client`, at the derived
+    /// `MinecraftGame.appPlatformListenerOffset`. When the qword there is not the
+    /// `MinecraftGame.AppPlatformListener.vtable` address, the result is `NOT_AVAILABLE`, with a log line.
+    pub(crate) fn listener_of(&self, client: usize) -> Result<usize, AmmlStatus> {
         let game = self.game_of(client)?;
         let (Some(offset), Some(expected)) = (self.listener_offset, self.listener_vtable) else {
             return Err(AmmlStatus::NOT_AVAILABLE);
@@ -382,23 +422,21 @@ impl ClientAdapter {
         // pointer of the object.
         let found = unsafe { std::ptr::with_exposed_provenance::<usize>(listener).read() };
         if found != expected {
-            curia::warn!("pause screen not available: the AppPlatformListener vtable is not at the derived offset", {
+            curia::warn!("the AppPlatformListener vtable is not at the derived offset", {
                 offset: format!("{offset:#x}"),
                 found: format!("{found:#x}"),
                 expected: format!("{expected:#x}")
             });
             return Err(AmmlStatus::NOT_AVAILABLE);
         }
-        let options = self.options_of(client)?;
-        let get_if_valid = Self::virtual_fn(options, self.get_if_valid).ok_or(AmmlStatus::NOT_AVAILABLE)?;
-        // SAFETY: `options` is the live option registry of the primary client, on the game thread, and
-        // `get_if_valid` is the function in its `OptionRegistry.getIfValid` slot.
-        let enabled = unsafe { self.pause_option.read(options, get_if_valid) }?;
-        if !enabled {
-            curia::info!("pause screen refused: the game option is off", { option: PauseOption::SAVE_TAG });
-            return Err(AmmlStatus::REFUSED);
-        }
-        // SAFETY: `listener` is the AppPlatformListener subobject of a live MinecraftGame (its vtable checked).
+        Ok(listener)
+    }
+
+    /// Calls the game's `onAppFocusLost` on `listener` past the loader's detour, then releases every injected input
+    /// with `FOCUS_LOST`, as the detour does after a real focus loss. `NOT_AVAILABLE` when the hook is not installed.
+    pub(crate) fn run_focus_lost(&self, listener: usize) -> Result<(), AmmlStatus> {
+        // SAFETY: `listener` is the AppPlatformListener subobject of a live MinecraftGame (its vtable checked by
+        // `listener_of`).
         let called = unsafe { ClientDetours::focus_lost_past_detour(std::ptr::with_exposed_provenance_mut(listener)) };
         if !called {
             return Err(AmmlStatus::NOT_AVAILABLE);

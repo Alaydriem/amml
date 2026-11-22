@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 
 use amml_data::AdapterCatalog;
 
-use crate::{Boundary, ClientAdapter, SessionHook};
+use crate::{Boundary, ClientAdapter, FocusAdapter, FocusGainedDetours, SessionHook};
 
 /// `void MinecraftGame::grabMouse()`, `void IMinecraftGame::releaseMouse()` and
 /// `void MinecraftGame::onAppFocusLost()`: rcx the object (for `onAppFocusLost`, the AppPlatformListener
@@ -129,7 +129,20 @@ impl ClientDetours {
         Boundary::run((), || ClientAdapter::with((), |adapter| adapter.note_captured(false)));
     }
 
+    /// True once the hook on `MinecraftGame.onAppFocusLost` is installed.
+    pub(crate) fn focus_lost_hooked() -> bool {
+        !FOCUS_LOST.load(Ordering::Acquire).is_null()
+    }
+
+    // With no listener of `AppFocusLost` the detour reads one flags word and calls the original. A cancel by a
+    // listener keeps the game's handler and the release of injected input from running.
     unsafe extern "C" fn focus_lost(this: *mut c_void) {
+        if FocusGainedDetours::flags() & FocusGainedDetours::LOSS_LISTENER != 0 {
+            let proceed = Boundary::run(true, || FocusAdapter::with(true, FocusAdapter::loss_requested));
+            if !proceed {
+                return;
+            }
+        }
         // SAFETY: the hook on `MinecraftGame.onAppFocusLost` is installed, so its slot holds an `ObjectFn`.
         let original = unsafe { Self::original(&FOCUS_LOST) };
         // SAFETY: the game's own argument, passed on unchanged.

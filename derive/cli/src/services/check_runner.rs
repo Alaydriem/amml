@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use amml_data::{Check, EntryId, EntryKind, Resolved};
 use iced_x86::{Decoder, DecoderOptions, FlowControl, Instruction};
 
-use crate::services::{CodeXref, LayoutGuard, RttiIndex};
+use crate::services::{CodeXref, LayoutGuard, RttiIndex, VtableLocator};
 use crate::structs::{CodeRefKind, Image};
 
 pub struct CheckRunner;
@@ -30,6 +30,9 @@ impl CheckRunner {
             Check::InVtable { vtable, min_slot, max_slot } => {
                 let (Ok(rva), Some(table)) = (u32::try_from(value), resolved.get(vtable)) else { return false };
                 u32::try_from(table.value).is_ok_and(|table| Self::in_slots(image, table, rva, *min_slot, *max_slot))
+            }
+            Check::InStoredVtable => {
+                u32::try_from(value).is_ok_and(|rva| VtableLocator::new(image).vptr_offset(rva).is_ok())
             }
             Check::Section { name } => {
                 u32::try_from(value).is_ok_and(|rva| image.section_of(rva).is_some_and(|section| &section.name == name))

@@ -1,6 +1,6 @@
 use core::ffi::c_void;
 
-use crate::{AmmlCameraKind, AmmlPose, AmmlProjection, AmmlStatus, AmmlStr, AmmlVec3};
+use crate::{AmmlActorTarget, AmmlCameraKind, AmmlPose, AmmlProjection, AmmlStatus, AmmlStr, AmmlVec3};
 
 /// Sets the camera pose of frame `frame` for the mod `module`. `frame` is the `frame_id` of the `CameraSetup` event
 /// being dispatched on the calling thread (`REFUSED` for any other value, and for a call outside the dispatch). The
@@ -46,6 +46,13 @@ pub type CameraFreeAvailableFn = unsafe extern "C" fn(out: *mut u8) -> AmmlStatu
 /// when the game gives no camera registry, or no camera in it holds the active camera component. Area `camera.active`.
 pub type CameraActiveFn = unsafe extern "C" fn(client: *const c_void, out: *mut AmmlCameraKind) -> AmmlStatus;
 
+/// Hides (`on` 1) or shows (`on` 0) the body of `target` for the mod `module`: while any mod wishes it hidden, the loader
+/// erases the local player from the actor render queue after `queueRenderEntities` and skips the dispatcher draw of
+/// that actor, so no body is drawn (the camera and the shadow of nothing else change). The wish ends by this call with
+/// `on` 0, the mod's disable and a world leave. Any thread (the call only sets state). `INVALID_ARGUMENT` for an
+/// unknown target; `NOT_AVAILABLE` when the area is not offered. Area `camera.hide_actor`.
+pub type CameraHideActorFn = unsafe extern "C" fn(module: AmmlStr, target: AmmlActorTarget, on: u8) -> AmmlStatus;
+
 /// The camera functions of `AmmlServices` (areas `camera.*`). The table only grows: a function added later is
 /// appended, `size` and `version` grow, and a reader calls a function only when `size` covers it.
 #[repr(C)]
@@ -60,6 +67,7 @@ pub struct AmmlCameraTable {
     pub release_free: Option<CameraReleaseFreeFn>,
     pub free_available: Option<CameraFreeAvailableFn>,
     pub active_camera: Option<CameraActiveFn>,
+    pub hide_actor: Option<CameraHideActorFn>,
 }
 
 impl AmmlCameraTable {
@@ -69,6 +77,8 @@ impl AmmlCameraTable {
     pub const SIZE_V2: u32 = 56;
     /// `size` of a v3 camera table: v2 plus `active_camera`.
     pub const SIZE_V3: u32 = 64;
+    /// `size` of a v4 camera table: v3 plus `hide_actor`.
+    pub const SIZE_V4: u32 = 72;
 
     /// A copy of the table at `table`, read as far as its own `size` covers; a later field is `None`. A null table, or
     /// one shorter than v1, gives `None`.
@@ -96,4 +106,4 @@ impl AmmlCameraTable {
     }
 }
 
-const _: () = assert!(core::mem::size_of::<AmmlCameraTable>() == AmmlCameraTable::SIZE_V3 as usize);
+const _: () = assert!(core::mem::size_of::<AmmlCameraTable>() == AmmlCameraTable::SIZE_V4 as usize);

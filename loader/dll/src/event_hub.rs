@@ -3,16 +3,18 @@ use std::sync::Mutex;
 
 use amml_abi::{
     AmmlBand, AmmlEvent, AmmlEventContext, AmmlEventHeader, AmmlOrigin, AmmlPhase, AmmlStatus, AmmlThread,
-    BlockChanged, CameraInstructionReceived, CameraSetup, ChatMessageAdded, ContainerSlotHover, ContainerSlotUnhover,
-    FrameUpdate, ItemHovertext, LocatorBarIconDraw, PlayerListUpdate, PlayerSkinChanged, ScreenChanged, ScreenRender,
-    UiPointer, UiScroll, WorldRendered,
+    AppFocusGained, AppFocusLost, BlockChanged, BlockEntityPass, BuildBlock, CameraInstructionReceived, CameraSetup,
+    ChatMessageAdded, ConnectionStarted, ContainerSlotHover, ContainerSlotUnhover, FrameEnd, FrameUpdate,
+    ItemHovertext, LatencyBarrier, LocatorBarIconDraw, PacketWire, PlayerListUpdate, PlayerMoved, PlayerSkinChanged,
+    ScreenChanged, ScreenRender, UiPointer, UiScroll, UsePressed, WorldRendered,
 };
 use amml_data::{AdapterCatalog, NeedKind};
 use amml_runtime::{CallOutcome, DispatchReport, EventBus, HeaderStamp, ListenError, ListenerId};
 
 use crate::{
-    BlockListener, Boundary, CameraDetours, ChatDetours, CurrentMod, DeferredDisable, GameGate, HandlerDetours,
-    HovertextDetours, LocatorBarDetours, ModListener, PacketDetours, RenderLevelDetours, ScreenDetours, UiInputDetours,
+    BlockEntityDetours, BlockListener, Boundary, CameraDetours, ChatDetours, CurrentMod, DeferredDisable, FocusAdapter,
+    FocusGainedDetours, GameGate, HandlerDetours, HovertextDetours, LocatorBarDetours, ModListener, PacketDetours,
+    PlayerMovedDetours, RenderLevelDetours, ScreenDetours, TimeDetours, UiInputDetours, UseBuildDetours, WireDetours,
 };
 
 // The pause of a split raise: the band it follows and what runs there.
@@ -90,6 +92,7 @@ impl EventHub {
     /// of it until `reopen_owner`.
     pub fn remove_owner(&self, owner: usize) -> usize {
         let removed = self.bus.remove_owner(owner);
+        FocusAdapter::forget_owner(owner);
         self.refresh_flags();
         removed
     }
@@ -222,8 +225,18 @@ impl EventHub {
         ChatDetours::set_wanted(self.bus.has_listeners(ChatMessageAdded::ID));
         BlockListener::set_wanted(self.bus.has_listeners(BlockChanged::ID));
         RenderLevelDetours::set(RenderLevelDetours::LISTENER, self.bus.has_listeners(WorldRendered::ID));
+        BlockEntityDetours::set(BlockEntityDetours::LISTENER, self.bus.has_listeners(BlockEntityPass::ID));
         CameraDetours::set(CameraDetours::LISTENER, self.bus.has_listeners(CameraSetup::ID));
         HandlerDetours::set(HandlerDetours::LISTENER, self.bus.has_listeners(CameraInstructionReceived::ID));
+        FocusGainedDetours::set(FocusGainedDetours::LOSS_LISTENER, self.bus.has_listeners(AppFocusLost::ID));
+        FocusGainedDetours::set(FocusGainedDetours::GAIN_LISTENER, self.bus.has_listeners(AppFocusGained::ID));
+        UseBuildDetours::set(UseBuildDetours::USE_LISTENER, self.bus.has_listeners(UsePressed::ID));
+        UseBuildDetours::set(UseBuildDetours::BUILD_LISTENER, self.bus.has_listeners(BuildBlock::ID));
+        let wire = self.bus.has_listeners(PacketWire::ID) || self.bus.has_listeners(ConnectionStarted::ID);
+        WireDetours::set(WireDetours::LISTENER, wire);
+        TimeDetours::set(TimeDetours::FRAME_END, self.bus.has_listeners(FrameEnd::ID));
+        HandlerDetours::set(HandlerDetours::LATENCY_LISTENER, self.bus.has_listeners(LatencyBarrier::ID));
+        PlayerMovedDetours::set_wanted(self.bus.has_listeners(PlayerMoved::ID));
     }
 
     /// Like `raise`, for a message the loader passes on whatever the listeners say: a cancel is
@@ -253,7 +266,19 @@ impl EventHub {
         injector: usize,
     ) -> DispatchReport {
         Self::header_of(value).injected = 1;
-        self.dispatch(value, context, None, None, Some(injector), true, None, None)
+        self.dispatch(value, context, None, None, Some(injector), false, None, None)
+    }
+
+    /// Raises an event the game raised inside an action of the mod at `actor` (a mod's own build): `origin` is
+    /// `THIS_MOD` for the listeners of `actor` and `OTHER_MOD` for the others, `injected` stays 0, and a cancel counts as
+    /// for `raise`.
+    pub fn raise_acted<E: AmmlEvent + Clone>(
+        &self,
+        value: &mut E,
+        context: &AmmlEventContext,
+        actor: usize,
+    ) -> DispatchReport {
+        self.dispatch(value, context, None, None, Some(actor), true, None, None)
     }
 
     /// `raise_injected` and `raise_keeping` together: `keep` runs after every listener call.
@@ -265,12 +290,12 @@ impl EventHub {
         keep: &dyn Fn(&mut E),
     ) -> DispatchReport {
         Self::header_of(value).injected = 1;
-        self.dispatch(value, context, None, None, Some(injector), true, Some(keep), None)
+        self.dispatch(value, context, None, None, Some(injector), false, Some(keep), None)
     }
 
-    // `only` and `skip` select listeners by owner; `injector` is set for an injected event; `may_cancel`
-    // false ignores every cancel; `keep` runs after each listener call; `split` runs its closure once after the
-    // listeners of its band.
+    // `only` and `skip` select listeners by owner; `injector` is the mod whose listeners get the origin `THIS_MOD` (the
+    // others get `OTHER_MOD`); `may_cancel` false ignores every cancel; `keep` runs after each listener call; `split`
+    // runs its closure once after the listeners of its band.
     #[allow(clippy::too_many_arguments)]
     fn dispatch<E: AmmlEvent + Clone>(
         &self,
@@ -290,7 +315,7 @@ impl EventHub {
         if E::ID == FrameUpdate::ID {
             self.gate.open();
         }
-        let cancellable = E::CANCELLABLE && injector.is_none() && may_cancel;
+        let cancellable = E::CANCELLABLE && may_cancel;
         let mut stamp = HeaderStamp::new(*Self::header_of(value), cancellable);
         let call = |listener: &ModListener, value: &mut E| {
             if Some(listener.owner) == skip || only.is_some_and(|only| only != listener.owner) {

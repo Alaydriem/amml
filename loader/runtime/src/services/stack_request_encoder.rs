@@ -1,4 +1,4 @@
-use crate::{RequestAction, SlotRef};
+use crate::{ProtocolValues, RequestAction, SlotRef};
 
 /// Writes the payload of item stack requests the way the game's `BinaryStream` writers do, so that `Packet::read` of
 /// an `ItemStackRequestPacket` reads it: the number of requests, then for each its id, its actions, the strings to
@@ -10,6 +10,13 @@ impl StackRequestEncoder {
     const ACTION_PLACE: u8 = 1;
     const ACTION_SWAP: u8 = 2;
     const ACTION_DROP: u8 = 3;
+    const ACTION_TAKE: u8 = 0;
+    const ACTION_DESTROY: u8 = 4;
+    // `ItemStackRequestActionType::CraftCreative`, and its index in the game's action variant: the deprecated types 7 and 8 have
+    // no struct in the variant, so the index is 12 (type 14) on 26.63 and on 70.26.
+    const ACTION_CRAFT_CREATIVE: u8 = 14;
+    const ACTION_CRAFT_CREATIVE_INDEX: u8 = 12;
+    const CRAFTS: u8 = 1;
     const NOT_RANDOMLY: u8 = 0;
     const ORIGIN_NONE: i32 = -1;
 
@@ -20,15 +27,24 @@ impl StackRequestEncoder {
         Self::write_unsigned_var_int(&mut out, u32::try_from(requests.len()).unwrap_or(u32::MAX));
         for (request_id, action) in requests {
             Self::write_var_int(&mut out, *request_id);
-            Self::write_unsigned_var_int(&mut out, 1);
-            Self::write_action(&mut out, *action);
+            Self::write_unsigned_var_int(&mut out, Self::action_count(*action));
+            Self::write_action(&mut out, *request_id, *action);
             Self::write_unsigned_var_int(&mut out, 0);
             out.extend_from_slice(&Self::ORIGIN_NONE.to_le_bytes());
         }
         out
     }
 
-    fn write_action(out: &mut Vec<u8>, action: RequestAction) {
+    // The creative craft is two actions (the craft, then the take of what it made); every other request has one.
+    fn action_count(action: RequestAction) -> u32 {
+        match action {
+            RequestAction::CraftCreative { replacing: Some(_), .. } => 3,
+            RequestAction::CraftCreative { .. } => 2,
+            _ => 1,
+        }
+    }
+
+    fn write_action(out: &mut Vec<u8>, request_id: i32, action: RequestAction) {
         match action {
             RequestAction::Swap { from, to } => {
                 Self::write_kind(out, Self::ACTION_SWAP);
@@ -44,6 +60,27 @@ impl StackRequestEncoder {
                 out.push(count);
                 Self::write_slot(out, from);
                 out.push(Self::NOT_RANDOMLY);
+            }
+            RequestAction::CraftCreative { creative_net_id, count, to, replacing } => {
+                if let Some((held_count, held)) = replacing {
+                    Self::write_kind(out, Self::ACTION_DESTROY);
+                    out.push(held_count);
+                    Self::write_slot(out, held);
+                }
+                out.push(Self::ACTION_CRAFT_CREATIVE_INDEX);
+                out.push(Self::ACTION_CRAFT_CREATIVE);
+                Self::write_unsigned_var_int(out, creative_net_id);
+                out.push(Self::CRAFTS);
+                Self::write_kind(out, Self::ACTION_TAKE);
+                out.push(count);
+                // The made stack has no net id yet: the request's own id stands for it.
+                let created = SlotRef {
+                    container: ProtocolValues::CREATED_OUTPUT,
+                    slot: ProtocolValues::CREATED_OUTPUT_SLOT,
+                    net_id: request_id,
+                };
+                Self::write_slot(out, created);
+                Self::write_slot(out, SlotRef { net_id: 0, ..to });
             }
         }
     }

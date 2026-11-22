@@ -1,6 +1,6 @@
 use amml_abi::{AmmlCameraKind, AmmlCameraTable, AmmlPose, AmmlStr};
 
-use crate::{ApiError, CameraKind, Client, Pose};
+use crate::{ActorTarget, ApiError, CameraKind, Client, Pose};
 
 /// The client's camera outside a `CameraSetup` frame (`Ctx::camera`): the game's own free camera.
 ///
@@ -10,6 +10,8 @@ use crate::{ApiError, CameraKind, Client, Pose};
 /// only. `Area::CAMERA_FREE`.
 ///
 /// `active_camera` reads which vanilla camera the client shows the world through (`Area::CAMERA_ACTIVE`).
+///
+/// `hide_actor` hides the local player's body (`Area::CAMERA_HIDE_ACTOR`).
 pub struct CameraControl {
     table: Option<AmmlCameraTable>,
     module: &'static str,
@@ -71,5 +73,19 @@ impl CameraControl {
         // live local.
         let status = unsafe { active_camera(client.handle(), &raw mut out) };
         status.is_ok().then(|| CameraKind::from_abi(out))
+    }
+
+    /// Hides (`on`) or shows the body of `target`. While any mod wishes the body hidden, the loader erases it from the
+    /// actor render queue and skips its draw, so no body is drawn by either path; the camera and the other actors do not
+    /// change. Your wish ends by a call with `on` false, your disable and a world leave. Any thread: the call only sets
+    /// state. `Err(NotAvailable)` without `Area::CAMERA_HIDE_ACTOR` and from a loader before camera table v4.
+    #[allow(unsafe_code)]
+    pub fn hide_actor(&self, target: ActorTarget, on: bool) -> Result<(), ApiError> {
+        let Some(hide_actor) = self.table.and_then(|table| table.hide_actor) else {
+            return Err(ApiError::NotAvailable);
+        };
+        // SAFETY: the table function is the loader's; the module id lives for the call.
+        let status = unsafe { hide_actor(AmmlStr::from_str(self.module), target.to_abi(), u8::from(on)) };
+        ApiError::check(status)
     }
 }

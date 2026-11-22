@@ -50,6 +50,8 @@ const TYPE_SLOTS: usize = 0x82;
 type Placed = HashMap<(u8, u8, i16), usize>;
 static PLACED: Mutex<Option<Placed>> = Mutex::new(None);
 static ASKED: Mutex<Vec<(u8, u8, i16)>> = Mutex::new(Vec::new());
+// The calls of the stand-in `BlockSource::getBlock`: the block source and the block position.
+static SOURCE_ASKED: Mutex<Vec<(usize, [i32; 3])>> = Mutex::new(Vec::new());
 
 /// The block kinds of the stand-in chunk besides air, which is what is where nothing was placed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -134,6 +136,7 @@ impl ChunkGame {
         }
         *PLACED.lock().unwrap() = Some(HashMap::new());
         ASKED.lock().unwrap().clear();
+        SOURCE_ASKED.lock().unwrap().clear();
     }
 
     // The stand-in `BlockType` and `Block` of `kind`.
@@ -154,6 +157,8 @@ impl ChunkGame {
         // capacity 15, a longer text through a pointer with the capacity of its length.
         let text = NAMES[kind];
         words[28].store(0, Ordering::SeqCst);
+        // The tint method byte of a mesher test, at 108h: no tint.
+        words[33].store(0, Ordering::SeqCst);
         if text.len() < 16 {
             let mut inline = [0u8; 16];
             inline[..text.len()].copy_from_slice(text);
@@ -183,6 +188,11 @@ impl ChunkGame {
     /// The address of the stand-in `BlockType` of `kind`.
     pub fn block_type(kind: ChunkKind) -> usize {
         std::ptr::from_ref(&TYPES[kind as usize]).addr()
+    }
+
+    /// The address of the stand-in air `Block`, what is where nothing was placed.
+    pub fn air() -> usize {
+        std::ptr::from_ref(&BLOCKS[0]).addr()
     }
 
     /// The address of the stand-in `Block` of `kind`.
@@ -239,6 +249,26 @@ impl ChunkGame {
     /// The block positions `getBlock` was asked for, in order, as column and y relative to the lowest block y.
     pub fn asked() -> Vec<(u8, u8, i16)> {
         ASKED.lock().unwrap().clone()
+    }
+
+    /// The calls of `block_source_get_block`, in order: the block source and the block position.
+    pub fn source_asked() -> Vec<(usize, [i32; 3])> {
+        SOURCE_ASKED.lock().unwrap().clone()
+    }
+
+    /// `Block const& BlockSource::getBlock(BlockPos const&) const`: the block placed at the world position, air where
+    /// nothing was placed. The stand-in chunk has its corner at x and z 0.
+    pub extern "C" fn block_source_get_block(this: usize, pos: *const [i32; 3]) -> *mut c_void {
+        // SAFETY: the adapter passes a live `BlockPos` of three ints.
+        let pos = unsafe { pos.read() };
+        SOURCE_ASKED.lock().unwrap().push((this, pos));
+        let key = (
+            u8::try_from(pos[0]).unwrap_or(u8::MAX),
+            u8::try_from(pos[2]).unwrap_or(u8::MAX),
+            i16::try_from(pos[1] - Self::MIN_Y).unwrap_or(i16::MAX),
+        );
+        let kind = PLACED.lock().unwrap().as_ref().and_then(|placed| placed.get(&key).copied()).unwrap_or(0);
+        std::ptr::from_ref(&BLOCKS[kind]).cast_mut().cast()
     }
 
     /// `LevelChunk* BlockSource::getChunk(int, int) const`: only chunk (0, 0) exists.

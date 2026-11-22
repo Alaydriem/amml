@@ -1,10 +1,11 @@
 use std::cell::{Cell, RefCell};
+use std::collections::BTreeMap;
 
-use amml_abi::{AmmlColorQuad, AmmlMeshStyle, AmmlStatus, AmmlTransform};
-use amml_runtime::{MeshBook, MeshKey, MeshRefusal};
+use amml_abi::{AmmlBlockHandle, AmmlColorQuad, AmmlMeshGroup, AmmlMeshStyle, AmmlStatus, AmmlTransform};
+use amml_runtime::{GroupBook, GroupKey, GroupRefusal, MeshBook, MeshKey, MeshRefusal};
 
-use crate::testing::FakeRenderRun;
 use crate::testing::fake_canvas::FakeCanvas;
+use crate::testing::{FakeMesher, FakeRenderRun};
 use crate::{MeshId, Vec3};
 
 /// The render side of a `FakeGame`: the dispatch that runs now, and the meshes of the fake mod. A canvas call answers
@@ -14,6 +15,9 @@ pub(crate) struct FakeRender {
     next_frame: Cell<u64>,
     running: RefCell<Option<FakeRenderRun>>,
     meshes: MeshBook,
+    groups: GroupBook,
+    // The quads each open group holds, by group id.
+    group_quads: RefCell<BTreeMap<u32, u32>>,
     next_handle: Cell<usize>,
     vibrant: Cell<bool>,
 }
@@ -31,6 +35,7 @@ impl FakeRender {
         *self.running.borrow_mut() = Some(FakeRenderRun {
             frame,
             camera_position: canvas.camera_position,
+            clip_matrix: canvas.clip_matrix,
             freed: Vec::new(),
             calls: Vec::new(),
         });
@@ -86,6 +91,99 @@ impl FakeRender {
         Ok(self.add_mesh())
     }
 
+    /// A mesher `build` of the loader in the dispatch of `frame`: the checks of `FakeMesher`, then a mesh of the fake mod
+    /// when a cell was drawn; gives the mesh and its quads.
+    pub(crate) fn mesher_build(
+        &self,
+        frame: u64,
+        dims: [u32; 3],
+        cells: &[u16],
+        palette: &[AmmlBlockHandle],
+    ) -> Result<(Option<MeshId>, u32), AmmlStatus> {
+        let quads = self.in_frame(frame, |run| {
+            let (drawn, quads) = FakeMesher::build(dims, cells, palette)?;
+            run.calls.push(format!("mesher build cells={drawn} quads={quads}"));
+            Ok(quads)
+        })?;
+        Ok(((quads > 0).then(|| self.add_mesh()), quads))
+    }
+
+    /// A mesher `group_begin` of the loader in the dispatch of `frame`: a slot side of 0 is `INVALID_ARGUMENT`, the 65th open group
+    /// `REFUSED`.
+    pub(crate) fn group_begin(&self, frame: u64, slot_size: [u32; 3]) -> Result<AmmlMeshGroup, AmmlStatus> {
+        self.in_frame(frame, |run| {
+            if slot_size.contains(&0) {
+                return Err(AmmlStatus::INVALID_ARGUMENT);
+            }
+            let handle = self.next_handle.get() + 1;
+            let key = self.groups.open(Self::OWNER, handle).map_err(Self::group_refusal)?;
+            self.next_handle.set(handle);
+            self.group_quads.borrow_mut().insert(key.id, 0);
+            run.calls.push(format!("mesher group begin slot={},{},{}", slot_size[0], slot_size[1], slot_size[2]));
+            Ok(AmmlMeshGroup { id: key.id, generation: key.generation })
+        })
+    }
+
+    /// A mesher `group_append` of the loader in the dispatch of `frame`: the checks of `FakeMesher`, then the quads of the
+    /// grid join the group.
+    pub(crate) fn group_append(
+        &self,
+        frame: u64,
+        group: AmmlMeshGroup,
+        grid: ([u32; 3], &[u16], &[AmmlBlockHandle]),
+        offset: [i32; 3],
+    ) -> Result<(), AmmlStatus> {
+        self.in_frame(frame, |run| {
+            let key = GroupKey { id: group.id, generation: group.generation };
+            self.groups.handle(Self::OWNER, key).map_err(Self::group_refusal)?;
+            let (dims, cells, palette) = grid;
+            let (drawn, quads) = FakeMesher::build(dims, cells, palette)?;
+            *self.group_quads.borrow_mut().entry(key.id).or_default() += quads;
+            run.calls.push(format!(
+                "mesher group append cells={drawn} quads={quads} offset={},{},{}",
+                offset[0], offset[1], offset[2]
+            ));
+            Ok(())
+        })
+    }
+
+    /// A mesher `group_finish` of the loader in the dispatch of `frame`: the group is gone, and a mesh of the fake mod holds
+    /// its quads (none for a group that holds none).
+    pub(crate) fn group_finish(&self, frame: u64, group: AmmlMeshGroup) -> Result<(Option<MeshId>, u32), AmmlStatus> {
+        let quads = self.in_frame(frame, |run| {
+            let key = GroupKey { id: group.id, generation: group.generation };
+            self.groups.finish(Self::OWNER, key).map_err(Self::group_refusal)?;
+            let quads = self.group_quads.borrow_mut().remove(&key.id).unwrap_or(0);
+            run.calls.push(format!("mesher group finish quads={quads}"));
+            Ok(quads)
+        })?;
+        Ok(((quads > 0).then(|| self.add_mesh()), quads))
+    }
+
+    /// A mesher `group_discard` of the loader, on any frame or none: the group is gone and its slot free. Inside a
+    /// dispatch the call is listed as `mesher group discard`.
+    pub(crate) fn group_discard(&self, group: AmmlMeshGroup) -> Result<(), AmmlStatus> {
+        let key = GroupKey { id: group.id, generation: group.generation };
+        self.groups.discard(Self::OWNER, key).map_err(Self::group_refusal)?;
+        self.group_quads.borrow_mut().remove(&key.id);
+        if let Some(run) = self.running.borrow_mut().as_mut() {
+            run.calls.push("mesher group discard".to_string());
+        }
+        Ok(())
+    }
+
+    /// The number of open groups of the fake mod.
+    pub(crate) fn open_groups(&self) -> usize {
+        self.groups.len()
+    }
+
+    fn group_refusal(refusal: GroupRefusal) -> AmmlStatus {
+        match refusal {
+            GroupRefusal::Stale => AmmlStatus::STALE,
+            GroupRefusal::NotOwner | GroupRefusal::TooMany => AmmlStatus::REFUSED,
+        }
+    }
+
     /// A `draw` of the loader in the dispatch of `frame`.
     pub(crate) fn draw(&self, frame: u64, mesh: MeshId, transform: &AmmlTransform) -> Result<(), AmmlStatus> {
         let key = MeshKey { id: mesh.id, generation: mesh.generation };
@@ -125,6 +223,12 @@ impl FakeRender {
         run.camera_position.ok_or(AmmlStatus::FAILED)
     }
 
+    pub(crate) fn clip_matrix(&self, frame: u64) -> Result<[[f32; 4]; 4], AmmlStatus> {
+        let running = self.running.borrow();
+        let run = running.as_ref().filter(|run| run.frame == frame).ok_or(AmmlStatus::REFUSED)?;
+        run.clip_matrix.ok_or(AmmlStatus::FAILED)
+    }
+
     /// Makes a mesh of the fake mod, as the loader would on a `build`.
     pub(crate) fn add_mesh(&self) -> MeshId {
         let handle = self.next_handle.get() + 1;
@@ -145,6 +249,8 @@ impl FakeRender {
     /// The world is left: every mesh is stale.
     pub(crate) fn world_left(&self) {
         self.meshes.world_left();
+        self.groups.world_left();
+        self.group_quads.borrow_mut().clear();
     }
 
     /// The meshes the book holds.

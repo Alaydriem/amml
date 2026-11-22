@@ -9,7 +9,7 @@ pub mod testing;
 
 /// The version of what the deriver does with a recipe's steps. It is part of every entry
 /// fingerprint, so a change here makes every stored result stale. Bump it whenever step semantics change.
-pub const DERIVER_VERSION: u32 = 13;
+pub const DERIVER_VERSION: u32 = 14;
 
 pub use errors::{CliError, DeriveError, StepError};
 pub use services::{

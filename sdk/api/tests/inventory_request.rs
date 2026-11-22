@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 use amml_abi::{AmmlStatus, ClientTick, InventoryRequestDone};
 use amml_api::testing::{FakeClient, FakeGame};
 use amml_api::{
-    ApiError, Area, HookOrder, InventoryMove, InventoryRequestDoneExt, RequestId, RequestOptions, RequestOutcome,
-    Screen,
+    ApiError, Area, BlockHandle, HookOrder, InventoryMove, InventoryRequestDoneExt, RequestId, RequestOptions,
+    RequestOutcome, Screen,
 };
 
 type Asked = Arc<Mutex<Vec<Result<RequestId, ApiError>>>>;
@@ -181,4 +181,39 @@ fn an_outcome_the_crate_does_not_name_is_other() {
     assert_eq!(RequestOutcome::from(1), RequestOutcome::Done);
     assert_eq!(RequestOutcome::from(5), RequestOutcome::Cancelled);
     assert_eq!(RequestOutcome::from(7), RequestOutcome::NotSent);
+}
+
+#[test]
+fn request_pick_from_the_fake_answers_done() {
+    let fake = FakeGame::new();
+    serving(&fake, Screen::Hud);
+    fake.offer_area(Area::INVENTORY_REQUEST.at(2));
+    let (ended, _listener) = listen_for_ends(&fake);
+    let block = BlockHandle::for_test(7);
+
+    let id = ask(&fake, move |inventory| inventory.request_pick(block, 4)).unwrap();
+
+    assert_eq!(fake.picks(), vec![(id, block, 4)]);
+    fake.answer(id, 1);
+    fake.frame();
+    assert_eq!(*ended.lock().unwrap(), vec![(id, RequestOutcome::Done, 1, 1)]);
+}
+
+#[test]
+fn request_pick_needs_version_2_of_the_area() {
+    let fake = FakeGame::new();
+    serving(&fake, Screen::Hud);
+    let block = BlockHandle::for_test(7);
+
+    assert_eq!(ask(&fake, move |inventory| inventory.request_pick(block, 4)), Err(ApiError::NotAvailable));
+}
+
+#[test]
+fn request_pick_above_the_hotbar_is_refused() {
+    let fake = FakeGame::new();
+    serving(&fake, Screen::Hud);
+    fake.offer_area(Area::INVENTORY_REQUEST.at(2));
+    let block = BlockHandle::for_test(7);
+
+    assert_eq!(ask(&fake, move |inventory| inventory.request_pick(block, 9)), Err(ApiError::Refused));
 }

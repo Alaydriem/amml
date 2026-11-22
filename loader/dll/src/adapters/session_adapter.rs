@@ -5,16 +5,17 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Instant;
 
 use amml_abi::{
-    AmmlEvent, AmmlEventContext, AmmlPhase, AmmlReleaseReason, ClientTick, FrameUpdate, GameTick, JoinStarted,
+    AmmlEvent, AmmlEventContext, AmmlPhase, AmmlReleaseReason, AmmlStr, ClientTick, FrameUpdate, GameTick, JoinStarted,
     WorldJoined, WorldLeft,
 };
 use amml_data::{AdapterCatalog, Availability, EntryId, NeedKind};
 
 use crate::{
-    BlockListener, CameraAdapter, ClientAdapter, EventHub, FreeCameraAdapter, InlineIconAdapter, InventoryAdapter,
-    ItemDrawAdapter, LevelRendererAdapter, LightingAdapter, LoaderState, ModLoader, RequestAdapter, ScreenAdapter,
-    SessionActions, SessionDetours, SessionHook, ShapesAdapter, TestWorld, TextureAdapter, TextureReloadAdapter,
-    WorldRenderAdapter,
+    BlockEntityAdapter, BlockListener, BodyHideAdapter, CameraAdapter, ClientAdapter, EventHub, FreeCameraAdapter,
+    InlineIconAdapter, InventoryAdapter, ItemDrawAdapter, JoinEvents, JoinNames, LevelRendererAdapter, LightingAdapter,
+    LoaderState, ModLoader, PlayerMovedAdapter, RequestAdapter, RouterAdapter, ScreenAdapter, SessionActions,
+    SessionDetours, SessionHook, ShapesAdapter, TestWorld, TextureAdapter, TextureReloadAdapter, TimeAdapter,
+    WireAdapter, WorldRenderAdapter,
 };
 
 static ADAPTER: OnceLock<SessionAdapter> = OnceLock::new();
@@ -192,6 +193,8 @@ impl SessionAdapter {
             self.state.capture().expire_shots(Instant::now());
             self.state.owner_events().drain(self.hub());
             self.state.input().apply_frame(self.hub());
+            TimeAdapter::with((), TimeAdapter::frame_began);
+            BodyHideAdapter::with((), BodyHideAdapter::frame_began);
             if self.state.shutdown().is_queued() {
                 let client = self.primary.load(Ordering::Acquire);
                 ModLoader::new(self.state).shutdown_live(client);
@@ -201,8 +204,11 @@ impl SessionAdapter {
         let mut event = FrameUpdate { header: EventHub::header::<FrameUpdate>(phase) };
         self.hub().raise(&mut event, &self.hub().loader_context());
         if phase == AmmlPhase::AFTER {
+            TimeAdapter::with((), TimeAdapter::frame_ended);
             LevelRendererAdapter::with((), LevelRendererAdapter::flush_pending);
             BlockListener::with((), BlockListener::flush);
+            JoinEvents::with(JoinEvents::flush);
+            RouterAdapter::with((), RouterAdapter::frame);
             TextureReloadAdapter::with((), TextureReloadAdapter::flush_pending);
             TestWorld::with(TestWorld::frame);
         }
@@ -229,6 +235,8 @@ impl SessionAdapter {
             let mut joined = WorldJoined { header: EventHub::header::<WorldJoined>(AmmlPhase::AFTER), epoch: epoch.0 };
             self.hub().raise(&mut joined, &self.context(client));
             SessionActions::with(SessionActions::world_joined);
+            JoinEvents::with(JoinEvents::forget_direct);
+            PlayerMovedAdapter::with((), PlayerMovedAdapter::world_joined);
             TextureAdapter::with((), |adapter| adapter.rebind("world_joined"));
         }
         BlockListener::with((), BlockListener::reconcile);
@@ -288,19 +296,37 @@ impl SessionAdapter {
     }
 
     /// `JoinStarted` after `ClientInstance.onStartJoinGame`; the next primary client update with a local
-    /// player joins the world.
-    pub(crate) fn join_started(&self) {
+    /// player joins the world. `names` are the flag and the strings of the call; the server and world names are lent to
+    /// the listeners for the call only. Each join logs `join started names` with all three strings (r8, r9 and the
+    /// argument at entry+28h), so the in-game check L-D6 confirms their roles.
+    pub(crate) fn join_started(&self, names: &JoinNames) {
         self.awaiting.store(true, Ordering::Release);
         FreeCameraAdapter::with((), FreeCameraAdapter::join_started);
-        let mut event = JoinStarted { header: EventHub::header::<JoinStarted>(AmmlPhase::AFTER) };
+        curia::info!("join started names", {
+            local: names.local,
+            arg_r8: names.correlation_id.as_str(),
+            arg_r9: names.server_name.as_str(),
+            arg_stack28: names.world_name.as_str()
+        });
+        JoinEvents::with(JoinEvents::forget_direct);
+        PlayerMovedAdapter::with((), PlayerMovedAdapter::join_started);
+        let mut event = JoinStarted {
+            header: EventHub::header::<JoinStarted>(AmmlPhase::AFTER),
+            local: u8::from(names.local),
+            _reserved: [0; 7],
+            server_name: AmmlStr::from_str(&names.server_name),
+            world_name: AmmlStr::from_str(&names.world_name),
+        };
         self.hub().raise(&mut event, &self.hub().loader_context());
     }
 
     /// Before `ClientExitLevel.hook`, and first in a live shutdown: a `DimensionChanging` held for the next frame is dropped, `WorldLeft` for a
     /// joined world, then the gate epoch is 0, its resources
-    /// are taken back, every injected input is released and the primary client is forgotten. An exit with no joined world changes nothing, so
+    /// are taken back, every injected input is released and the primary client is forgotten. The packet wire forgets its connections first, at every exit. An exit with no joined world changes nothing else, so
     /// a join that waits for its local player stays waiting.
     pub(crate) fn leaving(&self) {
+        WireAdapter::with((), WireAdapter::forget);
+        PlayerMovedAdapter::with((), PlayerMovedAdapter::leaving);
         if self.rearm_on_leave.load(Ordering::Acquire) {
             self.awaiting.store(true, Ordering::Release);
         }
@@ -316,6 +342,7 @@ impl SessionAdapter {
         BlockListener::with((), BlockListener::world_left);
         LightingAdapter::with((), LightingAdapter::world_left);
         WorldRenderAdapter::with((), WorldRenderAdapter::world_left);
+        BlockEntityAdapter::with((), BlockEntityAdapter::world_left);
         CameraAdapter::with((), CameraAdapter::world_left);
         ShapesAdapter::with((), ShapesAdapter::world_left);
         FreeCameraAdapter::with((), FreeCameraAdapter::world_left);
@@ -323,6 +350,8 @@ impl SessionAdapter {
         InlineIconAdapter::with((), InlineIconAdapter::world_left);
         ItemDrawAdapter::with((), ItemDrawAdapter::world_left);
         RequestAdapter::with((), RequestAdapter::world_left);
+        TimeAdapter::with((), TimeAdapter::world_left);
+        BodyHideAdapter::with((), BodyHideAdapter::world_left);
         // The gate epoch is 0 before the store takes the world back, so a new area call gives
         // `NotReady`; one that read the old epoch earlier gets `Stale` from the store.
         self.hub().gate().end_world();

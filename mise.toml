@@ -1497,6 +1497,28 @@ flag "--modmanager <dir>" help="The modmanager checkout to build; default: AMML_
 '''
 run = "bash scripts/ingame-minimap.sh"
 
+[tasks.ingame-stratum]
+description = "Runs stratum (feature gate) and modmanager in game on a patched standalone test instance under %LOCALAPPDATA%/amml/instances (--instance, required; the same instance checks as ingame-zoom: 1.26.63.01 and 1.26.63.01-P are refused, the exe must import amml.dll, amml/instance.hcl must set a data_dir outside %LOCALAPPDATA%/amml/data). Refuses a running game of the instance. Plays in the world amml-test-stratum (copied once from amml-test, restored from its own pristine copy each run). Sets pause_menu_on_focus_lost:0 in the options.txt files under data_dir for the run. Builds the release amml.dll and copies it, the recipes and the data into the instance; packages modmanager (--modmanager, else AMML_MODMANAGER_DIR, else ../modmanager) and stratum with feature gate (--stratum, else AMML_STRATUM_DIR, else ../stratum-build-replay); runs mise run compat on each dist folder and stops before the game on a failure or a forbidden Win32 import warning; parks the other mods, installs the two and puts the parked mods back on exit. Starts the game in the background and posts keys and focus messages only (the Easy Place hold and the library rows are attended). Reads the loader, manager and stratum logs of the run including any loader_*.log archive written during it. Closes only the game PID it started. Passes on every listed line and no 'event not available', 'area not available', 'loader too old' or 'panic' line in the three logs (ingame-stratum: pass); build rows need operator=true and are attended otherwise; see the script header"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--instance <name>" required=#true help="The test instance folder under %LOCALAPPDATA%/amml/instances (1.26.63.01-test, 1.26.70.26-standalone); 1.26.63.01 and 1.26.63.01-P are refused"
+flag "--stratum <dir>" help="The stratum checkout to build; default: AMML_STRATUM_DIR, else ../stratum-build-replay"
+flag "--modmanager <dir>" help="The modmanager checkout to build; default: AMML_MODMANAGER_DIR, else ../modmanager"
+'''
+run = "bash scripts/ingame-stratum.sh"
+
+[tasks.ingame-dejavu]
+description = "Builds the release loader, modmanager and dejavu, installs only modmanager and dejavu into a standalone test instance (its other mods are parked for the run and put back after), and drives dejavu through its own MCP server (pre-paired by a token file) in the world amml-test-dejavu: run A records the local world 30 s and leaves, run B joins the instance's BDS and records 30 s, run C plays the local recording with the free camera at roll 30, one 60-frame render and one marker set. Checks the proof lines of the dejavu port (capture, protocol, world folder, join, camera, fov, body, viewer, clock, graphics, markers, guards) and every contract event and area in the loader log; passes on `ingame-dejavu: pass`. Prints the first join names, option key, packet wire, app focus and time hold lines. Ends only the processes it started"
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--instance <name>" required=#true help="The test instance folder under %LOCALAPPDATA%/amml/instances (1.26.63.01-test, 1.26.70.26-standalone); 1.26.63.01 and 1.26.63.01-P are refused"
+flag "--dejavu <dir>" help="The dejavu checkout to build; default: AMML_DEJAVU_DIR, else ../dejavu"
+flag "--modmanager <dir>" help="The modmanager checkout to build; default: AMML_MODMANAGER_DIR, else ../modmanager"
+'''
+run = "bash scripts/ingame-dejavu.sh"
+
 [tasks.install]
 description = "Builds release amml.dll and amml-patch, patches Minecraft.Windows.exe from Minecraft.Windows.exe.bak of an AMML instance under %LOCALAPPDATA%/amml/instances (--instance, required), copies amml.dll, the recipes and the data next to it, and marks the AMML as a local build (amml/amml-version.txt = <version>+local, amml/amml-api.txt). Close the game first: a running game locks the DLL"
 dir = "{{config_root}}"

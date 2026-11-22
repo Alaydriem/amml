@@ -21,6 +21,21 @@ impl HashedStringLayout38 {
     pub const STRING: u8 = 0;
     pub const VIEW: u8 = 1;
 
+    /// A `HashedString` whose text is the `std::string` alternative `text`, with the game's hash of it and no last
+    /// match, for a call that reads it.
+    pub fn with_string(hash: u64, text: MsvcString) -> Self {
+        let mut storage = [0u64; 4];
+        // SAFETY: the storage is four words, the size and alignment of a std::string (asserted below).
+        unsafe { storage.as_mut_ptr().cast::<MsvcString>().write(text) };
+        Self { hash, storage, index: Self::STRING, _pad: [0; 7], _last_match: std::ptr::null() }
+    }
+
+    /// The `std::string` alternative, to release it; `None` for another index.
+    pub fn string_mut(&mut self) -> Option<&mut MsvcString> {
+        // SAFETY: index 0 holds a std::string at the start of the storage, which has its size and alignment.
+        (self.index == Self::STRING).then(|| unsafe { &mut *self.storage.as_mut_ptr().cast::<MsvcString>() })
+    }
+
     /// The text: the `std::string` or the `std::string_view` the index names; `None` for another index.
     ///
     /// # Safety

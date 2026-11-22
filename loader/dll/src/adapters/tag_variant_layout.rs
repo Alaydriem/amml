@@ -18,6 +18,8 @@ impl TagVariantLayout {
     pub const BYTE: u8 = 1;
     /// The index of an `IntTag`.
     pub const INT: u8 = 3;
+    /// The index of a `StringTag`.
+    pub const STRING: u8 = 8;
     /// The index of a `ListTag`.
     pub const LIST: u8 = 9;
 

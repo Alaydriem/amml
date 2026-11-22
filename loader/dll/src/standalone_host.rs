@@ -4,13 +4,14 @@ use amml_data::{AdapterCatalog, EntryId};
 use amml_runtime::{CacheSource, DeriveSource, EntryTable, HostResolver, ModSpec};
 
 use crate::{
-    ActiveCameraAdapter, ActorAdapter, BlockListener, CameraAdapter, ChatAdapter, ClientAdapter, FolderRedirect,
-    ForegroundHandback, FreeCameraAdapter, HeapCheck, HostError, HostInputs, HostPaths, HostProcess, HostStartup,
-    HudAdapter, InlineIconAdapter, InputAdapter, InstanceSettings, InventoryAdapter, ItemDrawAdapter,
-    LevelRendererAdapter, LightingAdapter, LoaderLog, LocatorBarAdapter, NetworkAdapter, OverlayService,
-    PlayerActionAdapter, RequestAdapter, RouterAdapter, ScreenAdapter, SessionActions, SessionAdapter, ShapesAdapter,
-    TestWorld, TextAdapter, TextureAdapter, TextureReloadAdapter, UiDrawAdapter, UiInputAdapter, WorldAdapter,
-    WorldInfoAdapter, WorldRenderAdapter,
+    ActiveCameraAdapter, ActorAdapter, BlockEntityAdapter, BlockListener, BlockReadAdapter, BlockStateAdapter,
+    BodyHideAdapter, CameraAdapter, ChatAdapter, ClientAdapter, FocusAdapter, FolderRedirect, ForegroundHandback,
+    FreeCameraAdapter, GameModeAdapter, HeapCheck, HostError, HostInputs, HostPaths, HostProcess, HostStartup,
+    HudAdapter, InlineIconAdapter, InputAdapter, InstanceSettings, InventoryAdapter, ItemDrawAdapter, JoinEvents,
+    KindsAdapter, LevelRendererAdapter, LightingAdapter, LoaderLog, LocatorBarAdapter, NetworkAdapter, OptionsAdapter,
+    OverlayService, PlayerActionAdapter, PlayerMovedAdapter, RequestAdapter, RouterAdapter, ScreenAdapter,
+    SessionActions, SessionAdapter, ShapesAdapter, TestWorld, TextAdapter, TextureAdapter, TextureReloadAdapter,
+    TimeAdapter, UiDrawAdapter, UiInputAdapter, WireAdapter, WorldAdapter, WorldInfoAdapter, WorldRenderAdapter,
 };
 
 /// The host where AMML starts itself, with no LeviLamina: the exe entry-point detour runs `run`
@@ -113,6 +114,7 @@ impl StandaloneHost {
             HostStartup::finish(paths, module_base, table, &scan, HeapCheck::Deferred, |state| {
                 SessionAdapter::install(state);
                 ClientAdapter::install(state);
+                FocusAdapter::install(state);
                 SessionActions::install(state);
                 HudAdapter::install(state);
                 ScreenAdapter::install(state);
@@ -124,21 +126,32 @@ impl StandaloneHost {
                 ActorAdapter::install(state);
                 WorldAdapter::install(state);
                 WorldInfoAdapter::install(state);
+                JoinEvents::install(state);
                 BlockListener::install(state, || HostProcess::image_layout(module_base));
                 InventoryAdapter::install(state);
+                BlockStateAdapter::install(state);
+                BlockReadAdapter::install(state);
+                KindsAdapter::install(state);
                 ItemDrawAdapter::install(state);
                 RequestAdapter::install(state);
                 NetworkAdapter::install(state);
+                WireAdapter::install(state);
+                TimeAdapter::install(state);
+                BodyHideAdapter::install(state);
+                PlayerMovedAdapter::install(state);
                 LocatorBarAdapter::install(state);
                 ChatAdapter::install(state);
                 InlineIconAdapter::install(state);
                 LightingAdapter::install(state);
                 PlayerActionAdapter::install(state);
+                GameModeAdapter::install(state);
                 LevelRendererAdapter::install(state);
                 WorldRenderAdapter::install(state);
+                BlockEntityAdapter::install(state);
                 CameraAdapter::install(state);
                 ActiveCameraAdapter::install(state);
                 FreeCameraAdapter::install(state);
+                OptionsAdapter::install(state);
                 ShapesAdapter::install(state);
                 RouterAdapter::install(state);
                 InputAdapter::install(state);

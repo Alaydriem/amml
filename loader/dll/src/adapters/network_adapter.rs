@@ -1,6 +1,6 @@
 use std::ffi::c_void;
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::Instant;
 
 use amml_abi::{
@@ -9,11 +9,12 @@ use amml_abi::{
 };
 use amml_data::{AdapterCatalog, Availability, NeedKind};
 use amml_msvc::MsvcHeap;
+use amml_runtime::ChunkCacheSwitch;
 
 use crate::{
-    ClientAdapter, EventHub, LoaderState, NetworkEvent, NetworkEventKind, NetworkListLayout, NetworkScope, ObjectRead,
-    PacketDetours, SessionAdapter, SkinAnimatedLayout, SkinDetailsLayout, SkinGeometryLayout, SkinPacketLayout,
-    SkinReader, ThreadNote,
+    ChunkCacheDetours, ClientAdapter, EventHub, LoaderState, NetworkEvent, NetworkEventKind, NetworkListLayout,
+    NetworkScope, ObjectRead, PacketDetours, SessionAdapter, SkinAnimatedLayout, SkinDetailsLayout, SkinGeometryLayout,
+    SkinPacketLayout, SkinReader, ThreadNote, WireDetours,
 };
 
 static ADAPTER: OnceLock<NetworkAdapter> = OnceLock::new();
@@ -22,6 +23,7 @@ static CUT_LOGGED: AtomicBool = AtomicBool::new(false);
 static SKIPPED_LOGGED: AtomicBool = AtomicBool::new(false);
 static NAME_LOGGED: AtomicBool = AtomicBool::new(false);
 static XUID_LOGGED: AtomicBool = AtomicBool::new(false);
+static CACHE_LOGGED: AtomicBool = AtomicBool::new(false);
 
 /// The `network.*` events and areas: the player list and the player skin packets the game handles, and the reads of the
 /// players and skins in them.
@@ -30,6 +32,11 @@ static XUID_LOGGED: AtomicBool = AtomicBool::new(false);
 /// inside a `NetworkScope`: the event and the lent skin handles are valid only until the last listener returns, because
 /// the game owns the packet and frees it after the handler. With no listener the detour does one relaxed load and nothing
 /// else. The `network` table functions (`NetworkTable`) answer only on that thread and inside that scope.
+///
+/// The areas `network.protocol` (the derived protocol number of the build, any thread) and `network.chunk_cache` (a
+/// per-mod wish for the `enabled` byte of the `ClientCacheStatusPacket` the client sends; `ChunkCacheSwitch` holds the
+/// wishes). While any mod wishes it off, `ChunkCacheDetours` writes 0 into `mEnabled` of each such packet, found by its
+/// vtable, before the game serializes it.
 pub struct NetworkAdapter {
     state: &'static LoaderState,
     list: Option<NetworkListLayout>,
@@ -39,6 +46,10 @@ pub struct NetworkAdapter {
     skin_thread: ThreadNote,
     list_events: AtomicU64,
     slowest_nanos: AtomicU64,
+    // The vtable of `ClientCacheStatusPacket` and the offset of its `mEnabled` byte; `Some` once the send is hooked.
+    cache: Option<(usize, usize)>,
+    protocol: Option<u32>,
+    wishes: Mutex<ChunkCacheSwitch>,
 }
 
 impl NetworkAdapter {
@@ -48,6 +59,9 @@ impl NetworkAdapter {
     pub const SKIN_ANIMATED: &'static str = "network.skin_animated";
     pub const SKIN_GEOMETRY: &'static str = "network.skin_geometry";
     pub const SKIN_DETAILS: &'static str = "network.skin_details";
+    pub const CHUNK_CACHE: &'static str = "network.chunk_cache";
+    pub const PROTOCOL: &'static str = "network.protocol";
+    const AREA_VERSION: u32 = 1;
     // Loader hooks run before every mod hook on the same function.
     const PRIORITY: i32 = i32::MAX;
     // An event slower than this is logged when it is the slowest so far.
@@ -103,6 +117,13 @@ impl NetworkAdapter {
             })
             .flatten();
         let reader = SkinReader::new(image, animated, geometry, details);
+        let cache = shaped(Self::CHUNK_CACHE)
+            .then(|| Some((field("ClientCacheStatusPacket.vtable")?, field("ClientCacheStatusPacket.mEnabled")?)))
+            .flatten()
+            .filter(|_| ChunkCacheDetours::send_hook().install(state, Self::PRIORITY));
+        let protocol = shaped(Self::PROTOCOL)
+            .then(|| field("SharedConstants.NetworkProtocolVersion").and_then(|value| u32::try_from(value).ok()))
+            .flatten();
         let offered = |row: &Availability| match row.id {
             Self::PLAYER_LIST => list.is_some(),
             Self::PLAYER_SKIN => packet.is_some(),
@@ -110,6 +131,8 @@ impl NetworkAdapter {
             Self::SKIN_ANIMATED => reader.has_animated(),
             Self::SKIN_GEOMETRY => reader.has_geometry(),
             Self::SKIN_DETAILS => reader.has_details(),
+            Self::CHUNK_CACHE => cache.is_some(),
+            Self::PROTOCOL => protocol.is_some(),
             _ => false,
         };
         for row in &mut rows {
@@ -127,6 +150,9 @@ impl NetworkAdapter {
             skin_thread: ThreadNote::new(),
             list_events: AtomicU64::new(0),
             slowest_nanos: AtomicU64::new(0),
+            cache,
+            protocol,
+            wishes: Mutex::new(ChunkCacheSwitch::new()),
         };
         if ADAPTER.set(adapter).is_err() {
             curia::warn!("the network adapter is already installed");
@@ -166,8 +192,88 @@ impl NetworkAdapter {
         }
     }
 
+    /// The network protocol number of the build, from the derived `SharedConstants.NetworkProtocolVersion`. Any thread.
+    /// `NOT_AVAILABLE` when the area is not offered.
+    pub fn protocol_version(&self) -> Result<u32, AmmlStatus> {
+        if !self.state.areas().is_available(Self::PROTOCOL, Self::AREA_VERSION) {
+            return Err(AmmlStatus::NOT_AVAILABLE);
+        }
+        self.protocol.ok_or(AmmlStatus::NOT_AVAILABLE)
+    }
+
+    /// The mod at `owner` wishes the client's chunk cache `enabled` or off. `NOT_READY` before the first frame,
+    /// `NOT_AVAILABLE` when the area is not offered, `REFUSED` off the game thread.
+    pub fn set_client_chunk_cache(&self, owner: usize, enabled: bool) -> Result<(), AmmlStatus> {
+        let gate = self.state.events().gate();
+        gate.require_open()?;
+        if !self.state.areas().is_available(Self::CHUNK_CACHE, Self::AREA_VERSION) {
+            return Err(AmmlStatus::NOT_AVAILABLE);
+        }
+        if !gate.on_game_thread() {
+            return Err(AmmlStatus::REFUSED);
+        }
+        let mut wishes = self.wishes();
+        let was = wishes.disabled();
+        wishes.set(owner, enabled);
+        let now = wishes.disabled();
+        WireDetours::set(WireDetours::CHUNK_CACHE, now);
+        drop(wishes);
+        if was != now {
+            curia::info!("client chunk cache", { enabled: !now });
+        }
+        Ok(())
+    }
+
+    /// The mod at `owner` is disabled: its chunk cache wish ends.
+    pub fn disable_owner(&self, owner: usize) {
+        let mut wishes = self.wishes();
+        if !wishes.clear(owner) {
+            return;
+        }
+        let now = wishes.disabled();
+        WireDetours::set(WireDetours::CHUNK_CACHE, now);
+        drop(wishes);
+        curia::info!("client chunk cache wish ended", { enabled: !now });
+    }
+
+    /// Before the game sends the packet at `packet`: when it is a `ClientCacheStatusPacket` (its first qword is the
+    /// derived vtable), its `mEnabled` byte becomes 0.
+    pub(crate) fn edit_cache_status(&self, packet: usize) {
+        let Some((vtable, enabled_at)) = self.cache else { return };
+        if packet == 0 {
+            return;
+        }
+        // SAFETY: `packet` is the `Packet const&` the game passed to `NetworkSystem::send`, live for the call; every
+        // packet starts with its vtable pointer.
+        let head = unsafe { std::ptr::with_exposed_provenance::<usize>(packet).read_unaligned() };
+        if head != vtable {
+            return;
+        }
+        // SAFETY: the vtable is the one of `ClientCacheStatusPacket`, whose `mEnabled` byte lies at `enabled_at` (the
+        // derived field entry) inside the 38h-byte packet. The game builds it on the sender's stack and reads it again
+        // only to serialize it.
+        unsafe { std::ptr::with_exposed_provenance_mut::<u8>(packet + enabled_at).write(0) };
+        if !CACHE_LOGGED.swap(true, Ordering::AcqRel) {
+            curia::info!("client chunk cache switched off for a status packet");
+        }
+    }
+
+    fn wishes(&self) -> MutexGuard<'_, ChunkCacheSwitch> {
+        self.wishes.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     fn is_own_row(row: &Availability) -> bool {
-        row.id.starts_with("network.")
+        [
+            Self::PLAYER_LIST,
+            Self::PLAYER_SKIN,
+            Self::SKIN,
+            Self::SKIN_ANIMATED,
+            Self::SKIN_GEOMETRY,
+            Self::SKIN_DETAILS,
+            Self::CHUNK_CACHE,
+            Self::PROTOCOL,
+        ]
+        .contains(&row.id)
     }
 
     fn heap() -> MsvcHeap {

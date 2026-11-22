@@ -7,6 +7,13 @@ pub enum Hand {
     Off,
 }
 
+impl From<AmmlHand> for Hand {
+    /// The off-hand slot is `Off`; every other slot reads as `Main`.
+    fn from(hand: AmmlHand) -> Self {
+        if hand == AmmlHand::OFF { Hand::Off } else { Hand::Main }
+    }
+}
+
 impl From<Hand> for AmmlHand {
     fn from(hand: Hand) -> Self {
         match hand {

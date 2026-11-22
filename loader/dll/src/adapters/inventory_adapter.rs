@@ -26,6 +26,8 @@ type MaxStackFn = unsafe extern "C" fn(*const c_void) -> u8;
 type GlintFn = unsafe extern "C" fn(*const c_void, *const c_void) -> u8;
 /// `void FillingContainer::swapSlots(int, int)`: rcx the container, edx and r8d the two slots.
 type SwapSlotsFn = unsafe extern "C" fn(*mut c_void, i32, i32);
+/// `void Container::setItem(int, ItemStack const&)`: rcx the container, edx the slot, r8 the stack the game copies.
+type SetItemFn = unsafe extern "C" fn(*mut c_void, i32, *const c_void);
 /// `ItemStack const& Actor::getItemInHandSlot(HandSlot) const`: rcx the actor, dl the hand slot (1 the off hand);
 /// the hand container's own slot in rax.
 type ItemInHandFn = unsafe extern "C" fn(*const c_void, u8) -> *const c_void;
@@ -326,6 +328,64 @@ impl InventoryAdapter {
         unsafe { swap(std::ptr::with_exposed_provenance_mut(container), i32::from(a), i32::from(b)) };
         // The slots changed under every handle lent before the swap: they are refused from here on.
         self.forget_lent();
+        true
+    }
+
+    /// Puts a copy of the stack at `stack` into player slot `slot` through the container's own `setItem` (the slot
+    /// `set_item` of its vtable), which also tells the container's listeners. False when it did not run. A write forgets
+    /// the stacks lent in the scope that runs now.
+    pub(crate) fn set_player_slot(&self, player: usize, set_item: usize, slot: u8, stack: usize) -> bool {
+        let Some(layout) = self.layout.as_ref() else { return false };
+        let Some((container, _)) = Self::player_items(player, layout) else { return false };
+        if usize::from(slot) >= InventoryLayout::SLOTS || stack == 0 {
+            return false;
+        }
+        let Some(function) = Self::virtual_fn(container, set_item) else { return false };
+        // SAFETY: the slot holds `void Container::setItem(int, ItemStack const&)`.
+        let set = unsafe { std::mem::transmute::<usize, SetItemFn>(function) };
+        // SAFETY: the live container of the local player, a slot inside it, and a live stack the game copies, on the
+        // game thread.
+        unsafe {
+            set(
+                std::ptr::with_exposed_provenance_mut(container),
+                i32::from(slot),
+                std::ptr::with_exposed_provenance(stack),
+            )
+        };
+        self.forget_lent();
+        true
+    }
+
+    /// The stack in player slot `slot` while it holds an item; `None` for an empty slot.
+    pub(crate) fn held_in_slot(&self, player: usize, slot: u8) -> Option<usize> {
+        let layout = self.layout.as_ref()?;
+        let (_, first) = Self::player_items(player, layout)?;
+        if usize::from(slot) >= InventoryLayout::SLOTS {
+            return None;
+        }
+        let stack = first + usize::from(slot) * layout.stack_size;
+        (Self::item_of(stack, layout) != 0).then_some(stack)
+    }
+
+    /// The stack in player slot `slot` while it holds an item and its net id is 0 (the stack a pick predicted: the
+    /// server names the real id later); `None` for another slot content or a net id that is a request id.
+    pub(crate) fn unnamed_stack(&self, player: usize, slot: u8, net_id_at: usize) -> Option<usize> {
+        let layout = self.layout.as_ref()?;
+        let (_, first) = Self::player_items(player, layout)?;
+        if usize::from(slot) >= InventoryLayout::SLOTS {
+            return None;
+        }
+        let stack = first + usize::from(slot) * layout.stack_size;
+        (Self::item_of(stack, layout) != 0 && Self::net_id_of(stack, net_id_at) == Some(0)).then_some(stack)
+    }
+
+    /// Writes `net_id` as the net id of the stack in player slot `slot`, only while `unnamed_stack` holds for it. False
+    /// when it did not run.
+    pub(crate) fn name_stack(&self, player: usize, slot: u8, net_id_at: usize, net_id: i32) -> bool {
+        let Some(stack) = self.unnamed_stack(player, slot, net_id_at) else { return false };
+        // SAFETY: a stack of the live item vector; the net id lies inside the 0x98-byte stack and the variant index byte
+        // after it is 0 (the net id alternative), as `unnamed_stack` read.
+        unsafe { std::ptr::with_exposed_provenance_mut::<i32>(stack + net_id_at).write_unaligned(net_id) };
         true
     }
 

@@ -92,11 +92,7 @@ impl WorldInfoAdapter {
         }
         for row in &mut rows {
             if row.shape.is_some() {
-                let refused: Vec<&'static str> = StorageDetours::hooks()
-                    .iter()
-                    .filter(|hook| !hook.install(state, Self::PRIORITY))
-                    .map(|hook| hook.entry)
-                    .collect();
+                let refused = StorageDetours::install(state, Self::PRIORITY);
                 if !refused.is_empty() {
                     row.shape = None;
                     row.missing = refused;
@@ -178,6 +174,17 @@ impl WorldInfoAdapter {
             info.port = port;
         }
         Ok(info)
+    }
+
+    /// The port and host of the connection info of the primary client, for a connection that starts before a world is
+    /// joined. `None` off the game thread, with no primary client, or when `read_connection` gives nothing; it does not
+    /// need the area offered or a joined world.
+    pub(crate) fn primary_connection(&self) -> Option<(u16, String)> {
+        if !self.state.events().gate().on_game_thread() {
+            return None;
+        }
+        let client = SessionAdapter::primary_client()?;
+        self.read_connection(client).map(|(_, port, host)| (port, host))
     }
 
     /// The text `field` of the joined world of `client`. `NOT_AVAILABLE` when the game gives no text for it or the text

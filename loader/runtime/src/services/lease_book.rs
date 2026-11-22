@@ -154,6 +154,15 @@ impl LeaseBook {
         self.lock().leases.iter().find(|entry| entry.lease == lease).map(|entry| entry.owner)
     }
 
+    /// The active leases of every owner but `owner`: how many, and the union of their blocks.
+    pub fn active_of_others(&self, owner: usize) -> (u32, AmmlInputBlocks) {
+        let state = self.lock();
+        let others = state.leases.iter().filter(|entry| entry.owner != owner && entry.state == AmmlLeaseState::ACTIVE);
+        others.fold((0u32, AmmlInputBlocks(0)), |(count, blocks), entry| {
+            (count.saturating_add(1), AmmlInputBlocks(blocks.0 | entry.terms.blocks.0))
+        })
+    }
+
     /// The union of the blocks of the active leases.
     pub fn blocks_now(&self) -> AmmlInputBlocks {
         let bits = self

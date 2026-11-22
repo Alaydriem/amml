@@ -327,3 +327,26 @@ fn an_unknown_lease_is_lost() {
     assert_eq!(book.state(ResourceId(12345)), AmmlLeaseState::LOST);
     assert_eq!(book.end(ResourceId(12345)), Vec::new());
 }
+
+#[test]
+fn the_active_leases_of_other_owners_are_counted_with_their_blocks() {
+    let book = LeaseBook::new();
+    book.acquire(A, 1, "@a/x", shared()).unwrap();
+    book.acquire(B, 2, "@b/y", terms(AmmlLeaseMode::SHARED, AmmlInputBlocks::LOOK, Vec::new(), false)).unwrap();
+    book.acquire(C, 3, "@c/z", terms(AmmlLeaseMode::SHARED, AmmlInputBlocks(0), Vec::new(), false)).unwrap();
+
+    assert_eq!(book.active_of_others(1), (2, AmmlInputBlocks::LOOK));
+    assert_eq!(book.active_of_others(2), (2, AmmlInputBlocks::KEYS));
+    assert_eq!(book.active_of_others(9), (3, AmmlInputBlocks(AmmlInputBlocks::KEYS.0 | AmmlInputBlocks::LOOK.0)));
+}
+
+#[test]
+fn a_suspended_lease_of_another_owner_is_not_counted() {
+    let book = LeaseBook::new();
+    book.acquire(A, 1, "@a/x", shared()).unwrap();
+    book.acquire(B, 2, "@b/y", preempt()).unwrap();
+
+    assert_eq!(book.state(A), AmmlLeaseState::SUSPENDED);
+    assert_eq!(book.active_of_others(2), (0, AmmlInputBlocks(0)));
+    assert_eq!(book.active_of_others(1), (1, AmmlInputBlocks::FULL));
+}

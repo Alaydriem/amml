@@ -63,6 +63,16 @@ impl RouterDetours {
         })
     }
 
+    // Tells the router adapter whether the router took `route` (the game's call gave true).
+    fn answered(route: *const c_void, via: AmmlRouteVia, answer: u8) {
+        Boundary::run((), || {
+            RouterAdapter::with((), |adapter| {
+                // SAFETY: the router's caller keeps the `std::string const&` (or null) live for the whole call.
+                unsafe { adapter.note_answer(route, via, answer != 0) }
+            })
+        });
+    }
+
     unsafe extern "C" fn push_route(this: *mut c_void, route: *const c_void, mode: u64) -> u8 {
         if Self::refused(route, AmmlRouteVia::PUSH) {
             return 0;
@@ -70,7 +80,9 @@ impl RouterDetours {
         // SAFETY: the hook on `OreUIRouter.pushRoute` is installed, so its slot holds a `PushRouteFn`.
         let original = unsafe { Self::original::<PushRouteFn>(&PUSH_ROUTE) };
         // SAFETY: the game's own arguments, passed on unchanged.
-        unsafe { original(this, route, mode) }
+        let answer = unsafe { original(this, route, mode) };
+        Self::answered(route, AmmlRouteVia::PUSH, answer);
+        answer
     }
 
     unsafe extern "C" fn replace_route(this: *mut c_void, route: *const c_void) -> u8 {
@@ -80,6 +92,8 @@ impl RouterDetours {
         // SAFETY: the hook on `OreUIRouter.replaceRoute` is installed, so its slot holds a `ReplaceRouteFn`.
         let original = unsafe { Self::original::<ReplaceRouteFn>(&REPLACE_ROUTE) };
         // SAFETY: the game's own arguments, passed on unchanged.
-        unsafe { original(this, route) }
+        let answer = unsafe { original(this, route) };
+        Self::answered(route, AmmlRouteVia::REPLACE, answer);
+        answer
     }
 }

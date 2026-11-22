@@ -29,6 +29,12 @@ impl BitOr for InputBlocks {
     }
 }
 
+impl From<AmmlInputBlocks> for InputBlocks {
+    fn from(blocks: AmmlInputBlocks) -> Self {
+        Self(blocks.0 & AmmlInputBlocks::FULL.0)
+    }
+}
+
 impl From<InputBlocks> for AmmlInputBlocks {
     fn from(blocks: InputBlocks) -> Self {
         Self(blocks.0)

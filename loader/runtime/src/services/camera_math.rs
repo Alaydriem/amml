@@ -42,6 +42,13 @@ impl CameraMath {
         usable.then(|| ((2.0 * (1.0 / focal_y).atan()).to_degrees(), focal_y / focal_x))
     }
 
+    /// The clip matrix `projection` times `view`, all stored by columns (`m[column][row]`).
+    pub fn clip(projection: &[[f32; 4]; 4], view: &[[f32; 4]; 4]) -> [[f32; 4]; 4] {
+        std::array::from_fn(|column| {
+            std::array::from_fn(|row| (0..4).map(|k| projection[k][row] * view[column][k]).sum())
+        })
+    }
+
     fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
         [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
     }

@@ -1,9 +1,10 @@
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 use amml_abi::AmmlThread;
 
-use crate::{Boundary, LoaderState, SessionHook, StorageReadGuard, ThreadNote};
+use crate::{Boundary, JoinEvents, LoaderState, SessionHook, StorageReadGuard, ThreadNote};
 
 /// `DBStorage::DBStorage(DBStorageConfig, NotNullNonOwnerPtr<LevelDbEnv>)`: rcx this, rdx a pointer to the config, r8 a
 /// pointer to the env pointer; gives this.
@@ -19,6 +20,13 @@ static LIVE: AtomicUsize = AtomicUsize::new(0);
 // The readers inside `with_live`.
 static READERS: AtomicUsize = AtomicUsize::new(0);
 static LONG_WAIT_LOGGED: AtomicBool = AtomicBool::new(false);
+// The entries of the hooks the first `install` refused; set once, by that call.
+static REFUSED: OnceLock<Vec<&'static str>> = OnceLock::new();
+// The offset of `mFullPath` in a `DBStorage`; 0 until `install` resolved it.
+static PATH_AT: AtomicUsize = AtomicUsize::new(0);
+// The storages that were opened and have not reported their shutdown done. Locked only when a storage is opened and
+// when `checkShutdownDone` gives done.
+static OPEN: Mutex<Vec<usize>> = Mutex::new(Vec::new());
 static CTOR_THREAD: ThreadNote = ThreadNote::new();
 static SHUTDOWN_THREAD: ThreadNote = ThreadNote::new();
 
@@ -30,6 +38,10 @@ static SHUTDOWN_THREAD: ThreadNote = ThreadNote::new();
 /// until no `with_live` reader is inside before it calls the game's function; the game destroys the storage only after
 /// that call, so a reader never sees a destroyed storage. A call on another storage with no reader inside is two loads and
 /// the original. Neither detour locks, allocates or logs on that path.
+///
+/// The constructor detour also raises `WorldStorageOpened` (through `JoinEvents`) and `checkShutdownDone` raises
+/// `WorldStorageClosed` the first time it gives done for a storage that was opened; the lock of the open list is taken
+/// only for those two.
 pub struct StorageDetours;
 
 impl StorageDetours {
@@ -53,6 +65,19 @@ impl StorageDetours {
                 original: &SHUTDOWN,
             },
         ]
+    }
+
+    /// Installs both detours as loader hooks at `priority` and gives the entries that were refused (none when both
+    /// stand). The hooks are installed once per process, by the first call; a later call gives the first result, so
+    /// the adapters that need the storage hooks (`WorldInfoAdapter`, `JoinEvents`) can each call it.
+    pub fn install(state: &'static LoaderState, priority: i32) -> Vec<&'static str> {
+        REFUSED
+            .get_or_init(|| {
+                let path_at = state.resolve("DBStorage.mFullPath").ok().and_then(|at| usize::try_from(at).ok());
+                PATH_AT.store(path_at.unwrap_or(0), Ordering::Release);
+                Self::hooks().iter().filter(|hook| !hook.install(state, priority)).map(|hook| hook.entry).collect()
+            })
+            .clone()
     }
 
     /// Runs `read` with the address of the live storage while it cannot be destroyed; `None` when there is none.
@@ -111,6 +136,7 @@ impl StorageDetours {
         if this != 0 {
             Self::set_live(this);
             Boundary::run((), || Self::note(&CTOR_THREAD, Self::CTOR));
+            Boundary::run((), || Self::opened(this));
         }
         result
     }
@@ -122,6 +148,34 @@ impl StorageDetours {
             Boundary::run((), || Self::note(&SHUTDOWN_THREAD, Self::SHUTDOWN_DONE));
         }
         // SAFETY: the game's own argument, passed on unchanged.
-        unsafe { original(this) }
+        let result = unsafe { original(this) };
+        if result & 0xFF != 0 && this != 0 {
+            Boundary::run((), || Self::closed(this));
+        }
+        result
+    }
+
+    // Records `storage` as opened and raises `WorldStorageOpened` for it.
+    fn opened(storage: usize) {
+        let mut open = OPEN.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        if !open.contains(&storage) {
+            open.push(storage);
+        }
+        drop(open);
+        let path_at = PATH_AT.load(Ordering::Acquire);
+        if path_at != 0 {
+            JoinEvents::with(|events| events.storage_opened(storage, path_at));
+        }
+    }
+
+    // Raises `WorldStorageClosed` once for a storage that was opened and not yet reported done.
+    fn closed(storage: usize) {
+        let mut open = OPEN.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(index) = open.iter().position(|address| *address == storage) else {
+            return;
+        };
+        open.swap_remove(index);
+        drop(open);
+        JoinEvents::with(JoinEvents::storage_closed);
     }
 }

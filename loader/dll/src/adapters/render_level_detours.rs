@@ -2,7 +2,7 @@ use std::ffi::c_void;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 
-use crate::{Boundary, LightingAdapter, LoaderState, RenderCall, SessionHook, WorldRenderAdapter};
+use crate::{BlockEntityAdapter, Boundary, LightingAdapter, LoaderState, RenderCall, SessionHook, WorldRenderAdapter};
 
 /// `void LevelRenderer::renderLevel(ScreenContext&, FrameRenderObject const&)`.
 type RenderLevelFn = unsafe extern "C" fn(*mut c_void, usize, usize);
@@ -13,12 +13,12 @@ static WANTED: AtomicU32 = AtomicU32::new(0);
 // The result of the one install, once it ran.
 static INSTALLED: OnceLock<bool> = OnceLock::new();
 
-/// The loader's one detour on `LevelRenderer::renderLevel`, shared by the held light (`lighting.terrain`) and the world
-/// render (`render.world_rendered`, `render.world_canvas`).
+/// The loader's one detour on `LevelRenderer::renderLevel`, shared by the held light (`lighting.terrain`), the world
+/// render (`render.world_rendered`, `render.world_canvas`) and the block entity ghosts (`render.block_entities`).
 ///
 /// The detour reads one flags word. With no flag set it calls the original and does nothing else: no lock, no
 /// allocation, no log. With a flag set, the work runs in this order: the lighting rebuild (before the game's frame
-/// update reads the marks), the destruction of the meshes that wait for the render thread, the restore of the world
+/// update reads the marks), the destruction of the meshes and the release of the ghost actors that wait for the render thread, the restore of the world
 /// material while it is patched, the game's `renderLevel` with its own arguments, then the `WorldRendered` event. A panic inside any step is caught at the boundary and the
 /// game's own call still runs.
 pub struct RenderLevelDetours;
@@ -33,6 +33,8 @@ impl RenderLevelDetours {
     pub const MESH_DUE: u32 = 4;
     /// The world material is patched, or waits for its restore.
     pub const MATERIAL: u32 = 8;
+    /// A block entity ghost's game actor waits for the render thread to release it.
+    pub const GHOST_DUE: u32 = 16;
     // Loader hooks run before every mod hook on the same function.
     const PRIORITY: i32 = i32::MAX;
 
@@ -89,6 +91,10 @@ impl RenderLevelDetours {
         if wanted & Self::MESH_DUE != 0 {
             Self::set(Self::MESH_DUE, false);
             Boundary::run((), || WorldRenderAdapter::with((), WorldRenderAdapter::destroy_due));
+        }
+        if wanted & Self::GHOST_DUE != 0 {
+            Self::set(Self::GHOST_DUE, false);
+            Boundary::run((), || BlockEntityAdapter::with((), BlockEntityAdapter::destroy_due));
         }
         if wanted & Self::MATERIAL != 0 {
             Boundary::run((), || {

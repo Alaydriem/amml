@@ -2,10 +2,10 @@ use std::ffi::c_void;
 
 use amml_abi::AmmlStatus;
 use amml_msvc::MemberCall;
-use amml_runtime::WorldTransform;
+use amml_runtime::{CameraMath, WorldTransform};
 
 use crate::{
-    MatrixStackRefLayout, MeshCalls, MeshContextLayout, MeshLayout, ShaderColorLayout, TextureListLayout,
+    CameraLayout, MatrixStackRefLayout, MeshCalls, MeshContextLayout, MeshLayout, ShaderColorLayout, TextureListLayout,
     TexturePtrLayout,
 };
 
@@ -121,6 +121,34 @@ impl MeshDrawAdapter {
         // SAFETY: the entry is `~MatrixStackRef`; the ref is the one `push` returned, popped here once.
         unsafe { std::mem::transmute::<usize, RefDtorFn>(self.calls.matrix_stack_ref_dtor)(&mut pushed) };
         result
+    }
+
+    /// The clip matrix of the camera of the frame: the top of its projection stack times the top of its view stack,
+    /// by columns (`CameraMath::clip`). `None` for no screen or camera, an empty stack or a value that is not finite.
+    ///
+    /// # Safety
+    /// `screen` is zero or the screen context of the running `renderLevel` call, on its thread.
+    pub unsafe fn clip_matrix(&self, screen: usize) -> Option<[[f32; 4]; 4]> {
+        if screen == 0 {
+            return None;
+        }
+        let context = screen.checked_add(self.calls.screen_mesh_context)?;
+        // SAFETY: the caller guarantees a live screen context; its `MeshContext` base is laid out as the mirror.
+        let fields = unsafe { &*std::ptr::with_exposed_provenance::<MeshContextLayout>(context) };
+        let camera = fields.camera.cast::<CameraLayout>();
+        if camera.is_null() {
+            return None;
+        }
+        // SAFETY: the live camera of the frame, laid out as the mirror whose anchor (`Camera.mForward`) `MeshCalls`
+        // checked; the top of a stack is a `glm::mat4` the game keeps for the frame.
+        let (projection, view) = unsafe {
+            (
+                (*camera).projection_stack.stack.back()?.read_unaligned(),
+                (*camera).view_stack.stack.back()?.read_unaligned(),
+            )
+        };
+        let clip = CameraMath::clip(&projection, &view);
+        clip.iter().flatten().all(|value| value.is_finite()).then_some(clip)
     }
 
     // Safety: as `draw`.

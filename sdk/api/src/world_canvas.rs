@@ -32,6 +32,20 @@ impl<'f> WorldCanvas<'f> {
         status.is_ok().then(|| Vec3::from(out))
     }
 
+    /// The clip matrix of the camera of this frame: the top of its projection stack times the top of its view stack,
+    /// relative to the camera, by columns (`matrix[column][row]`, as glm stores it). A world point `p` (camera relative,
+    /// with `w` = 1) is at `sum(matrix[column][row] * p[column])` in clip space. `None` when the frame has no camera or a
+    /// matrix stack is empty, from a loader without `Area::RENDER_WORLD_CANVAS.at(3)`, or when the loader refuses the
+    /// call.
+    #[allow(unsafe_code)]
+    pub fn clip_matrix(&self) -> Option<[[f32; 4]; 4]> {
+        let clip = self.table.canvas_clip_matrix?;
+        let mut out = [[0.0f32; 4]; 4];
+        // SAFETY: the table function is the loader's; `out` is writable for the call.
+        let status = unsafe { clip(self.frame, &raw mut out) };
+        status.is_ok().then_some(out)
+    }
+
     /// Frees the mesh `mesh` of this mod. The id is `Stale` at once; the game object is destroyed on the render thread
     /// at the next level pass. `Err(Stale)` for an id of an older generation or one that was freed, `Err(Refused)` for
     /// a mesh of another mod.
@@ -44,8 +58,8 @@ impl<'f> WorldCanvas<'f> {
 
     /// Builds a mesh of `quads` with `style` in this frame and gives its id; the loader keeps the mesh until it is freed
     /// (`free`, a world leave, a render device reset, a graphics mode switch, the disable of the mod). `Err(Refused)`
-    /// above `MAX_QUADS`; `Err(NotAvailable)` for `MeshLight::World`, `MeshTexture::TerrainAtlas` or any blend and
-    /// depth other than `MeshStyle::OVERLAY`, and from a loader without `Area::RENDER_WORLD_CANVAS.at(2)`;
+    /// above `MAX_QUADS`; `Err(NotAvailable)` for `MeshLight::World`, `MeshTexture::TerrainAtlas` (`MeshStyle::GHOST`: only
+    /// `BlockMesher` makes such a mesh) or any blend and depth other than `MeshStyle::OVERLAY`, and from a loader without `Area::RENDER_WORLD_CANVAS.at(2)`;
     /// `Err(Loader(INVALID_ARGUMENT))` for no quads or a corner that is not finite; `Err(Loader(FAILED))` when the
     /// game made no mesh.
     #[allow(unsafe_code)]

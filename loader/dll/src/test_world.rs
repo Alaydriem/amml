@@ -1,12 +1,13 @@
 use std::ffi::c_void;
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::{Mutex, OnceLock, PoisonError};
+use std::time::{Duration, Instant};
 
 use amml_abi::{AmmlScreen, AmmlStatus};
 use amml_data::AdapterCatalog;
 use amml_msvc::{MsvcHeap, MsvcString};
 
-use crate::{ClientAdapter, LoaderState, SessionAdapter};
+use crate::{ClientAdapter, LoaderState, SessionAdapter, StorageDetours};
 
 static TEST_WORLD: OnceLock<TestWorld> = OnceLock::new();
 
@@ -21,17 +22,28 @@ type StartLocalWorldFn = unsafe extern "C" fn(*mut c_void, *const MsvcString) ->
 /// `AMML_TEST_WORLD` variable, read by the standalone host only; it is not offered to mods.
 ///
 /// `frame` runs after each `FrameUpdate`, on the game thread. It acts only while a level id is set, it has not
-/// stopped and no world is joined: when the top screen of the primary client is the start screen, it calls
-/// `LocalWorldStarter.startLocalWorld` with a WorldID built on the game heap and freed after the call.
-/// Result 0 stops it; results 2 (startup already in progress) and 3 (game server starter not ready) retry
-/// 60 frames later, at most 30 times; any other result, a missing entry or a null hop stops it with a
-/// `test world not started` line. A joined world stops it.
+/// stopped and no world is joined. It waits until the title screen has settled: the top screen of the primary client
+/// was the start screen and no world storage was live in every frame of the last `settle` (15 s for the test world
+/// from the variable, so the game's Microsoft sign-in completes first); any other frame, a toast screen for example,
+/// starts the wait again. Then it calls `LocalWorldStarter.startLocalWorld` with a WorldID built on the game heap and
+/// freed after the call. Results 2 (startup already in progress) and 3 (game server starter not ready) retry 60 frames
+/// later, at most 30 times; any other result but 0, a missing entry or a null hop stops it with a `test world not
+/// started` line. A joined world stops it.
+///
+/// The world is started at most once per process: after result 0 it watches the load, and when the top screen was the
+/// loading screen and is then the start screen again with no world joined (the game refused the load, for example with
+/// disconnect reason 46 when its Microsoft sign-in was not complete), it stops with a `test world load ended without a
+/// join` line. A second start in the same process crashes the game.
 pub struct TestWorld {
     level_id: Option<String>,
     stopped: AtomicBool,
     frames: AtomicU32,
     next_attempt: AtomicU32,
     retries: AtomicU32,
+    started: AtomicBool,
+    loading_seen: AtomicBool,
+    settle: Duration,
+    quiet_since: Mutex<Option<Instant>>,
 }
 
 impl TestWorld {
@@ -46,21 +58,28 @@ impl TestWorld {
     const GAME_SERVER_STARTER_NOT_READY: u32 = 3;
     const RETRY_FRAMES: u32 = 60;
     const MAX_RETRIES: u32 = 30;
+    /// How long the title screen stays settled before the start, for the test world from the variable.
+    pub const START_SETTLE: Duration = Duration::from_secs(15);
 
-    /// A test world for `level_id`; `None` (or an empty id) does nothing.
-    pub fn new(level_id: Option<String>) -> Self {
+    /// A test world for `level_id`; `None` (or an empty id) does nothing. The start waits until the title screen has
+    /// been settled for `settle`.
+    pub fn new(level_id: Option<String>, settle: Duration) -> Self {
         Self {
             level_id: level_id.filter(|id| !id.is_empty()),
             stopped: AtomicBool::new(false),
             frames: AtomicU32::new(0),
             next_attempt: AtomicU32::new(0),
             retries: AtomicU32::new(0),
+            started: AtomicBool::new(false),
+            loading_seen: AtomicBool::new(false),
+            settle,
+            quiet_since: Mutex::new(None),
         }
     }
 
     /// A test world for the level id in `AMML_TEST_WORLD`; unset, empty or not Unicode gives none.
     pub fn from_env() -> Self {
-        Self::new(std::env::var(Self::VARIABLE).ok())
+        Self::new(std::env::var(Self::VARIABLE).ok(), Self::START_SETTLE)
     }
 
     pub fn level_id(&self) -> Option<&str> {
@@ -99,10 +118,13 @@ impl TestWorld {
             return;
         }
         let frame = self.frames.fetch_add(1, Ordering::AcqRel).saturating_add(1);
+        if self.started.load(Ordering::Acquire) {
+            return self.watch(level_id);
+        }
         if frame < self.next_attempt.load(Ordering::Acquire) {
             return;
         }
-        match self.on_start_screen() {
+        match self.settled(level_id) {
             Ok(true) => {}
             Ok(false) => return,
             Err(missing) => return self.not_started_missing(level_id, missing),
@@ -114,7 +136,8 @@ impl TestWorld {
         match result {
             Self::STARTED => {
                 curia::info!("test world started", { level_id: level_id });
-                self.stop();
+                self.loading_seen.store(false, Ordering::Release);
+                self.started.store(true, Ordering::Release);
             }
             Self::STARTUP_ALREADY_IN_PROGRESS | Self::GAME_SERVER_STARTER_NOT_READY
                 if self.retries.load(Ordering::Acquire) < Self::MAX_RETRIES =>
@@ -134,19 +157,64 @@ impl TestWorld {
         self.stopped.store(true, Ordering::Release);
     }
 
+    // One frame after the start: notes the loading screen; the start screen after it, with no world joined, stops the
+    // test world.
+    fn watch(&self, level_id: &str) {
+        let screen = match self.top_screen() {
+            Ok(Some(screen)) => screen,
+            Ok(None) => return,
+            Err(missing) => return self.not_started_missing(level_id, missing),
+        };
+        if screen == AmmlScreen::LOADING {
+            self.loading_seen.store(true, Ordering::Release);
+            return;
+        }
+        if screen != AmmlScreen::START || !self.loading_seen.load(Ordering::Acquire) {
+            return;
+        }
+        curia::warn!("test world load ended without a join", { level_id: level_id });
+        self.stop();
+    }
+
+    // Whether the title screen has been settled for `settle`: the start screen on top and no live world storage in every
+    // frame since the first such frame. Any other frame clears that first frame.
+    fn settled(&self, level_id: &str) -> Result<bool, &'static str> {
+        let on_start = self.top_screen()? == Some(AmmlScreen::START);
+        let storage_live = StorageDetours::with_live(|_| ()).is_some();
+        let mut quiet = self.quiet();
+        if !on_start || storage_live {
+            *quiet = None;
+            return Ok(false);
+        }
+        let now = Instant::now();
+        let since = *quiet.get_or_insert(now);
+        let waited = now.saturating_duration_since(since);
+        if waited < self.settle {
+            return Ok(false);
+        }
+        let waited_ms = u64::try_from(waited.as_millis()).unwrap_or(u64::MAX);
+        let settle_ms = u64::try_from(self.settle.as_millis()).unwrap_or(u64::MAX);
+        curia::info!("test world settled", { level_id: level_id, settle_ms: settle_ms, waited_ms: waited_ms });
+        Ok(true)
+    }
+
+    fn quiet(&self) -> std::sync::MutexGuard<'_, Option<Instant>> {
+        self.quiet_since.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
     fn not_started_missing(&self, level_id: &str, missing: &str) {
         curia::warn!("test world not started", { level_id: level_id, missing: missing });
         self.stop();
     }
 
-    // Whether the top screen of the primary client is the start screen. A gate that is not open yet, another
-    // thread or no primary client gives false (wait); no client adapter or no top-screen area is missing.
-    fn on_start_screen(&self) -> Result<bool, &'static str> {
+    // The top screen of the primary client. A gate that is not open yet, another thread or no primary client gives
+    // `None` (wait); no client adapter or no top-screen area is missing.
+    fn top_screen(&self) -> Result<Option<AmmlScreen>, &'static str> {
         let client = SessionAdapter::primary_client().unwrap_or(0);
         let adapter = ClientAdapter::get().ok_or(ClientAdapter::TOP_SCREEN)?;
         match adapter.top_screen(std::ptr::with_exposed_provenance(client)) {
-            Ok(screen) => Ok(screen == AmmlScreen::START),
-            Err(AmmlStatus::NOT_READY | AmmlStatus::REFUSED) => Ok(false),
+            Ok(screen) => Ok(Some(screen)),
+            Err(AmmlStatus::NOT_READY | AmmlStatus::REFUSED) => Ok(None),
             Err(_) => Err(ClientAdapter::TOP_SCREEN),
         }
     }

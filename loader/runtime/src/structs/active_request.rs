@@ -1,5 +1,5 @@
 use crate::RequestMove;
-use crate::structs::RequestPhase;
+use crate::structs::{RequestPhase, RequestShown};
 
 /// The request the book runs now.
 #[derive(Clone, Debug)]
@@ -14,8 +14,10 @@ pub struct ActiveRequest {
     pub wire_ids: Vec<i32>,
     /// The server's answer to each request: accepted or not; `None` before it comes.
     pub answers: Vec<Option<bool>>,
-    /// For each move shown on the client: the two slots and the net id of the stack moved into the second.
-    pub predicted: Vec<Option<(u8, u8, i32)>>,
+    /// For each move shown on the client: what is shown.
+    pub predicted: Vec<Option<RequestShown>>,
+    /// For each move: the net id the server named for the slot a pick made; `None` before it comes.
+    pub slot_net_ids: Vec<Option<i32>>,
     /// When the slots first did not hold what the moves need.
     pub settle_from: Option<f64>,
     /// A screen opened before the server's open arrived.

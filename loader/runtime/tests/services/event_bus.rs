@@ -62,6 +62,18 @@ fn a_cancel_stays_cancelled_for_later_listeners() {
 }
 
 #[test]
+fn the_report_names_the_owner_of_the_first_cancel() {
+    let bus = bus();
+    bus.add("tick", 1, 2, 10, 0).unwrap();
+    bus.add("tick", 1, 2, 20, 1).unwrap();
+    bus.add("tick", 1, 2, 30, 2).unwrap();
+    let mut value = 0u32;
+    let report =
+        bus.dispatch("tick", &mut value, |tag, _| if *tag >= 1 { CallOutcome::Cancelled } else { CallOutcome::Done });
+    assert_eq!(report.cancelled_by, Some(20));
+}
+
+#[test]
 fn a_panicking_listener_has_its_changes_undone() {
     let bus = bus();
     bus.add("tick", 1, 2, 10, 1).unwrap();

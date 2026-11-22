@@ -55,6 +55,7 @@ pub mod mod_phase;
 pub mod mod_record;
 pub mod mod_report;
 pub mod network_table;
+pub mod options_table;
 pub mod overlay;
 pub mod overlay_table;
 pub mod owner_event;
@@ -68,6 +69,7 @@ pub mod standalone_host;
 pub mod startup_gate;
 mod target_hook;
 pub mod test_world;
+pub mod time_table;
 #[cfg(feature = "folder-trace")]
 mod trace_hooks;
 pub mod ui_scope;
@@ -80,36 +82,46 @@ pub mod world_table;
 
 pub use actor_table::ActorTable;
 pub use adapters::{
-    AabbShapeLayout, ActiveCameraAdapter, ActorAdapter, ActorsInAdapter, ArrowDataLayout, BaseActorRendererLayout,
-    BiomeReader, BlockListener, BlockListenerAttach, BlockListenerDetours, BlockListenerObject, BlockTypeReader,
-    CameraAdapter, CameraDetours, CameraEntityLayout, CameraInstructionLayout, CameraLayout, CameraLayoutError,
-    CameraPresetLayout, CameraPresetsLayout, CameraProjection, CameraRegistryHold, CameraWriter, CharWidthDetours,
-    ChatAdapter, ChatDetours, ChatEvent, ChatScope, ChunkAdapter, ChunkBlockPos, ChunkLayout2651, ChunkLayout2660,
-    ChunkLayoutKind, ChunkOffsets, ClientAdapter, ClientDetours, ColumnExtras, ContainerAdapter, ContainerCalls,
-    ContainerSlotData, ContainerTransferAmount, ContentsEntry, ContentsList, CoordinatorWalk, CursorClipAdapter,
-    DispatchFinish, DrawBatch, DrawCalls, EightArgMouseFeed, EmitterPush, EnttLookup, EnttPoolNodeLayout,
-    EnttRegistryLayout, EnttStorageLayout, FontFrame, FreeCameraAdapter, FreeCameraCalls, FreeCameraHeld, GameAnswers,
-    GameConnectionInfoLayout, GameConnectionInfoLayout2663, GameConnectionInfoLayout2670, GameConnectionRead,
-    GameRequestPort, GameVector, GamepadAdapter, GuiMessageLayout, HandleStamp, HandlerDetours, HashedStringLayout30,
-    HashedStringLayout38, HidKeyFeed, HitResultLayout, HovertextDetours, HudAdapter, HudDetours,
-    ImageDescriptionLayout, InlineIconAdapter, InputAdapter, InventoryAdapter, InventoryLayout, ItemDrawAdapter,
-    ItemDrawCalls, ItemDrawFrame, JoinBook, KeyDetours, KeyFeed, LeaveHold, LevelRendererAdapter, LevelRendererDetours,
-    LightingAdapter, LightingDetours, LocatorBarAdapter, LocatorBarDetours, LocatorBarLayout, LocatorIconCall,
-    LookAdapter, LookMoveDetours, MapColorAdapter, MapColorComponentLayout, MapColorShape, MatrixStackLayout,
-    MatrixStackRefLayout, MceColor, MceImageLayout, MeshBuilder, MeshCalls, MeshContextLayout, MeshDataLayout,
-    MeshDrawAdapter, MeshLayout, MeshLayoutError, MeshParts, MouseDetours, MouseFeed, MoveAdapter, MoveLayout,
-    NameReader, NameTagMaterial, NetworkAdapter, NetworkEvent, NetworkEventKind, NetworkIdentifierBuffer,
-    NetworkListLayout, NetworkScope, NonOwnerPointerLayout, ObjectRead, PacketDetours, PacketFactory, PacketIo,
-    PacketLayout, PathViewLayout, PauseOption, PlayerActionAdapter, PlayerActionDetours, PrimitiveShapeLayout,
-    ProcessorKeyFeed, RaycastAdapter, RealKeyPath, RealMousePath, RenderCall, RenderLevelDetours, RequestAdapter,
-    RequestCalls, RequestPort, RouterAdapter, RouterDetours, ScreenAdapter, ScreenControllerDetours, ScreenDetours,
-    ScreenLayout, ScreenNames, SessionActions, SessionAdapter, SessionDetours, SessionHook, SetInstructionLayout,
-    SevenArgMouseFeed, ShaderColorLayout, ShapeCalls, ShapesAdapter, ShapesHeld, SkinAnimatedLayout, SkinDetailsLayout,
-    SkinGeometryLayout, SkinPacketLayout, SkinReader, StorageDetours, StorageReadGuard, StringViewLayout,
-    SubChunkLayout, SurfaceAdapter, SurfaceReader, SurfaceShape, TagReader, TagVariantLayout, TessellatorLayout,
-    TextAdapter, TextCalls, TextureAdapter, TextureCalls, TextureListLayout, TexturePtrLayout, TexturePump,
-    TextureReloadAdapter, TextureReloadDetours, ThreadNote, TurnFeed, UiDrawAdapter, UiFlags, UiInputAdapter,
-    UiInputDetours, UiInputLayout, UiTreeWalk, ViewCameraReader, ViewRenderDataLayout, WorldAdapter, WorldBlockPos,
+    AabbShapeLayout, ActiveCameraAdapter, ActorAdapter, ActorRenderQueueLayout, ActorsInAdapter, ArrowDataLayout,
+    BaseActorRendererLayout, BiomeReader, BlockActorFactory, BlockEntityAdapter, BlockEntityDetours, BlockListener,
+    BlockListenerAttach, BlockListenerDetours, BlockListenerObject, BlockMesher, BlockReadAdapter, BlockStateAdapter,
+    BlockStateHook, BlockTessellatorCacheLayout, BlockTessellatorLayout, BlockTypeReader, BodyHideAdapter,
+    BodyHideDetours, CameraAdapter, CameraDetours, CameraEntityLayout, CameraInstructionLayout, CameraLayout,
+    CameraLayoutError, CameraPresetLayout, CameraPresetsLayout, CameraProjection, CameraRegistryHold, CameraWriter,
+    CharWidthDetours, ChatAdapter, ChatDetours, ChatEvent, ChatScope, ChestPairWriter, ChunkAdapter, ChunkBlockPos,
+    ChunkCacheDetours, ChunkLayout2651, ChunkLayout2660, ChunkLayoutKind, ChunkOffsets, ClientAdapter, ClientDetours,
+    ColumnExtras, ContainerAdapter, ContainerCalls, ContainerSlotData, ContainerTransferAmount, ContentsEntry,
+    ContentsList, CoordinatorWalk, CreativeItemEntryLayout, CreativePick, CreativeRegistry, CursorClipAdapter,
+    DirectNote, DispatchFinish, DrawBatch, DrawCalls, EightArgMouseFeed, EmitterPush, EnttLookup, EnttPoolNodeLayout,
+    EnttRegistryLayout, EnttStorageLayout, ExternalJoinDetours, FocusAdapter, FocusGainedDetours, FontFrame,
+    FreeCameraAdapter, FreeCameraCalls, FreeCameraHeld, GameAnswers, GameConnectionInfoLayout,
+    GameConnectionInfoLayout2663, GameConnectionInfoLayout2670, GameConnectionRead, GameJoinDetours, GameModeAdapter,
+    GameRequestPort, GameVector, GamepadAdapter, GetIfValidFn, GhostMaterial, GuiMessageLayout, HandleStamp,
+    HandlerDetours, HashedStringLayout30, HashedStringLayout38, HidKeyFeed, HitResultLayout, HovertextDetours,
+    HudAdapter, HudDetours, ImageDescriptionLayout, InlineIconAdapter, InputAdapter, IntOptionLayout, InventoryAdapter,
+    InventoryLayout, ItemDrawAdapter, ItemDrawCalls, ItemDrawFrame, JoinBook, JoinEvents, JoinNames, KeyDetours,
+    KeyFeed, KindsAdapter, LatencyLayout, LeaveHold, LevelRendererAdapter, LevelRendererDetours, LightingAdapter,
+    LightingDetours, LocatorBarAdapter, LocatorBarDetours, LocatorBarLayout, LocatorIconCall, LookAdapter,
+    LookMoveDetours, MapColorAdapter, MapColorComponentLayout, MapColorShape, MatrixStackLayout, MatrixStackRefLayout,
+    MceColor, MceImageLayout, MeshBuilder, MeshCalls, MeshContextLayout, MeshDataBuffer, MeshDataLayout,
+    MeshDrawAdapter, MeshLayout, MeshLayoutError, MeshParts, MesherTint, MouseDetours, MouseFeed, MoveAdapter,
+    MoveLayout, MovePlayerFields, MovePlayerLayout, NameReader, NameTagMaterial, NetworkAdapter,
+    NetworkConnectionLayout, NetworkEvent, NetworkEventKind, NetworkIdEquality, NetworkIdentifierBuffer,
+    NetworkListLayout, NetworkScope, NonOwnerPointerLayout, NowRestore, ObjectRead, OptionScan, OptionScanError,
+    OptionsAdapter, OwnedItemStack, PacketDetours, PacketFactory, PacketIo, PacketLayout, ParticleEngineLayout,
+    PathViewLayout, PauseOption, PermissionShape, PickCalls, PickRangeShape, PickUndo, PlayerActionAdapter,
+    PlayerActionDetours, PlayerJoinWorldContextLayout, PlayerMovedAdapter, PlayerMovedDetours, PrimitiveShapeLayout,
+    ProcessorKeyFeed, RaycastAdapter, RealKeyPath, RealMousePath, RegistryLookup, RenderCall, RenderLevelDetours,
+    RenderMetadataLayout, RequestAdapter, RequestCalls, RequestPort, RotationComponentLayout, RouterAdapter,
+    RouterDetours, ScreenAdapter, ScreenControllerDetours, ScreenDetours, ScreenLayout, ScreenNames, SessionActions,
+    SessionAdapter, SessionDetours, SessionHook, SetInstructionLayout, SevenArgMouseFeed, ShaderColorLayout,
+    ShapeCalls, ShapesAdapter, ShapesHeld, SkinAnimatedLayout, SkinDetailsLayout, SkinGeometryLayout, SkinPacketLayout,
+    SkinReader, SkullDrawShape, SteadyClock, StorageDetours, StorageNote, StorageReadGuard, StringByteInputLayout,
+    StringViewLayout, SubChunkLayout, SurfaceAdapter, SurfaceReader, SurfaceShape, SystemUniformsLayout, TagReader,
+    TagVariantLayout, TessellatorLayout, TextAdapter, TextCalls, TextureAdapter, TextureCalls, TextureListLayout,
+    TexturePtrLayout, TexturePump, TextureReloadAdapter, TextureReloadDetours, ThreadNote, TimeAdapter, TimeDetours,
+    TimeHeld, TimerLayout, TurnFeed, UiDrawAdapter, UiFlags, UiInputAdapter, UiInputDetours, UiInputLayout, UiTreeWalk,
+    UseBuildDetours, ViewCameraReader, ViewRenderDataLayout, WireAdapter, WireDetours, WorldAdapter, WorldBlockPos,
     WorldInfoAdapter, WorldMaterial, WorldRenderAdapter,
 };
 pub use api_table::ApiTable;
@@ -162,6 +174,7 @@ pub use mod_phase::ModPhase;
 pub use mod_record::ModRecord;
 pub use mod_report::ModReport;
 pub use network_table::NetworkTable;
+pub use options_table::OptionsTable;
 pub use overlay::{
     BackBufferCopy, CaptureJob, CaptureRead, CaptureService, CaptureStream, CapturedImage, ChainTargets, DeviceStart,
     DrawSurface, DrawWindow, DxgiProbe, FrameCapture, FrameFlow, OverlayDevice, OverlayError, OverlayService,
@@ -179,6 +192,7 @@ pub use shutdown_run::ShutdownRun;
 pub use standalone_host::StandaloneHost;
 pub use startup_gate::StartupGate;
 pub use test_world::TestWorld;
+pub use time_table::TimeTable;
 pub use ui_scope::UiScope;
 pub use ui_table::UiTable;
 pub use use_row::UseRow;

@@ -1,6 +1,6 @@
-use amml_abi::{AmmlInputTable, AmmlLeaseMode, AmmlLeaseRequest, AmmlStr};
+use amml_abi::{AmmlInputTable, AmmlLeaseMode, AmmlLeaseRequest, AmmlOtherLeases, AmmlStr};
 
-use crate::{ApiError, InputLease, KeyCode, LeaseRequest, Modifiers};
+use crate::{ApiError, InputLease, KeyCode, LeaseRequest, Modifiers, OtherLeases};
 
 /// The loader's input service: the keys the user holds, and input leases. Usable from any thread.
 /// On a loader without an input table every call gives `None`, an empty value or `NotAvailable`.
@@ -58,6 +58,18 @@ impl Input {
         #[allow(unsafe_code)]
         let status = unsafe { (table.acquire)(AmmlStr::from_str(self.module), &abi, &mut lease) };
         ApiError::check(status).map(|()| InputLease::new(table, lease))
+    }
+
+    /// The active input leases of the other mods: how many, and the union of the real input they block. This mod's own
+    /// leases never count; a suspended lease does not count. Use it to stand a feature down while another mod drives
+    /// the input. `None` on a loader whose input table has no such read (before input table v3).
+    pub fn held_by_others(&self) -> Option<OtherLeases> {
+        let held = self.table?.held_by_others?;
+        let mut out = AmmlOtherLeases::default();
+        // SAFETY: the module id lives for the call and `out` is a live local.
+        #[allow(unsafe_code)]
+        let status = unsafe { held(AmmlStr::from_str(self.module), &mut out) };
+        status.is_ok().then(|| OtherLeases::from(out))
     }
 
     /// Sets the lease ranking, highest first: a ranked mod's exclusive lease suspends the exclusive

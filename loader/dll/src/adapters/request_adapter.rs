@@ -3,14 +3,15 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::Instant;
 
 use amml_abi::{
-    AmmlEvent, AmmlInventoryMove, AmmlPhase, AmmlRequestOptions, AmmlStatus, AmmlThread, InventoryRequestDone,
+    AmmlBlockHandle, AmmlEvent, AmmlInventoryMove, AmmlPhase, AmmlRequestOptions, AmmlStatus, AmmlThread,
+    InventoryRequestDone,
 };
 use amml_data::{AdapterCatalog, Availability, EntryId, NeedKind};
 use amml_runtime::{RequestBook, RequestDone, RequestMove, RequestRefusal, RequestStep, RequestTick};
 
 use crate::{
-    ClientAdapter, EventHub, GameRequestPort, InventoryAdapter, LoaderState, PacketDetours, PacketIo, RequestCalls,
-    RequestPort, ScreenAdapter, SessionAdapter, ThreadNote, UiFlags,
+    BlockHandles, ClientAdapter, EventHub, GameRequestPort, InventoryAdapter, LoaderState, PacketDetours, PacketIo,
+    RequestCalls, RequestPort, ScreenAdapter, SessionAdapter, ThreadNote, UiFlags,
 };
 
 static ADAPTER: OnceLock<RequestAdapter> = OnceLock::new();
@@ -42,6 +43,10 @@ impl RequestAdapter {
     pub const REQUEST: &'static str = "inventory.request";
     pub const REQUEST_DONE: &'static str = InventoryRequestDone::ID;
     const AREA_VERSION: u32 = 1;
+    // The version that adds the creative pick.
+    const PICK_VERSION: u32 = 2;
+    // The hotbar slots a pick can fill.
+    const HOTBAR_SLOTS: u8 = 9;
     // Loader hooks run before every mod hook on the same function.
     const PRIORITY: i32 = i32::MAX;
 
@@ -151,9 +156,69 @@ impl RequestAdapter {
         moves: &[AmmlInventoryMove],
         options: AmmlRequestOptions,
     ) -> Result<u64, AmmlStatus> {
+        self.enter(player, Self::AREA_VERSION)?;
+        let (Some(calls), Some(io), Some(client)) =
+            (self.calls.as_ref(), self.io.as_ref(), SessionAdapter::primary_client())
+        else {
+            return Err(AmmlStatus::NOT_AVAILABLE);
+        };
+        let moves = moves.iter().copied().map(Self::decode).collect::<Result<Vec<_>, _>>()?;
+        let mut port = GameRequestPort::new(calls, io, client);
+        self.request_with(&mut port, owner, &moves, options)
+    }
+
+    /// Takes the creative pick of the mod `owner` for the local player `player`: the item of the block `block` into the
+    /// empty hotbar slot `slot`, as one request that the next client tick sends. Gives its id. `NOT_READY` before the
+    /// game runs, `NOT_AVAILABLE` without the area at version 2, `REFUSED` off the game thread, for a player that is not
+    /// the local player, outside the creative game mode, for a block with no creative entry, for a slot above 8 and while
+    /// another request runs, `STALE` for a block handle that was taken back.
+    pub fn request_pick(
+        &self,
+        owner: usize,
+        player: *const std::ffi::c_void,
+        block: AmmlBlockHandle,
+        slot: u8,
+    ) -> Result<u64, AmmlStatus> {
+        self.enter(player, Self::PICK_VERSION)?;
+        let (Some(calls), Some(io), Some(client)) =
+            (self.calls.as_ref(), self.io.as_ref(), SessionAdapter::primary_client())
+        else {
+            return Err(AmmlStatus::NOT_AVAILABLE);
+        };
+        if calls.pick.is_none() {
+            return Err(AmmlStatus::NOT_AVAILABLE);
+        }
+        let mut port = GameRequestPort::new(calls, io, client);
+        self.pick_with(&mut port, owner, block, slot)
+    }
+
+    /// `request_pick` over a port, after the gate, thread and player checks: no hidden open, and the stack is shown on
+    /// the client at once.
+    pub fn pick_with(
+        &self,
+        port: &mut dyn RequestPort,
+        owner: usize,
+        block: AmmlBlockHandle,
+        slot: u8,
+    ) -> Result<u64, AmmlStatus> {
+        if slot >= Self::HOTBAR_SLOTS {
+            return Err(AmmlStatus::REFUSED);
+        }
+        let address = BlockHandles::address(self.state, block)?;
+        if !port.is_creative() {
+            return Err(AmmlStatus::REFUSED);
+        }
+        let entry = port.creative_entry(address).ok_or(AmmlStatus::REFUSED)?;
+        let moves = [RequestMove::Pick { slot, creative_net_id: entry.creative_net_id, count: entry.count }];
+        self.request_with(port, owner, &moves, AmmlRequestOptions { hidden_open: 0, predict: 1, _reserved: [0; 2] })
+    }
+
+    // The checks every call of the area makes before it reads the game: the gate, the area at `version`, the game thread
+    // and the player (the local player of the primary client).
+    fn enter(&self, player: *const std::ffi::c_void, version: u32) -> Result<(), AmmlStatus> {
         let gate = self.state.events().gate();
         gate.require_open()?;
-        if !self.state.areas().is_available(Self::REQUEST, Self::AREA_VERSION) {
+        if !self.state.areas().is_available(Self::REQUEST, version) {
             return Err(AmmlStatus::NOT_AVAILABLE);
         }
         if !gate.on_game_thread() {
@@ -166,14 +231,7 @@ impl RequestAdapter {
         if current != Some(player.expose_provenance()) {
             return Err(AmmlStatus::REFUSED);
         }
-        let (Some(calls), Some(io), Some(client)) =
-            (self.calls.as_ref(), self.io.as_ref(), SessionAdapter::primary_client())
-        else {
-            return Err(AmmlStatus::NOT_AVAILABLE);
-        };
-        let moves = moves.iter().copied().map(Self::decode).collect::<Result<Vec<_>, _>>()?;
-        let mut port = GameRequestPort::new(calls, io, client);
-        self.request_with(&mut port, owner, &moves, options)
+        Ok(())
     }
 
     /// `request_moves` over a port, after the game checks.
@@ -207,7 +265,6 @@ impl RequestAdapter {
                 Ok(id)
             }
             Err(RequestRefusal::Busy | RequestRefusal::ScreenOpen) => Err(AmmlStatus::REFUSED),
-            Err(RequestRefusal::Unsupported) => Err(AmmlStatus::NOT_AVAILABLE),
             Err(RequestRefusal::Empty | RequestRefusal::TooMany | RequestRefusal::BadMove) => {
                 Err(AmmlStatus::INVALID_ARGUMENT)
             }
@@ -308,6 +365,10 @@ impl RequestAdapter {
             RequestStep::SendClose(_) => "send_close",
             RequestStep::Predict { .. } => "predict",
             RequestStep::Unpredict { .. } => "unpredict",
+            RequestStep::PredictPick { .. } => "predict_pick",
+            RequestStep::UnpredictPick { .. } => "unpredict_pick",
+            RequestStep::AdoptNetId { .. } => "adopt_net_id",
+            RequestStep::NetIdMissing { .. } => "net_id_missing",
         }
     }
 
@@ -340,7 +401,11 @@ impl RequestAdapter {
         // SAFETY: `packet` is the live `ItemStackResponsePacket` the game passed to its handler.
         let answers = unsafe { crate::PacketLayout::responses(packet) };
         if !answers.is_empty() {
-            self.book().on_responses(&answers);
+            // SAFETY: as above.
+            let named = unsafe { crate::PacketLayout::hotbar_net_ids(packet) };
+            let mut book = self.book();
+            book.on_responses(&answers);
+            book.on_slot_net_ids(&named);
         }
     }
 

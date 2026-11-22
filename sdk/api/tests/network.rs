@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 use amml_abi::{PlayerListUpdate, PlayerSkinChanged};
 use amml_api::testing::{FakeGame, FakePlayerEntry, FakePlayerList, FakeSkin};
 use amml_api::{
-    ActorUniqueId, AnimatedKind, Area, HookOrder, PixelFormat, PlayerListAction, PlayerListUpdateExt,
-    PlayerSkinChangedExt, Uuid,
+    ActorUniqueId, AmmlMod, AnimatedKind, ApiError, Area, Ctx, DisableCtx, HookOrder, PixelFormat, PlayerListAction,
+    PlayerListUpdateExt, PlayerSkinChangedExt, Uuid,
 };
 
 type Seen = Arc<Mutex<Vec<String>>>;
@@ -317,4 +317,57 @@ fn at_most_16_animated_images_are_given() {
     fake.raise_skin(ALEX, Some(skin));
 
     assert_eq!(*seen.lock().unwrap(), ["16".to_string()]);
+}
+
+struct CacheMod;
+
+impl AmmlMod for CacheMod {
+    const NAMESPACE: &'static str = "acme";
+    const NAME: &'static str = "cache";
+
+    fn enable(_ctx: &Ctx) -> Result<(), ApiError> {
+        Ok(())
+    }
+
+    fn disable(_ctx: &Ctx, _how: &DisableCtx) {}
+}
+
+#[test]
+fn set_client_chunk_cache_needs_its_area() {
+    let fake = FakeGame::new();
+    fake.open_gate();
+    let network = fake.ctx().network();
+
+    assert_eq!(network.set_client_chunk_cache(false), Err(ApiError::NotAvailable));
+    assert_eq!(fake.client_chunk_cache(), None);
+
+    fake.offer_area(Area::NETWORK_CHUNK_CACHE);
+    assert_eq!(network.set_client_chunk_cache(false), Ok(()));
+    assert_eq!(fake.client_chunk_cache(), Some(false));
+    assert_eq!(network.set_client_chunk_cache(true), Ok(()));
+    assert_eq!(fake.client_chunk_cache(), Some(true));
+}
+
+#[test]
+fn set_client_chunk_cache_waits_for_the_game_and_ends_with_the_mod() {
+    let fake = FakeGame::new();
+    fake.offer_area(Area::NETWORK_CHUNK_CACHE);
+    let network = fake.ctx().network();
+    assert_eq!(network.set_client_chunk_cache(false), Err(ApiError::NotReady));
+
+    fake.open_gate();
+    assert_eq!(network.set_client_chunk_cache(false), Ok(()));
+    fake.disable::<CacheMod>();
+    assert_eq!(fake.client_chunk_cache(), None);
+}
+
+#[test]
+fn protocol_version_reads_the_fake_value_and_needs_its_area() {
+    let fake = FakeGame::new();
+    let network = fake.ctx().network();
+    assert_eq!(network.protocol_version(), None);
+
+    fake.offer_area(Area::NETWORK_PROTOCOL);
+    fake.set_protocol_version(2259);
+    assert_eq!(network.protocol_version(), Some(2259));
 }

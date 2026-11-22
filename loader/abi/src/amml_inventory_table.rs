@@ -98,6 +98,23 @@ pub type InventoryRequestMovesFn = unsafe extern "C" fn(
     out_id: *mut u64,
 ) -> AmmlStatus;
 
+/// Asks for the creative pick of the block `block` into the hotbar slot `slot` (0 to 8) of the local player `player`
+/// (area `inventory.request` version 2): one item stack request that makes a full stack of the block's creative item
+/// and takes it into the slot. A stack already in the slot is destroyed first in the same request (and comes back on
+/// the client when the server refuses or does not answer). `module` is the calling mod. As `request_moves`, the call sends
+/// nothing itself: the loader predicts the stack on the client and sends the packet at the next client tick,
+/// `InventoryRequestDone` with the id in `out_id` ends the request, and one request runs at a time for the whole loader
+/// (`REFUSED` while another runs). No hidden inventory is opened. `REFUSED` outside the creative game mode, for a block
+/// with no creative entry, for a slot above 8, off the game thread and for a player that is not the local player;
+/// `STALE` for a block handle that was taken back. Version 7.
+pub type InventoryRequestPickFn = unsafe extern "C" fn(
+    module: AmmlStr,
+    player: *const c_void,
+    block: AmmlBlockHandle,
+    slot: u8,
+    out_id: *mut u64,
+) -> AmmlStatus;
+
 /// A change stamp of `stack` (a stack `player` holds now, or one lent in the running UI scope with a null `player`):
 /// 0 for a stack with no user data; else a hash of the address of its user data `CompoundTag` and of every key and
 /// value of that tag and of the compounds nested in it, read through the loader's layout mirrors. Two reads of one
@@ -135,6 +152,8 @@ pub struct AmmlInventoryTable {
     pub request_moves: Option<InventoryRequestMovesFn>,
     /// `None` in a table before v6.
     pub item_change_stamp: Option<InventoryItemChangeStampFn>,
+    /// `None` in a table before v7.
+    pub request_pick: Option<InventoryRequestPickFn>,
 }
 
 impl AmmlInventoryTable {
@@ -150,6 +169,8 @@ impl AmmlInventoryTable {
     pub const SIZE_V5: u32 = 104;
     /// `size` of a v6 inventory table: v5 plus `item_change_stamp`.
     pub const SIZE_V6: u32 = 112;
+    /// `size` of a v7 inventory table: v6 plus `request_pick`.
+    pub const SIZE_V7: u32 = 120;
 
     /// A copy of the table at `table`, read only as far as its own `size` covers; the later fields of a
     /// shorter table are `None`. `None` for a null table or one shorter than v1.
@@ -177,4 +198,4 @@ impl AmmlInventoryTable {
     }
 }
 
-const _: () = assert!(core::mem::size_of::<AmmlInventoryTable>() == AmmlInventoryTable::SIZE_V6 as usize);
+const _: () = assert!(core::mem::size_of::<AmmlInventoryTable>() == AmmlInventoryTable::SIZE_V7 as usize);

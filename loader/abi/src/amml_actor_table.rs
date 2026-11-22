@@ -1,13 +1,17 @@
 use core::ffi::c_void;
 
-use crate::{AmmlRotation, AmmlStatus, AmmlVec3};
+use crate::{
+    AmmlAabb, AmmlBlockPos, AmmlFace, AmmlGameType, AmmlHitResult, AmmlPermissionLevel, AmmlRotation, AmmlStatus,
+    AmmlStr, AmmlVec3,
+};
 
 /// Gives 1 in `out` while the actor `player` is alive, 0 when it is dead. `player` is a local player handle that
 /// a client call gave in the same game frame.
 pub type ActorIsAliveFn = unsafe extern "C" fn(player: *const c_void, out: *mut u8) -> AmmlStatus;
 
 /// Gives a point of the actor `player` in `out` (the feet for `position`, the eyes for `eye_position`, the head for
-/// `head_position`). Area `actor.read` version 2; `head_position` is version 3.
+/// `head_position`, the view direction as a unit vector for `view_vector`). Area `actor.read` version 2; `head_position` is
+/// version 3, `view_vector` version 4.
 pub type ActorPointFn = unsafe extern "C" fn(player: *const c_void, out: *mut AmmlVec3) -> AmmlStatus;
 /// Gives the view direction of the actor `player` in `out`. Area `actor.read` version 2.
 pub type ActorRotationFn = unsafe extern "C" fn(player: *const c_void, out: *mut AmmlRotation) -> AmmlStatus;
@@ -21,6 +25,44 @@ pub type DimensionIdFn = unsafe extern "C" fn(dimension: *const c_void, out: *mu
 pub type ActorBlockSourceFn = unsafe extern "C" fn(player: *const c_void, out: *mut *const c_void) -> AmmlStatus;
 /// Gives the health of the actor `player` in `out`. Area `actor.health`.
 pub type ActorHealthFn = unsafe extern "C" fn(player: *const c_void, out: *mut i32) -> AmmlStatus;
+
+/// Gives the collision box of the actor `player` in `out`. Area `actor.read` version 4.
+pub type ActorAabbFn = unsafe extern "C" fn(player: *const c_void, out: *mut AmmlAabb) -> AmmlStatus;
+/// Gives the game mode of the actor `player` in `out`. Area `actor.game_type`.
+pub type ActorGameTypeFn = unsafe extern "C" fn(player: *const c_void, out: *mut AmmlGameType) -> AmmlStatus;
+/// Gives the player permission level of the actor `player` in `out`. Area `actor.permission`.
+pub type ActorPermissionLevelFn =
+    unsafe extern "C" fn(player: *const c_void, out: *mut AmmlPermissionLevel) -> AmmlStatus;
+/// Turns the actor `player` to `rotation`, and its head to `head_yaw` when `has_head_yaw` is not 0. Game thread only.
+/// Area `actor.look_write`.
+pub type ActorSetRotationFn = unsafe extern "C" fn(
+    player: *const c_void,
+    rotation: *const AmmlRotation,
+    head_yaw: f32,
+    has_head_yaw: u8,
+) -> AmmlStatus;
+
+/// The mod `module` builds with the main hand of the local player `player`: the loader points the game's hit result at
+/// the face `face` of the block `pos`, with the click point `click` (world coordinates, inside that block), calls the
+/// player's `GameMode::buildBlock` and puts the hit result back. Gives in `out` 1 when the game built, 0 when it did
+/// not (also when a listener of `BuildBlock` cancelled it). Game thread only. Area `player.build`.
+pub type ActorBuildAtFn = unsafe extern "C" fn(
+    module: AmmlStr,
+    player: *const c_void,
+    pos: *const AmmlBlockPos,
+    face: AmmlFace,
+    click: *const AmmlVec3,
+    out: *mut u8,
+) -> AmmlStatus;
+/// Gives what the crosshair of the local player `player` points at in `out`: the level's own hit result
+/// (`Level::getHitResult`, the object the game's build and attack read). Game thread only. Area `player.hit_result`.
+pub type ActorHitResultFn = unsafe extern "C" fn(player: *const c_void, out: *mut AmmlHitResult) -> AmmlStatus;
+/// Gives the build repeat delay of the game mode of the local player `player` in milliseconds in `out`. Area
+/// `player.build`.
+pub type ActorBuildDelayFn = unsafe extern "C" fn(player: *const c_void, out: *mut u32) -> AmmlStatus;
+/// Gives the largest distance at which the local player `player` can pick a block, in blocks, in `out`. Area
+/// `player.pick_range`.
+pub type ActorPickRangeFn = unsafe extern "C" fn(player: *const c_void, out: *mut f32) -> AmmlStatus;
 
 /// The actor functions of `AmmlServices` (area `actor.read`). The table only grows: a function added later is
 /// appended, `size` and `version` grow, and a reader calls a function only when `size` covers it.
@@ -38,6 +80,16 @@ pub struct AmmlActorTable {
     pub head_position: Option<ActorPointFn>,
     pub block_source: Option<ActorBlockSourceFn>,
     pub health: Option<ActorHealthFn>,
+    pub view_vector: Option<ActorPointFn>,
+    pub aabb: Option<ActorAabbFn>,
+    pub game_type: Option<ActorGameTypeFn>,
+    pub permission_level: Option<ActorPermissionLevelFn>,
+    pub set_rotation: Option<ActorSetRotationFn>,
+    pub build_at: Option<ActorBuildAtFn>,
+    pub build_delay: Option<ActorBuildDelayFn>,
+    pub max_pick_range: Option<ActorPickRangeFn>,
+    /// From v6.
+    pub hit_result: Option<ActorHitResultFn>,
 }
 
 impl AmmlActorTable {
@@ -47,6 +99,12 @@ impl AmmlActorTable {
     pub const SIZE_V2: u32 = 56;
     /// `size` of a v3 actor table: v2 plus `head_position`, `block_source` and `health`.
     pub const SIZE_V3: u32 = 80;
+    /// `size` of a v4 actor table: v3 plus `view_vector`, `aabb`, `game_type`, `permission_level` and `set_rotation`.
+    pub const SIZE_V4: u32 = 120;
+    /// `size` of a v5 actor table: v4 plus `build_at`, `build_delay` and `max_pick_range`.
+    pub const SIZE_V5: u32 = 144;
+    /// `size` of a v6 actor table: v5 plus `hit_result`.
+    pub const SIZE_V6: u32 = 152;
 
     /// A copy of the table at `table`, read as far as its own `size` covers; a later field is `None`. A null
     /// table, or one shorter than v1, gives `None`.
@@ -74,4 +132,4 @@ impl AmmlActorTable {
     }
 }
 
-const _: () = assert!(core::mem::size_of::<AmmlActorTable>() == AmmlActorTable::SIZE_V3 as usize);
+const _: () = assert!(core::mem::size_of::<AmmlActorTable>() == AmmlActorTable::SIZE_V6 as usize);

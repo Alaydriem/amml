@@ -272,7 +272,8 @@ fn a_second_client_does_not_raise_client_tick() {
 #[test]
 fn game_tick_carries_the_tick_and_join_started_passes_every_argument_through() {
     let _harness = start(&[]);
-    let args = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77];
+    // rdx is the flag; r8, r9 and the stack word at entry+28h are the addresses of the three strings, null here.
+    let args = [0x11, 0, 0, 0, 0x55, 0x66, 0x77];
 
     SessionGame::frame();
     SessionGame::update(&CLIENT_A);

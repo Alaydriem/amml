@@ -1,8 +1,16 @@
-use amml_abi::AmmlScreen;
-use amml_msvc::MemberCall;
-use amml_runtime::{ProtocolValues, RequestSlot, RequestStep};
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use crate::{ClientAdapter, InventoryAdapter, PacketIo, PacketLayout, RequestCalls, RequestPort};
+use amml_abi::{AmmlGameType, AmmlScreen};
+use amml_msvc::MemberCall;
+use amml_runtime::{CreativeEntry, ProtocolValues, RequestSlot, RequestStep};
+
+use crate::{
+    ActorAdapter, ClientAdapter, CreativePick, InventoryAdapter, PacketIo, PacketLayout, PickUndo, RequestCalls,
+    RequestPort,
+};
+
+// Whether the answer of a pick that named no slot was logged.
+static NET_ID_MISSING_LOGGED: AtomicBool = AtomicBool::new(false);
 
 /// The request port of the running game: the screen of the client, the slots of the local player and the packets of
 /// the request path. Built for one client tick or one call; it keeps nothing. Game thread only.
@@ -83,6 +91,12 @@ impl<'a> GameRequestPort<'a> {
         self.io.sender(self.client).is_some_and(|sender| self.io.send(sender, packet))
     }
 
+    // The creative pick over the local player; `None` without the player or the pick calls.
+    fn pick(&self) -> Option<(usize, CreativePick<'a>)> {
+        let calls = self.calls.pick.as_ref()?;
+        Some((Self::player()?, CreativePick::new(calls, self.calls.net_id_at)))
+    }
+
     fn swap(&self, a: u8, b: u8, expect_at_b: Option<i32>) -> bool {
         let (Some(player), Some(inventory)) = (Self::player(), InventoryAdapter::get()) else { return false };
         let expect = expect_at_b.map(|net_id| (net_id, self.calls.net_id_at));
@@ -104,6 +118,17 @@ impl RequestPort for GameRequestPort<'_> {
         InventoryAdapter::get()?.request_slots(Self::player()?, self.calls.net_id_at)
     }
 
+    fn is_creative(&mut self) -> bool {
+        let Some(player) = Self::player() else { return false };
+        let handle = std::ptr::with_exposed_provenance(player);
+        ActorAdapter::get().is_some_and(|adapter| adapter.game_type(handle) == Ok(AmmlGameType::CREATIVE))
+    }
+
+    fn creative_entry(&mut self, block: usize) -> Option<CreativeEntry> {
+        let (player, calls) = (Self::player()?, self.calls.pick.as_ref()?);
+        CreativePick::new(calls, self.calls.net_id_at).entry_for(player, block)
+    }
+
     fn run(&mut self, step: &RequestStep) -> bool {
         match step {
             RequestStep::SendInteract => self.interact(),
@@ -111,6 +136,22 @@ impl RequestPort for GameRequestPort<'_> {
             RequestStep::SendClose(container_id) => self.close(*container_id),
             RequestStep::Predict { a, b } => self.swap(*a, *b, None),
             RequestStep::Unpredict { a, b, net_id } => self.swap(*a, *b, Some(*net_id)),
+            RequestStep::PredictPick { slot, creative_net_id, count } => {
+                self.pick().is_some_and(|(player, pick)| pick.predict(player, *slot, *creative_net_id, *count))
+            }
+            RequestStep::UnpredictPick { slot } => {
+                self.pick().is_some_and(|(player, pick)| pick.unpredict(player, *slot))
+            }
+            RequestStep::NetIdMissing { slot } => {
+                PickUndo::forget();
+                if !NET_ID_MISSING_LOGGED.swap(true, Ordering::AcqRel) {
+                    curia::warn!("an accepted pick named no net id", { slot: *slot });
+                }
+                true
+            }
+            RequestStep::AdoptNetId { slot, net_id } => {
+                self.pick().is_some_and(|(player, pick)| pick.adopt(player, *slot, *net_id))
+            }
         }
     }
 }

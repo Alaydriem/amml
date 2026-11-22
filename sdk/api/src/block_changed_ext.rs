@@ -1,6 +1,6 @@
 use amml_abi::BlockChanged;
 
-use crate::{BlockPos, BlockTypeId};
+use crate::{BlockHandle, BlockPos, BlockTypeId, Ctx};
 
 /// Typed reads of a `BlockChanged`: a block of the dimension of the local player changed, and the event comes after
 /// the game's own change.
@@ -25,6 +25,11 @@ pub trait BlockChangedExt {
 
     /// The type of the block before the change; `BlockTypeId::NONE` when the game gave no readable type.
     fn old(&self) -> BlockTypeId;
+
+    /// The block after the change, as an owned `BlockHandle` of this mod (version 2 of the event). Valid only inside the
+    /// listener call that got the event: a copy of the event kept past it gives `None`, as do an event of version 1, a
+    /// change with no block and a refused read. The handle itself stays valid in this world.
+    fn new_state(&self, ctx: &Ctx) -> Option<BlockHandle>;
 }
 
 impl BlockChangedExt for BlockChanged {
@@ -47,5 +52,12 @@ impl BlockChangedExt for BlockChanged {
 
     fn old(&self) -> BlockTypeId {
         BlockTypeId(self.old)
+    }
+
+    fn new_state(&self, ctx: &Ctx) -> Option<BlockHandle> {
+        if self.header.version < 2 || self.new_state == 0 {
+            return None;
+        }
+        ctx.blocks().changed_state(self.new_state)
     }
 }

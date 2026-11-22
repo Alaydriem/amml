@@ -1,9 +1,15 @@
 use std::ffi::c_void;
 use std::marker::PhantomData;
 
-use amml_abi::{AmmlAabb, AmmlActorBox, AmmlBlockHit, AmmlRayOptions, AmmlSurfaceSample, AmmlWorldTable};
+use amml_abi::{
+    AmmlAabb, AmmlActorBox, AmmlBlockHit, AmmlBlockPos, AmmlKindsResult, AmmlRayOptions, AmmlSurfaceSample,
+    AmmlWorldTable,
+};
 
-use crate::{Aabb, ActorBox, BlockHit, ColumnPos, LevelChunk, RayOptions, SurfaceSample, Vec3};
+use crate::{
+    Aabb, ActorBox, ApiError, Block, BlockHit, BlockPos, BlockTypeId, Blocks, ColumnPos, KindsInBox, LevelChunk,
+    RayOptions, SurfaceSample, Vec3,
+};
 
 /// The block source of the dimension of a `LocalPlayer` (`LocalPlayer::block_source`), as an opaque handle. Two values
 /// are equal when they name the same block source. It lives no longer than the event that gave its player; the loader
@@ -12,6 +18,7 @@ use crate::{Aabb, ActorBox, BlockHit, ColumnPos, LevelChunk, RayOptions, Surface
 pub struct BlockSource<'f> {
     handle: *const c_void,
     world: Option<AmmlWorldTable>,
+    module: &'static str,
     _event: PhantomData<&'f ()>,
 }
 
@@ -20,9 +27,25 @@ impl<'f> BlockSource<'f> {
     const SCAN_BATCH: usize = 32;
     /// The most boxes `actors_in` gives.
     pub const MAX_ACTORS: usize = 256;
+    /// The most cells a box of `kinds_in_box` may hold.
+    pub const KINDS_CELL_CAP: u32 = 65536;
 
-    pub(crate) fn new(handle: *const c_void, world: Option<AmmlWorldTable>) -> Self {
-        Self { handle, world, _event: PhantomData }
+    pub(crate) fn new(handle: *const c_void, world: Option<AmmlWorldTable>, module: &'static str) -> Self {
+        Self { handle, world, module, _event: PhantomData }
+    }
+
+    /// The block at `pos`. `None` when the game has no block there, when the loader refuses the call (the block source
+    /// is from an earlier frame, world or dimension, or the call is not on the game thread) or does not serve the
+    /// area. The block is valid in this game frame only. Area `world.blocks` (`Area::WORLD_BLOCKS`).
+    pub fn block(&self, pos: BlockPos) -> Option<Block<'f>> {
+        let world = self.world?;
+        let read = world.block_at?;
+        let at = AmmlBlockPos::from(pos);
+        let mut out: *const c_void = std::ptr::null();
+        // SAFETY: the loader checks the handle before it reads game memory; `at` and `out` are live locals.
+        #[allow(unsafe_code)]
+        let status = unsafe { read(self.handle, &raw const at, &mut out) };
+        (status.is_ok() && !out.is_null()).then(|| Block::new(out, self.handle, pos, world, self.module))
     }
 
     /// The chunk at chunk position (`x`, `z`), in chunks (a block x or z divided by 16, rounded down). `None` when the
@@ -37,6 +60,45 @@ impl<'f> BlockSource<'f> {
         #[allow(unsafe_code)]
         let status = unsafe { read(self.handle, x, z, &mut out) };
         (status.is_ok() && !out.is_null()).then(|| LevelChunk::new(out, world))
+    }
+
+    /// The distinct block types in the box from `min` to `max` (both included), by full name, in the order the loader
+    /// meets them (x, then z, then y, each upward). Air counts as a kind. At most `max_kinds` are listed.
+    ///
+    /// Every chunk of the box is checked loaded before a cell is read: a chunk that is not, or a block that cannot be
+    /// read, gives `Ok(KindsInBox::NotLoaded)`; more kinds than `max_kinds` gives `Ok(KindsInBox::TooMany)`; neither
+    /// lists anything. A box with `min` above `max` on an axis, or with more than `KINDS_CELL_CAP` (65536) cells, gives
+    /// `Err(Refused)`, as do a block source that is from an earlier frame, world or dimension and a call off the game
+    /// thread. `Err(NotAvailable)` without the area. Area `world.kinds_in_box` (`Area::WORLD_KINDS_IN_BOX`), which needs
+    /// `world.chunk_read` for the names.
+    pub fn kinds_in_box(&self, min: BlockPos, max: BlockPos, max_kinds: u32) -> Result<KindsInBox, ApiError> {
+        let scan = self.world.and_then(|world| world.kinds_in_box).ok_or(ApiError::NotAvailable)?;
+        // A box holds at most `KINDS_CELL_CAP` cells, so no more kinds than that can be found.
+        let room = max_kinds.min(Self::KINDS_CELL_CAP);
+        let mut ids = vec![0u32; room as usize];
+        let mut result = AmmlKindsResult::default();
+        let (min, max) = (AmmlBlockPos::from(min), AmmlBlockPos::from(max));
+        // SAFETY: the loader checks the handle before it reads game memory; `min`, `max` and `result` are live locals
+        // and `ids` holds `room` entries.
+        #[allow(unsafe_code)]
+        let status =
+            unsafe { scan(self.handle, &raw const min, &raw const max, ids.as_mut_ptr(), room, &raw mut result) };
+        ApiError::check(status)?;
+        match result.kind {
+            AmmlKindsResult::KINDS => {
+                let blocks = Blocks::new(self.world, self.module);
+                let count = (result.count as usize).min(ids.len());
+                ids[..count]
+                    .iter()
+                    .map(|id| blocks.type_name(BlockTypeId(*id)))
+                    .collect::<Option<Vec<String>>>()
+                    .map(KindsInBox::Kinds)
+                    .ok_or(ApiError::Loader(amml_abi::AmmlStatus::FAILED))
+            }
+            AmmlKindsResult::NOT_LOADED => Ok(KindsInBox::NotLoaded),
+            AmmlKindsResult::TOO_MANY => Ok(KindsInBox::TooMany),
+            _ => Err(ApiError::Loader(amml_abi::AmmlStatus::FAILED)),
+        }
     }
 
     /// Finds where a mob can stand in `column`, for the block ys `y_min` to `y_max` (both included), and writes the

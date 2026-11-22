@@ -1,12 +1,19 @@
 use std::ffi::c_void;
 use std::sync::Mutex;
 
-use amml::{ActorAdapter, BlockListener, ClientAdapter, ModListener, SessionAdapter, WorldAdapter};
-use amml_abi::{AmmlBand, AmmlEventContext, AmmlEventHeader, AmmlStatus, BlockChanged};
-use amml_runtime::{ImageLayout, ListenerId};
+use amml::{
+    ActorAdapter, BlockListener, BlockReadAdapter, ClientAdapter, LoaderState, ModListener, ModLoader, SessionAdapter,
+    WorldAdapter,
+};
+use amml_abi::{
+    AmmlApi, AmmlBand, AmmlBlockHandle, AmmlEventContext, AmmlEventHeader, AmmlServices, AmmlStatus, AmmlStr,
+    AmmlWorldTable, BlockChanged,
+};
+use amml_runtime::{ImageLayout, ListenerId, ModRegistry};
 
 use crate::support::{
-    ActorGame, BlockGame, ChunkGame, ChunkKind, ClientGame, GAME_CLIENT_A, Harness, LogFile, SessionGame,
+    ActorGame, BlockGame, BlockReadGame, ChunkGame, ChunkKind, ClientGame, EchoMod, EventsMod, GAME_CLIENT_A, Harness,
+    LogFile, SessionGame,
 };
 
 // What the `world.block_changed` listener saw, one line per event.
@@ -279,4 +286,98 @@ fn a_table_whose_end_lies_outside_the_image_is_refused() {
 
     assert!(!harness.state.events().is_available("world.block_changed", 1));
     assert_eq!(rows[0].missing, vec!["BlockSourceListener slot count"]);
+}
+
+const FIRST_MOD: &str = "@events/events";
+const SECOND_MOD: &str = "@echo/echo";
+
+// What the `new_state` listener saw: the token of the event, then the answers of `block_changed_state` for the first
+// mod (twice), the second mod, and a token that is not the event's.
+static STATES: Mutex<Vec<(AmmlStatus, AmmlBlockHandle)>> = Mutex::new(Vec::new());
+static TOKEN: Mutex<u32> = Mutex::new(0);
+
+fn world_table() -> AmmlWorldTable {
+    let state = LoaderState::get().unwrap();
+    // SAFETY: the loader's tables live for the process.
+    let services = unsafe { AmmlApi::services(state.api()) }.unwrap();
+    // SAFETY: as above.
+    let table = unsafe { AmmlServices::world(services) }.unwrap();
+    // SAFETY: as above.
+    unsafe { AmmlWorldTable::read(table) }.unwrap()
+}
+
+fn changed_state(module: &str, token: u64) -> (AmmlStatus, AmmlBlockHandle) {
+    let mut out = AmmlBlockHandle::NONE;
+    // SAFETY: the table is live; the module text and the output live for the call.
+    let status = unsafe { (world_table().block_changed_state.unwrap())(AmmlStr::from_str(module), token, &mut out) };
+    (status, out)
+}
+
+unsafe extern "C" fn on_state(
+    event: *mut AmmlEventHeader,
+    _context: *const AmmlEventContext,
+    _: *mut c_void,
+) -> AmmlStatus {
+    // SAFETY: the loader raises `world.block_changed` with a `BlockChanged`.
+    let changed = unsafe { &*event.cast::<BlockChanged>() };
+    let token = u64::from(changed.new_state);
+    *TOKEN.lock().unwrap() = changed.new_state;
+    let mut seen = STATES.lock().unwrap();
+    seen.push(changed_state(FIRST_MOD, token));
+    seen.push(changed_state(FIRST_MOD, token));
+    seen.push(changed_state(SECOND_MOD, token));
+    seen.push(changed_state(FIRST_MOD, token + 1));
+    AmmlStatus::OK
+}
+
+// Installed over the `world.blocks` stand-ins, joined, with two mods loaded and the `new_state` listener attached.
+fn attached_with_state() -> (Harness, usize) {
+    STATES.lock().unwrap().clear();
+    let harness = Harness::start_with_entries(&BlockReadGame::entries(&[]));
+    SessionAdapter::install(harness.state);
+    ClientAdapter::install(harness.state);
+    ActorAdapter::install(harness.state);
+    WorldAdapter::install(harness.state);
+    BlockListener::install(harness.state, BlockGame::image);
+    BlockReadAdapter::install(harness.state);
+    let plain = EventsMod::build("plain", &[]);
+    harness.install_mod("events", "events", &plain, "events.dll", 3);
+    harness.install_mod("echo", "echo", &EchoMod::build("plain", &[]), "echo.dll", 2);
+    let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
+    assert!(ModLoader::new(harness.state).load_all(&scan.mods).iter().all(|report| report.is_ok()));
+    join(&harness);
+    let listener = ModListener { owner: 0, callback: on_state, user: 0 };
+    harness.state.events().listen("world.block_changed", 2, AmmlBand::NORMAL, listener).unwrap();
+    ClientGame::update(&GAME_CLIENT_A);
+    let added = BlockGame::added();
+    assert_eq!(added.len(), 1);
+    (harness, added[0])
+}
+
+#[test]
+fn new_state_interns_for_the_calling_mod() {
+    let (_harness, listener) = attached_with_state();
+
+    BlockGame::fire_changed(listener, [1, 2, 3], 0, stone(), dirt());
+
+    let seen = STATES.lock().unwrap().clone();
+    assert_eq!(seen.len(), 4);
+    assert_eq!((seen[0].0, seen[1].0, seen[2].0), (AmmlStatus::OK, AmmlStatus::OK, AmmlStatus::OK));
+    assert_ne!(seen[0].1, AmmlBlockHandle::NONE);
+    assert_eq!(seen[0].1, seen[1].1);
+    assert_ne!(seen[0].1, seen[2].1);
+    assert_ne!(*TOKEN.lock().unwrap(), 0);
+    assert_eq!(seen[3], (AmmlStatus::STALE, AmmlBlockHandle::NONE));
+}
+
+#[test]
+fn new_state_outside_the_call_is_none() {
+    let (_harness, listener) = attached_with_state();
+    BlockGame::fire_changed(listener, [1, 2, 3], 0, stone(), dirt());
+    let token = u64::from(*TOKEN.lock().unwrap());
+    assert_ne!(token, 0);
+
+    let after = changed_state(FIRST_MOD, token);
+
+    assert_eq!(after, (AmmlStatus::STALE, AmmlBlockHandle::NONE));
 }

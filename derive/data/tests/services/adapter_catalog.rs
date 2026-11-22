@@ -145,18 +145,62 @@ const ACTOR_V2: [&str; 9] = [
 #[test]
 fn the_actor_read_area_needs_the_alive_slot_the_local_player_and_the_v2_reads() {
     let mut all = ACTOR_V2.to_vec();
-    all.extend(["Actor.getAttachPos", "Dimension.getBlockSourceFromMainChunkSource"]);
+    all.extend(["Actor.getAttachPos", "Dimension.getBlockSourceFromMainChunkSource", "Actor.getViewVector"]);
     let row = availability_of(&all, "actor.read");
-    assert_eq!((row.kind, row.shape, row.version), (NeedKind::Area, Some("default"), 3));
+    assert_eq!((row.kind, row.shape, row.version), (NeedKind::Area, Some("default"), 4));
     assert_eq!(availability_of(&all[1..], "actor.read").missing, ["Actor.isAlive"]);
-    assert_eq!(availability_of(&all[..2], "actor.read").missing.len(), 9);
+    assert_eq!(availability_of(&all[..2], "actor.read").missing.len(), 10);
 }
 
 #[test]
 fn actor_read_v3_needs_the_block_source_entries() {
     let v2_only = availability_of(&ACTOR_V2, "actor.read");
     assert_eq!(v2_only.shape, None);
-    assert_eq!(v2_only.missing, ["Actor.getAttachPos", "Dimension.getBlockSourceFromMainChunkSource"]);
+    assert_eq!(
+        v2_only.missing,
+        ["Actor.getAttachPos", "Dimension.getBlockSourceFromMainChunkSource", "Actor.getViewVector"]
+    );
+}
+
+#[test]
+fn actor_read_v4_needs_the_view_vector_call() {
+    let mut v3 = ACTOR_V2.to_vec();
+    v3.extend(["Actor.getAttachPos", "Dimension.getBlockSourceFromMainChunkSource"]);
+    let row = availability_of(&v3, "actor.read");
+    assert_eq!(row.shape, None);
+    assert_eq!(row.missing, ["Actor.getViewVector"]);
+}
+
+#[test]
+fn the_game_type_row_needs_the_getter() {
+    let row = availability_of(&["Player.getPlayerGameType"], "actor.game_type");
+    assert_eq!((row.kind, row.shape), (NeedKind::Area, Some("default")));
+    assert_eq!(availability_of(&[], "actor.game_type").missing, ["Player.getPlayerGameType"]);
+}
+
+#[test]
+fn the_permission_row_has_one_shape_per_build() {
+    let getter = availability_of(&["Player.getPlayerPermissionLevel"], "actor.permission");
+    assert_eq!(getter.shape, Some(AdapterCatalog::PERMISSION_GETTER_SHAPE));
+    let abilities =
+        availability_of(&["Player.getAbilitiesComponent", "AbilitiesComponent.mPlayerPermissions"], "actor.permission");
+    assert_eq!(abilities.shape, Some(AdapterCatalog::PERMISSION_ABILITIES_SHAPE));
+    // The abilities shape needs the byte offset as well as the getter.
+    assert_eq!(availability_of(&["Player.getAbilitiesComponent"], "actor.permission").shape, None);
+    let neither = availability_of(&[], "actor.permission");
+    assert_eq!(neither.shape, None);
+    assert_eq!(neither.missing, ["Player.getPlayerPermissionLevel"]);
+}
+
+#[test]
+fn look_write_needs_the_rotation_entries() {
+    let all = ["Actor.actorRotationComponent", "ActorRotationComponent.mRot", "Actor.setYHeadRotations"];
+    let row = availability_of(&all, "actor.look_write");
+    assert_eq!((row.kind, row.shape), (NeedKind::Area, Some("default")));
+    for entry in all {
+        let without: Vec<&str> = all.iter().copied().filter(|name| *name != entry).collect();
+        assert_eq!(availability_of(&without, "actor.look_write").missing, vec![entry], "{entry}");
+    }
 }
 
 #[test]
@@ -283,7 +327,7 @@ fn world_info_needs_the_getters_the_level_reads_and_the_storage_entries() {
 
 #[test]
 fn served_version_gives_the_catalog_version_or_none() {
-    assert_eq!(AdapterCatalog::served_version(NeedKind::Area, "actor.read"), Some(3));
+    assert_eq!(AdapterCatalog::served_version(NeedKind::Area, "actor.read"), Some(4));
     assert_eq!(AdapterCatalog::served_version(NeedKind::Event, "input.injected_released"), Some(2));
     assert_eq!(AdapterCatalog::served_version(NeedKind::Event, "actor.read"), None);
     assert_eq!(AdapterCatalog::served_version(NeedKind::Area, "no.such_area"), None);
@@ -480,14 +524,34 @@ fn the_inventory_request_rows_need_the_packet_calls_and_the_container_entries() 
         "ClientNetworkHandler.handle.ContainerClosePacket",
         "ClientNetworkHandler.handle.ItemStackResponsePacket",
     ];
-    for id in ["inventory.request", "inventory.request_done"] {
-        for entry in entries {
-            assert!(entries_of(id).contains(&entry), "{id} {entry}");
-            let without: Vec<&str> = entries.iter().copied().filter(|name| *name != entry).collect();
-            assert_eq!(availability_of(&without, id).missing, vec![entry], "{id}");
+    let pick_entries = [
+        "Actor.mLevel",
+        "Level.getItemRegistry",
+        "ItemRegistryRef.getCreativeItemRegistry",
+        "CreativeItemRegistry.mCreativeItems",
+        "ItemStack.emptyCtor",
+        "ItemStack.copyCtor",
+        "ItemStack.reinit",
+        "ItemStack.vtable",
+        "ItemStackBase.getMaxStackSize",
+        "BlockType.asItemInstance",
+        "Player.getPlayerGameType",
+        "FillingContainer.setItem",
+    ];
+    // The event stays on the packet entries; the area, at version 2, also needs the creative pick entries.
+    for (id, wanted) in [
+        ("inventory.request", [entries.as_slice(), pick_entries.as_slice()].concat()),
+        ("inventory.request_done", entries.to_vec()),
+    ] {
+        for entry in &wanted {
+            assert!(entries_of(id).contains(entry), "{id} {entry}");
+            let without: Vec<&str> = wanted.iter().copied().filter(|name| name != entry).collect();
+            assert_eq!(availability_of(&without, id).missing, vec![*entry], "{id}");
         }
-        assert!(availability_of(&entries, id).shape.is_some());
+        assert!(availability_of(&wanted, id).shape.is_some());
     }
+    assert_eq!(AdapterCatalog::served_version(amml_data::NeedKind::Area, "inventory.request"), Some(2));
+    assert_eq!(AdapterCatalog::served_version(amml_data::NeedKind::Event, "inventory.request_done"), Some(1));
 }
 
 #[test]
@@ -654,7 +718,7 @@ fn the_world_canvas_area_needs_the_view_and_mesh_entries_but_not_render_mesh() {
         .copied()
         .collect();
     let row = availability_of(&row_entries, "render.world_canvas");
-    assert_eq!((row.kind, row.shape, row.version), (NeedKind::Area, Some("default"), 2));
+    assert_eq!((row.kind, row.shape, row.version), (NeedKind::Area, Some("default"), 3));
     // `Mesh.renderMesh` fails on 70.26: the draw goes through the list overload only.
     assert!(!row_entries.contains(&"Mesh.renderMesh"));
     // The white texture of `draw` is a per-call need: the `ui.textures` entries are optional entries of the row.
@@ -681,6 +745,9 @@ fn the_world_canvas_area_needs_the_view_and_mesh_entries_but_not_render_mesh() {
         "Tessellator.mTessellating",
         "LevelRendererCamera.mWireframeMaterial",
         "BaseActorRenderer.size",
+        "LevelRenderer.mAtlasTexture",
+        "ClientInstance.getItemInHandRenderer",
+        "ItemInHandRenderer.mMatBlendBlock",
     ] {
         let without: Vec<&str> = row_entries.iter().copied().filter(|name| *name != needed).collect();
         assert_eq!(availability_of(&without, "render.world_canvas").missing, [needed]);
@@ -788,4 +855,474 @@ fn the_shapes_row_needs_the_capture_the_session_clearing_the_shapes_slot_and_the
     }
     let row = availability_of(&shapes, "world.shapes");
     assert_eq!((row.kind, row.shape, row.version), (NeedKind::Area, Some("default"), 1));
+}
+
+#[test]
+fn focus_rows_need_their_entries() {
+    let lost = availability_of(&[], "client.app_focus_lost");
+    assert_eq!(lost.missing, vec!["MinecraftGame.onAppFocusLost"]);
+    assert_eq!(availability_of(&["MinecraftGame.onAppFocusLost"], "client.app_focus_lost").shape, Some("default"));
+
+    let gained = availability_of(&["MinecraftGame.onAppFocusGained"], "client.app_focus_gained");
+    assert_eq!(gained.shape, None);
+    assert_eq!(
+        gained.missing,
+        vec!["MinecraftGame.AppPlatformListener.vtable", "MinecraftGame.appPlatformListenerOffset"]
+    );
+
+    let replay = availability_of(&["MinecraftGame.onAppFocusLost"], "client.focus_replay");
+    assert_eq!(replay.shape, Some("default"));
+    assert_eq!(replay.kind, NeedKind::Area);
+}
+
+#[test]
+fn options_rows_need_their_entries() {
+    let distance = availability_of(&[], "options.view_distance");
+    assert_eq!(distance.kind, NeedKind::Area);
+    assert_eq!(distance.missing, vec!["ClientInstance.getOptions", "IOptionRegistry.getViewDistanceChunks"]);
+    let both = ["ClientInstance.getOptions", "IOptionRegistry.getViewDistanceChunks"];
+    assert_eq!(availability_of(&both, "options.view_distance").shape, Some("default"));
+
+    let ints = availability_of(&["ClientInstance.getOptions"], "options.int");
+    assert_eq!(ints.shape, None);
+    assert_eq!(
+        ints.missing,
+        vec!["OptionRegistry.getIfValid", "OptionRegistry.getEffectiveMaxFramerateOption", "IntOption.set"]
+    );
+    let all = [
+        "ClientInstance.getOptions",
+        "OptionRegistry.getIfValid",
+        "OptionRegistry.getEffectiveMaxFramerateOption",
+        "IntOption.set",
+    ];
+    let row = availability_of(&all, "options.int");
+    assert_eq!((row.kind, row.shape, row.version), (NeedKind::Area, Some("default"), 1));
+}
+
+#[test]
+fn block_states_row_needs_the_serialization_member() {
+    let all = entries_of("world.block_states");
+    assert_eq!(AdapterCatalog::served_version(NeedKind::Area, "world.block_states"), Some(1));
+    assert!(availability_of(&all, "world.block_states").shape.is_some());
+    assert!(!all.contains(&"BlockTypeRegistry.mRegistry"));
+    for entry in [
+        "BlockTypeRegistry.instance",
+        "BlockTypeRegistry.lookupByName",
+        "Block.mSerializationId",
+        "StringByteInput.vtable",
+        "NbtIo.read",
+        "BlockSerializationUtils.tryGetBlockFromNBT",
+        "CompoundTag.dtor",
+        "VanillaBlockStateTransformUtils.transformBlock",
+        "BlockType.asItemInstance",
+        "ItemStackBase.dtor",
+    ] {
+        let without: Vec<&str> = all.iter().copied().filter(|name| *name != entry).collect();
+        assert_eq!(availability_of(&without, "world.block_states").missing, vec![entry]);
+    }
+}
+
+#[test]
+fn blocks_row_needs_the_block_read_entries_and_the_block_source_chain() {
+    let all = entries_of("world.blocks");
+    assert_eq!(AdapterCatalog::served_version(NeedKind::Area, "world.blocks"), Some(1));
+    assert!(availability_of(&all, "world.blocks").shape.is_some());
+    for entry in [
+        "BlockSource.getBlock",
+        "Block.mBlockType",
+        "BlockType.canBeBuiltOver",
+        "BlockType.isInteractiveBlock",
+        "BlockType.asItemInstance",
+        "BlockType.mNameInfo.mFullName",
+        "ItemStackBase.dtor",
+        "HashedString.layout",
+        "Dimension.getBlockSourceFromMainChunkSource",
+    ] {
+        let without: Vec<&str> = all.iter().copied().filter(|name| *name != entry).collect();
+        assert_eq!(availability_of(&without, "world.blocks").missing, vec![entry]);
+    }
+}
+
+#[test]
+fn kinds_in_box_row_needs_the_chunk_and_block_reads_and_the_block_source_chain() {
+    let all = entries_of("world.kinds_in_box");
+    assert_eq!(AdapterCatalog::served_version(NeedKind::Area, "world.kinds_in_box"), Some(1));
+    assert!(availability_of(&all, "world.kinds_in_box").shape.is_some());
+    for entry in [
+        "BlockSource.getChunk",
+        "BlockSource.getBlock",
+        "LevelChunk.mSubChunks",
+        "SubChunk.isPlaceHolderSubChunk",
+        "Block.mBlockType",
+        "BlockType.mNameInfo.mFullName",
+        "HashedString.layout",
+        "Dimension.getBlockSourceFromMainChunkSource",
+    ] {
+        let without: Vec<&str> = all.iter().copied().filter(|name| *name != entry).collect();
+        assert_eq!(availability_of(&without, "world.kinds_in_box").missing, vec![entry]);
+    }
+}
+
+#[test]
+fn block_mesher_row_needs_the_block_tessellator_and_the_block_reads() {
+    let all = entries_of("render.block_mesher");
+    assert_eq!(AdapterCatalog::served_version(NeedKind::Area, "render.block_mesher"), Some(1));
+    assert!(availability_of(&all, "render.block_mesher").shape.is_some());
+    for entry in [
+        "BlockTessellator.ctor",
+        "BlockTessellator.dtor",
+        "BlockTessellator.setRegion",
+        "BlockTessellator.tessellateInWorld",
+        "BlockTessellator.mBlockCache",
+        "BlockGraphics.getForBlock",
+        "BlockGraphics.mBlockShape",
+        "Block.getRenderLayer",
+        "BlockType.getExtraRenderLayers",
+        "Block.mBlockType",
+        "BlockSource.getBlock",
+        "Tessellator.begin",
+        "Tessellator.end",
+        "Dimension.getBlockSourceFromMainChunkSource",
+        "BlockTypeRegistry.lookupByName",
+        "HashedString.layout",
+    ] {
+        let without: Vec<&str> = all.iter().copied().filter(|name| *name != entry).collect();
+        assert_eq!(availability_of(&without, "render.block_mesher").missing, vec![entry]);
+    }
+}
+
+#[test]
+fn block_mesher_row_needs_the_mesh_data_and_the_tint_entries() {
+    let all = entries_of("render.block_mesher");
+    for entry in [
+        "MeshData.clear",
+        "MeshData.dtor",
+        "MeshData.moveAssign",
+        "BiomeColorSampling.getTessellationPolicy",
+        "TessellationPolicy.get",
+        "BlockType.mTintMethod",
+    ] {
+        let without: Vec<&str> = all.iter().copied().filter(|name| *name != entry).collect();
+        assert_eq!(availability_of(&without, "render.block_mesher").missing, vec![entry]);
+    }
+}
+
+#[test]
+fn water_tint_row_needs_the_chunk_the_biome_and_the_water_colour() {
+    let all = entries_of("render.water_tint");
+    assert_eq!(AdapterCatalog::served_version(NeedKind::Area, "render.water_tint"), Some(1));
+    assert_eq!(all, ["BlockSource.getChunk", "LevelChunk.getBiome", "BiomeColorSampling.getWaterColor"]);
+    assert!(availability_of(&all, "render.water_tint").shape.is_some());
+    for entry in &all {
+        let without: Vec<&str> = all.iter().copied().filter(|name| name != entry).collect();
+        assert_eq!(availability_of(&without, "render.water_tint").missing, vec![*entry]);
+    }
+}
+
+#[test]
+fn block_changed_is_served_at_version_2_with_the_entries_of_version_1() {
+    let all = entries_of("world.block_changed");
+    assert_eq!(AdapterCatalog::served_version(NeedKind::Event, "world.block_changed"), Some(2));
+    assert_eq!(availability_of(&all, "world.block_changed").version, 2);
+}
+
+#[test]
+fn use_pressed_needs_the_build_action_handler() {
+    let row = availability_of(&["ClientInputCallbacks.handleBuildAction"], "player.use_pressed");
+    assert_eq!((row.kind, row.shape), (NeedKind::Event, Some("default")));
+    assert_eq!(availability_of(&[], "player.use_pressed").missing, ["ClientInputCallbacks.handleBuildAction"]);
+}
+
+#[test]
+fn build_block_needs_the_game_mode_slot_and_its_player() {
+    let all = ["GameMode.vtable", "GameMode.buildBlock", "GameMode.mPlayer", "ClientInstance.getLocalPlayer"];
+    assert_eq!(entries_of("player.build_block"), all);
+    let row = availability_of(&all, "player.build_block");
+    assert_eq!((row.kind, row.shape), (NeedKind::Event, Some("default")));
+    for entry in all {
+        let without: Vec<&str> = all.iter().copied().filter(|name| *name != entry).collect();
+        assert_eq!(availability_of(&without, "player.build_block").missing, vec![entry]);
+    }
+}
+
+#[test]
+fn player_build_needs_the_game_mode_the_hit_result_and_the_delay() {
+    let all =
+        ["Player.mGameMode", "Actor.mLevel", "Level.getHitResult", "GameMode.buildBlock", "GameMode.buildingTickDelay"];
+    assert_eq!(entries_of("player.build"), all);
+    assert_eq!(AdapterCatalog::served_version(NeedKind::Area, "player.build"), Some(1));
+    let row = availability_of(&all, "player.build");
+    assert_eq!((row.kind, row.shape), (NeedKind::Area, Some("default")));
+    for entry in all {
+        let without: Vec<&str> = all.iter().copied().filter(|name| *name != entry).collect();
+        assert_eq!(availability_of(&without, "player.build").missing, vec![entry]);
+    }
+}
+
+#[test]
+fn the_pick_range_row_has_one_shape_per_build() {
+    let getter = availability_of(&["Player.mGameMode", "GameMode.getMaxPickRange"], "player.pick_range");
+    assert_eq!((getter.kind, getter.shape), (NeedKind::Area, Some(AdapterCatalog::PICK_RANGE_GETTER_SHAPE)));
+    let both =
+        availability_of(&["Player.mGameMode", "GameMode.getMaxPickRange", "Player.isCreative"], "player.pick_range");
+    assert_eq!(both.shape, Some(AdapterCatalog::PICK_RANGE_GETTER_SHAPE));
+    let creative = availability_of(&["Player.mGameMode", "Player.isCreative"], "player.pick_range");
+    assert_eq!(creative.shape, Some(AdapterCatalog::PICK_RANGE_CREATIVE_SHAPE));
+    assert_eq!(AdapterCatalog::served_version(NeedKind::Area, "player.pick_range"), Some(1));
+    let neither = availability_of(&[], "player.pick_range");
+    assert_eq!(neither.shape, None);
+    assert_eq!(neither.missing, ["Player.mGameMode", "GameMode.getMaxPickRange"]);
+}
+
+#[test]
+fn the_block_entity_pass_needs_the_body_hook_and_the_player_vtable() {
+    let all = ["LevelRendererCamera.renderBlockEntitiesBody", "LevelRendererPlayer.vtable"];
+    assert_eq!(entries_of("render.block_entity_pass"), all);
+    let row = availability_of(&all, "render.block_entity_pass");
+    assert_eq!((row.kind, row.shape), (NeedKind::Event, Some("default")));
+    for entry in all {
+        let without: Vec<&str> = all.iter().copied().filter(|name| *name != entry).collect();
+        assert_eq!(availability_of(&without, "render.block_entity_pass").missing, vec![entry]);
+    }
+}
+
+// The entries both shapes of `render.block_entities` need besides the factory.
+const BLOCK_ENTITY_COMMON: [&str; 19] = [
+    "LevelRendererCamera.renderBlockEntitiesBody",
+    "LevelRendererPlayer.vtable",
+    "BlockActor.loadStatic",
+    "BlockActor._getRenderComponent",
+    "DefaultDataLoadHelper.vtable",
+    "BlockActorRenderDispatcher.render",
+    "RenderMetadata.engaged",
+    "BaseActorRenderContext.mBlockEntityRenderDispatcher",
+    "BaseActorRenderContext.mImpl",
+    "BaseActorRenderContext.Impl.mCameraTargetPosition",
+    "NbtIo.read",
+    "StringByteInput.vtable",
+    "CompoundTag.dtor",
+    "Actor.mLevel",
+    "ClientInstance.getLocalPlayer",
+    "Actor.getDimension",
+    "Dimension.getBlockSourceFromMainChunkSource",
+    "Block.mBlockType",
+    "LevelRenderer.renderLevel",
+];
+
+#[test]
+fn the_block_entities_row_has_one_factory_shape_per_build() {
+    let mut factory = BLOCK_ENTITY_COMMON.to_vec();
+    factory.push("VanillaBlockActorFactory.createBlockActor");
+    let row = availability_of(&factory, "render.block_entities");
+    assert_eq!((row.kind, row.shape), (NeedKind::Area, Some(AdapterCatalog::BLOCK_ENTITIES_FACTORY_SHAPE)));
+    let mut flag = BLOCK_ENTITY_COMMON.to_vec();
+    flag.extend(["VanillaBlockActorFactory.createBlockActorWithFlag", "Level.isClientSide"]);
+    let row = availability_of(&flag, "render.block_entities");
+    assert_eq!(row.shape, Some(AdapterCatalog::BLOCK_ENTITIES_FLAG_SHAPE));
+    // The flag form needs the level's flag slot as well.
+    flag.retain(|name| *name != "Level.isClientSide");
+    assert_eq!(availability_of(&flag, "render.block_entities").shape, None);
+    assert_eq!(AdapterCatalog::served_version(NeedKind::Area, "render.block_entities"), Some(1));
+    for entry in BLOCK_ENTITY_COMMON {
+        let without: Vec<&str> = factory.iter().copied().filter(|name| *name != entry).collect();
+        assert_eq!(availability_of(&without, "render.block_entities").missing, vec![entry]);
+    }
+}
+
+#[test]
+fn the_chest_pair_row_needs_the_type_test_the_position_and_the_chest_members() {
+    let all = [
+        "BlockActor.isType",
+        "BlockActor.mPosition",
+        "ChestBlockActor.mPairFlags",
+        "ChestBlockActor.mLargeChestPaired",
+        "ChestBlockActor.mLargeChestPairedPosition",
+    ];
+    assert_eq!(entries_of("render.chest_pair"), all);
+    let row = availability_of(&all, "render.chest_pair");
+    assert_eq!((row.kind, row.shape), (NeedKind::Area, Some("default")));
+    for entry in all {
+        let without: Vec<&str> = all.iter().copied().filter(|name| *name != entry).collect();
+        assert_eq!(availability_of(&without, "render.chest_pair").missing, vec![entry]);
+    }
+}
+
+const SKULL_COMMON: [&str; 4] = [
+    "BlockActorRenderDispatcher.mSkullRenderer",
+    "BlockType.mNameInfo.mFullName",
+    "HashedString.layout",
+    "BlockActor.isType",
+];
+
+#[test]
+fn the_skull_pose_row_has_one_shape_per_build() {
+    let mut render_skull = SKULL_COMMON.to_vec();
+    render_skull.push("SkullBlockRenderer.renderSkull");
+    let row = availability_of(&render_skull, "render.skull_pose");
+    assert_eq!((row.kind, row.shape), (NeedKind::Area, Some(AdapterCatalog::SKULL_RENDER_SHAPE)));
+    let mut upright = SKULL_COMMON.to_vec();
+    upright.extend([
+        "SkullBlockRenderer.renderSkullUpright",
+        "MatrixStack.push",
+        "MatrixStackRef.dtor",
+        "ScreenContext.camera",
+        "Camera.mForward",
+    ]);
+    let row = availability_of(&upright, "render.skull_pose");
+    assert_eq!(row.shape, Some(AdapterCatalog::SKULL_UPRIGHT_SHAPE));
+    // The upright form draws inside a pushed matrix.
+    upright.retain(|name| *name != "MatrixStack.push");
+    assert_eq!(availability_of(&upright, "render.skull_pose").shape, None);
+    assert_eq!(AdapterCatalog::served_version(NeedKind::Area, "render.skull_pose"), Some(1));
+    for entry in SKULL_COMMON {
+        let without: Vec<&str> = render_skull.iter().copied().filter(|name| *name != entry).collect();
+        assert_eq!(availability_of(&without, "render.skull_pose").missing, vec![entry]);
+    }
+}
+
+#[test]
+fn the_wire_rows_need_the_hooks_the_connection_walk_and_the_protocol() {
+    const WIRE: [&str; 11] = [
+        "NetworkSystem.sendInternal",
+        "NetworkSystem.isServer",
+        "NetworkSystem.mConnections",
+        "NetworkConnection.mPeer",
+        "NetworkConnection.mType",
+        "PacketTraceNetworkPeer.receivePacket",
+        "NetworkPeer.receivePacket",
+        "SharedConstants.NetworkProtocolVersion",
+        "ClientInstance.getGameConnectionInfo",
+        "GameConnectionInfo.size",
+        "GameConnectionInfo.dtor",
+    ];
+    for event in ["network.packet_wire", "network.connection_started"] {
+        assert_eq!(entries_of(event), WIRE);
+        assert_eq!(availability_of(&WIRE, event).kind, NeedKind::Event);
+        assert!(availability_of(&WIRE, event).shape.is_some());
+        let without: Vec<&str> = WIRE.iter().copied().filter(|name| *name != "NetworkConnection.mType").collect();
+        assert_eq!(availability_of(&without, event).missing, vec!["NetworkConnection.mType"]);
+    }
+}
+
+#[test]
+fn the_chunk_cache_and_protocol_rows_need_their_entries() {
+    const CACHE: [&str; 3] =
+        ["NetworkSystem.send", "ClientCacheStatusPacket.vtable", "ClientCacheStatusPacket.mEnabled"];
+    assert_eq!(entries_of("network.chunk_cache"), CACHE);
+    assert_eq!(availability_of(&CACHE, "network.chunk_cache").kind, NeedKind::Area);
+    assert!(availability_of(&CACHE, "network.chunk_cache").shape.is_some());
+    for entry in CACHE {
+        let without: Vec<&str> = CACHE.iter().copied().filter(|name| *name != entry).collect();
+        assert_eq!(availability_of(&without, "network.chunk_cache").missing, vec![entry]);
+    }
+    assert_eq!(entries_of("network.protocol"), ["SharedConstants.NetworkProtocolVersion"]);
+    assert!(availability_of(&["SharedConstants.NetworkProtocolVersion"], "network.protocol").shape.is_some());
+    assert_eq!(AdapterCatalog::served_version(NeedKind::Area, "network.chunk_cache"), Some(1));
+    assert_eq!(AdapterCatalog::served_version(NeedKind::Area, "network.protocol"), Some(1));
+}
+
+#[test]
+fn the_time_rows_need_their_entries() {
+    const TIME: [&str; 11] = [
+        "Timer.advanceTime",
+        "MinecraftGame.mSimTimer",
+        "MinecraftGame.mRealTimer",
+        "ClientInstance.mSimTimer",
+        "ClientInstance.mRealTimer",
+        "ParticleSystemEngine.tick",
+        "ParticleSystemEngine.mValid",
+        "ParticleSystemEngine.mLastTickTime",
+        "ParticleSystemEngine.mParticleCount",
+        "PredictedMovementSystem.tickPredictedMovement",
+        "SystemUniforms.mNow",
+    ];
+    assert_eq!(entries_of("time.control"), TIME);
+    assert_eq!(entries_of("time.step_applied"), TIME);
+    assert_eq!(availability_of(&TIME, "time.control").kind, NeedKind::Area);
+    assert_eq!(availability_of(&TIME, "time.step_applied").kind, NeedKind::Event);
+    for entry in TIME {
+        let without: Vec<&str> = TIME.iter().copied().filter(|name| *name != entry).collect();
+        assert_eq!(availability_of(&without, "time.control").missing, vec![entry]);
+    }
+    assert_eq!(AdapterCatalog::served_version(NeedKind::Area, "time.control"), Some(1));
+}
+
+#[test]
+fn the_frame_end_and_latency_barrier_rows_need_their_entries() {
+    const FRAME_END: [&str; 1] = ["MinecraftGame.endFrame"];
+    const BARRIER: [&str; 2] =
+        ["LegacyClientNetworkHandler.vtable", "ClientNetworkHandler.handle.NetworkStackLatencyPacket"];
+    assert_eq!(entries_of("time.frame_end"), FRAME_END);
+    assert_eq!(entries_of("time.latency_barrier"), BARRIER);
+    assert!(availability_of(&FRAME_END, "time.frame_end").shape.is_some());
+    assert!(availability_of(&BARRIER, "time.latency_barrier").shape.is_some());
+    assert_eq!(availability_of(&[], "time.frame_end").missing, FRAME_END);
+    assert_eq!(availability_of(&BARRIER[..1], "time.latency_barrier").missing, vec![BARRIER[1]]);
+}
+
+#[test]
+fn the_hide_actor_and_player_moved_rows_need_their_entries() {
+    const HIDE: [&str; 5] = [
+        "LevelRendererPlayer.vtable",
+        "LevelRendererPlayer.queueRenderEntities",
+        "LevelRendererCamera.mActorRenderQueue",
+        "ActorRenderDispatcher.render",
+        "ClientInstance.getLocalPlayer",
+    ];
+    const MOVED: [&str; 4] = [
+        "LegacyClientNetworkHandler.vtable",
+        "ClientNetworkHandler.handle.MovePlayerPacket",
+        "Actor.getRuntimeID",
+        "ClientInstance.getLocalPlayer",
+    ];
+    assert_eq!(entries_of("camera.hide_actor"), HIDE);
+    assert_eq!(entries_of("player.moved"), MOVED);
+    assert!(availability_of(&HIDE, "camera.hide_actor").shape.is_some());
+    assert!(availability_of(&MOVED, "player.moved").shape.is_some());
+    assert_eq!(availability_of(&HIDE[..3], "camera.hide_actor").missing, vec![HIDE[3], HIDE[4]]);
+    assert_eq!(availability_of(&MOVED[..2], "player.moved").missing, vec![MOVED[2], MOVED[3]]);
+}
+
+#[test]
+fn server_join_starting_v2_needs_the_external_world_slot_and_join_multiplayer_with_address() {
+    let all = entries_of("world.server_join_starting");
+    for entry in [
+        "ClientInstance.startExternalNetworkWorld",
+        "ClientInstance.vtable",
+        "MinecraftGame.joinMultiplayerWithAddress",
+        "MinecraftGame.vtable",
+        "GameConnectionInfo.size",
+    ] {
+        assert!(all.contains(&entry), "{entry}: {all:?}");
+    }
+    assert_eq!(AdapterCatalog::served_version(NeedKind::Event, "world.server_join_starting"), Some(2));
+    let without: Vec<&str> =
+        all.iter().copied().filter(|entry| *entry != "MinecraftGame.joinMultiplayerWithAddress").collect();
+    let row = availability_of(&without, "world.server_join_starting");
+    assert_eq!((row.shape, row.missing), (None, vec!["MinecraftGame.joinMultiplayerWithAddress"]));
+}
+
+#[test]
+fn the_direct_join_area_needs_the_games_connect_by_address_and_the_client_vtable() {
+    let all = entries_of("client.join_server_direct");
+    assert_eq!(all, ["ClientInstance.connectByAddress", "ClientInstance.connectByAddressThis"]);
+    let need = AdapterCatalog::needs().iter().find(|need| need.id == "client.join_server_direct").unwrap();
+    assert_eq!((need.kind, need.version), (NeedKind::Area, 1));
+}
+
+#[test]
+fn the_title_rows_need_the_router_hooks_and_the_client_router() {
+    assert_eq!(entries_of("client.title_screen"), ["OreUIRouter.pushRoute", "OreUIRouter.replaceRoute"]);
+    assert_eq!(entries_of("client.go_to_title"), ["ClientInstance.getCurrentUIRouter", "OreUIRouter.pushRoute"]);
+    for id in ["client.title_screen", "client.go_to_title"] {
+        let need = AdapterCatalog::needs().iter().find(|need| need.id == id).unwrap();
+        assert_eq!((need.kind, need.version), (NeedKind::Area, 1), "{id}");
+    }
+}
+
+#[test]
+fn the_hit_result_row_needs_the_level_of_the_player_and_its_hit_result_slot() {
+    assert_eq!(entries_of("player.hit_result"), ["Actor.mLevel", "Level.getHitResult"]);
+    let need = AdapterCatalog::needs().iter().find(|need| need.id == "player.hit_result").unwrap();
+    assert_eq!((need.kind, need.version), (NeedKind::Area, 1));
 }

@@ -58,6 +58,28 @@ pub type ClientWorldTextFn = unsafe extern "C" fn(
     cap: usize,
     out_len: *mut usize,
 ) -> AmmlStatus;
+/// Passes on to the game the app focus loss that `module` holds (area `client.focus_replay`): the game's handler runs
+/// once, past the loader's detour, and no `AppFocusLost` is raised. A loss is held by the first mod whose listener
+/// cancelled it, only: a later mod that cancels the same loss holds nothing. With no held loss of `module` (none
+/// cancelled, another mod cancelled first, a focus gain since, or already replayed) it gives `OK` and runs nothing. `REFUSED` off the game
+/// thread or for a client that is not the primary client.
+pub type ClientReplayAppFocusLostFn = unsafe extern "C" fn(module: AmmlStr, client: *const c_void) -> AmmlStatus;
+
+/// Gives 1 in `out` when the client shows the title screen (area `client.title_screen`): no world is joined, the last
+/// route the game's Ore UI router took (`_pushRoute` or `replaceRoute` gave true; a route it refused does not count)
+/// is the main menu (`/main-menu`, with or without a query), and that route has stood for 30 frames with no later
+/// route taken, so the page is drawn. A back navigation does not pass through those two router functions, so the read
+/// can stay 0 on a title reached by going back. `REFUSED` off the game thread or for a client that is not the primary
+/// client.
+pub type ClientTitleScreenFn = unsafe extern "C" fn(client: *const c_void, out: *mut u8) -> AmmlStatus;
+/// Goes back to the title screen (area `client.go_to_title`): pushes the game's own route
+/// `/main-menu/?shouldFlushStack=true` (mode 0) through the client's current Ore UI router, which empties the menu
+/// stack. `REFUSED` while a world is joined or when the router refuses the route.
+pub type ClientGoToTitleFn = unsafe extern "C" fn(client: *const c_void) -> AmmlStatus;
+
+/// Gives 1 in `out` when the game says a world is being played (area `client.in_gameplay`, `MinecraftGame::isInGame`).
+/// Game thread only; `REFUSED` for a client that is not the primary client.
+pub type ClientInGameplayFn = unsafe extern "C" fn(client: *const c_void, out: *mut u8) -> AmmlStatus;
 
 /// The client functions of `AmmlServices`. The table only grows: a function added later is appended as an `Option`,
 /// `size` and `version` grow, and `read` copies only what `size` covers (a later function of an older table is
@@ -86,6 +108,21 @@ pub struct AmmlClientTable {
     pub world_info: Option<ClientWorldInfoFn>,
     /// From v4.
     pub world_text: Option<ClientWorldTextFn>,
+    /// From v5.
+    pub replay_app_focus_lost: Option<ClientReplayAppFocusLostFn>,
+    /// From v6.
+    pub in_gameplay: Option<ClientInGameplayFn>,
+    /// From v7. Joins the server at the address literal `host` (IPv4 or IPv6; a host name gives `INVALID_ARGUMENT`),
+    /// port `port`, through the game's own `ClientInstance.connectByAddress` (area `client.join_server_direct`), which
+    /// builds the connection info (type `UnknownIP`, transport 4) and the join context and passes them to
+    /// `startExternalNetworkWorld`; `name` is not used. The answer is a `JoinServerResult` with `OTHER` once the
+    /// game took the join, because the game's call has no result; a `join_server` join that still waits is answered
+    /// `OTHER` and replaced. `REFUSED` in a world.
+    pub join_server_direct: Option<ClientJoinServerFn>,
+    /// From v8.
+    pub title_screen: Option<ClientTitleScreenFn>,
+    /// From v8.
+    pub go_to_title: Option<ClientGoToTitleFn>,
 }
 
 impl AmmlClientTable {
@@ -97,6 +134,14 @@ impl AmmlClientTable {
     pub const SIZE_V3: u32 = 120;
     /// `size` of a v4 client table: v3 plus `world_info` and `world_text`.
     pub const SIZE_V4: u32 = 136;
+    /// `size` of a v5 client table: v4 plus `replay_app_focus_lost`.
+    pub const SIZE_V5: u32 = 144;
+    /// `size` of a v6 client table: v5 plus `in_gameplay`.
+    pub const SIZE_V6: u32 = 152;
+    /// `size` of a v7 client table: v6 plus `join_server_direct`.
+    pub const SIZE_V7: u32 = 160;
+    /// `size` of a v8 client table: v7 plus `title_screen` and `go_to_title`.
+    pub const SIZE_V8: u32 = 176;
 
     /// A copy of the table at `table`, read as far as its own `size` covers; a later field is `None`. A null
     /// table, or one shorter than v1, gives `None`.
@@ -124,4 +169,4 @@ impl AmmlClientTable {
     }
 }
 
-const _: () = assert!(core::mem::size_of::<AmmlClientTable>() == AmmlClientTable::SIZE_V4 as usize);
+const _: () = assert!(core::mem::size_of::<AmmlClientTable>() == AmmlClientTable::SIZE_V8 as usize);

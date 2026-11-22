@@ -1,14 +1,16 @@
 use std::ffi::c_void;
 use std::sync::{Arc, Mutex};
 
-use amml::{ModListener, NetworkAdapter};
+use amml::{ModListener, ModLoader, NetworkAdapter};
 use amml_abi::{
     AmmlApi, AmmlBand, AmmlEventContext, AmmlEventHeader, AmmlImageView, AmmlNetworkTable, AmmlPlayerListEntry,
     AmmlServices, AmmlStatus, AmmlStr, AmmlThread, NETWORK_TEXT_NAME, NETWORK_TEXT_XUID, PlayerListUpdate,
     PlayerSkinChanged,
 };
 
-use crate::support::{Harness, HeapProbe, NetworkGame, SkinSpec};
+use amml_runtime::ModRegistry;
+
+use crate::support::{EventsMod, Harness, HeapProbe, NetworkGame, SkinSpec};
 
 const UUID_A: [u8; 16] = [0xa1; 16];
 const UUID_B: [u8; 16] = [0xb2; 16];
@@ -505,4 +507,110 @@ fn the_event_runs_on_the_thread_of_the_handler() {
     let seen = seen.lock().unwrap().clone();
     assert_eq!(seen[0], (AmmlThread::NETWORK, true));
     assert_eq!(seen[1].0, AmmlThread::GAME);
+}
+
+const EVENTS: &str = "@events/events";
+const PROVIDER: &str = "@events/events-provider";
+
+fn protocol(table: &AmmlNetworkTable) -> (AmmlStatus, u32) {
+    let mut out = 0xEE;
+    // SAFETY: the table is live; `out` is writable.
+    let status = unsafe { (table.protocol_version.unwrap())(&mut out) };
+    (status, out)
+}
+
+fn wish(table: &AmmlNetworkTable, module: &str, enabled: u8) -> AmmlStatus {
+    // SAFETY: the table is live; the view lives for the call.
+    unsafe { (table.set_client_chunk_cache.unwrap())(AmmlStr::from_str(module), enabled) }
+}
+
+// The two events-mod fixtures as mods 0 and 1.
+fn enable_mods(harness: &Harness) -> ModLoader {
+    let plain = EventsMod::build("plain", &[]);
+    harness.install_mod("events", "events", &plain, "events.dll", 3);
+    let provider = EventsMod::build("provider", &["provider"]);
+    harness.install_mod("events", "events-provider", &provider, "events_provider.dll", 3);
+    let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
+    let loader = ModLoader::new(harness.state);
+    assert!(loader.load_all(&scan.mods).iter().all(|report| report.is_ok()));
+    loader.enable_all();
+    loader
+}
+
+// The harness with the cache rows, two enabled mods, and the calling thread as the game thread of an open gate.
+fn start_cache() -> (Harness, ModLoader) {
+    let harness = start();
+    let loader = enable_mods(&harness);
+    harness.state.events().gate().open();
+    harness.state.events().gate().note_game_thread();
+    (harness, loader)
+}
+
+#[test]
+fn protocol_reads_the_derived_value() {
+    let harness = start();
+    let table = table(&harness);
+    assert_eq!(table.size, AmmlNetworkTable::SIZE_V2);
+
+    assert_eq!(protocol(&table), (AmmlStatus::OK, NetworkGame::PROTOCOL as u32));
+    // Any thread, with the gate shut.
+    let off_thread = std::thread::spawn(move || protocol(&table)).join().unwrap();
+    assert_eq!(off_thread, (AmmlStatus::OK, NetworkGame::PROTOCOL as u32));
+    // SAFETY: the table is live; a null out is refused before it is written.
+    assert_eq!(unsafe { (table.protocol_version.unwrap())(std::ptr::null_mut()) }, AmmlStatus::INVALID_ARGUMENT);
+}
+
+#[test]
+fn a_build_without_the_protocol_entry_does_not_offer_the_area() {
+    let entries: Vec<_> = NetworkGame::entries()
+        .into_iter()
+        .filter(|(name, _)| *name != "SharedConstants.NetworkProtocolVersion")
+        .collect();
+    let harness = start_with(&entries);
+    let table = table(&harness);
+
+    assert!(!harness.state.areas().is_available("network.protocol", 1));
+    assert_eq!(protocol(&table).0, AmmlStatus::NOT_AVAILABLE);
+}
+
+#[test]
+fn only_the_cache_status_packet_is_edited() {
+    let (harness, _loader) = start_cache();
+    let table = table(&harness);
+    assert!(harness.state.areas().is_available("network.chunk_cache", 1));
+
+    // With no wish the game's own value goes out, and no detour work runs.
+    assert_eq!(NetworkGame::send(NetworkGame::packet(true, 1)), 1);
+
+    // A wish for the cache on changes nothing.
+    assert_eq!(wish(&table, EVENTS, 1), AmmlStatus::OK);
+    assert_eq!(NetworkGame::send(NetworkGame::packet(true, 1)), 1);
+
+    // One mod wishing it off makes every status packet carry 0; a packet of another type keeps its byte.
+    assert_eq!(wish(&table, PROVIDER, 0), AmmlStatus::OK);
+    assert_eq!(NetworkGame::send(NetworkGame::packet(true, 1)), 0);
+    assert_eq!(NetworkGame::send(NetworkGame::packet(false, 1)), 1);
+    assert_eq!(NetworkGame::send(NetworkGame::packet(true, 0)), 0);
+
+    // The same mod changes its wish to on: the game's value goes out again.
+    assert_eq!(wish(&table, PROVIDER, 1), AmmlStatus::OK);
+    assert_eq!(NetworkGame::send(NetworkGame::packet(true, 1)), 1);
+    assert_eq!(NetworkGame::sent(), 6);
+}
+
+#[test]
+fn the_disable_of_a_mod_ends_its_wish_and_the_calls_check_their_conditions() {
+    let (harness, loader) = start_cache();
+    let table = table(&harness);
+
+    assert_eq!(wish(&table, "@nobody/nothing", 0), AmmlStatus::INVALID_ARGUMENT);
+    assert_eq!(NetworkGame::send(NetworkGame::packet(true, 1)), 1);
+    let off_thread = std::thread::spawn(move || wish(&table, EVENTS, 0)).join().unwrap();
+    assert_eq!(off_thread, AmmlStatus::REFUSED);
+    assert_eq!(NetworkGame::send(NetworkGame::packet(true, 1)), 1);
+
+    assert_eq!(wish(&table, EVENTS, 0), AmmlStatus::OK);
+    assert_eq!(NetworkGame::send(NetworkGame::packet(true, 1)), 0);
+    loader.disable_one(0);
+    assert_eq!(NetworkGame::send(NetworkGame::packet(true, 1)), 1);
 }

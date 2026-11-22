@@ -56,3 +56,36 @@ entry "BlockGraphics.mRenderLayer" {
     max = 40
   }
 }
+
+entry "BlockGraphics.mBlockShape" {
+  kind  = "field"
+  notes = "Offset of BlockShape BlockGraphics::mBlockShape (a 4-byte enum): 10h on 26.63 (6aed1906-b127418e74d2f2f9) and 70.26 (6afa4e47-dadc375797a3d31a); 26.51 header order: vptr, mBlock 8, mBlockShape 10h. Recipe 0 is BlockTessellator::tessellateInWorld right after its BlockGraphics.getForBlock call: `test rax,rax; je; mov ecx,[rax+10h]; xor ebp,ebp; mov [rsp+..],ecx; mov [rsi+..],r15b`; the value it loads is the switch index of the shape jump table that follows (`cmp rcx,9Eh; ja; lea rdx,[rip+..]; movsxd rcx,[rdx+rcx*4]`, 159 shapes on both builds). It starts after the call and reads the load displacement. Recipe 1 is another getForBlock caller (0x2544780 on 26.63, 0x372ec40 on 70.26) right after the call: `test rax,rax; je; mov eax,[rax+10h]; cmp eax,-1; je; cmp eax,6Ah; je; mov rax,[r14+..]; movss xmm8,[rax+..]` (it skips the Invisible shape -1 and shape 6Ah); it reads the load displacement. The two recipes are in two functions and share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. Range window 8..30h. Not derived on builds before 26.63. No build gate: the same member on both builds."
+
+  recipe {
+    step "ref" { entry = "BlockTessellator.tessellateInWorld" }
+    step "pattern" {
+      bytes  = "48 85 C0 74 ?? 8B 48 ?? 31 ED 89 4C 24 ?? 44 88 BE ?? ?? ?? ??"
+      offset = 5
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "48 85 C0 0F 84 ?? ?? ?? ?? 8B 40 ?? 83 F8 ?? 0F 84 ?? ?? ?? ?? 83 F8 ?? 0F 84 ?? ?? ?? ?? 49 8B 86 ?? ?? ?? ?? F3 44 0F 10 40 ??"
+      offset = 9
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 8
+    max = 48
+  }
+}

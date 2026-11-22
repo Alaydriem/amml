@@ -8,8 +8,8 @@ use amml_runtime::{EventBus, ListenError, ListenerId, ProviderRegistry};
 use crate::Area;
 use crate::testing::{
     FakeCameraFree, FakeCameraState, FakeChatBook, FakeClient, FakeInput, FakeInventory, FakeItemBook, FakeLighting,
-    FakeListener, FakeNetwork, FakeOverlay, FakePhase, FakeRender, FakeRequests, FakeShapes, FakeTextureBook, FakeUi,
-    FakeWindow,
+    FakeListener, FakeNetwork, FakeOptionsState, FakeOverlay, FakePhase, FakeRender, FakeRequests, FakeShapes,
+    FakeTextureBook, FakeTime, FakeUi, FakeWindow,
 };
 
 thread_local! {
@@ -41,11 +41,24 @@ pub(crate) struct FakeState {
     client: RefCell<Option<FakeClient>>,
     // The chunk positions the fake gave handles for, in the order of their handles.
     chunks: RefCell<Vec<(i32, i32)>>,
+    // The block positions the fake gave block handles for, in the order of their handles.
+    blocks: RefCell<Vec<crate::BlockPos>>,
+    // The token and the new state of the `BlockChanged` event that runs; `None` outside the raise.
+    changed: Cell<Option<(u32, crate::BlockHandle)>>,
+    last_changed_token: Cell<u32>,
     inventory: Cell<FakeInventory>,
     lighting: FakeLighting,
     client_writes: RefCell<Vec<String>>,
+    rotation_writes: RefCell<Vec<(crate::Rotation, Option<f32>)>>,
+    // Each `GameMode::build_at` the game took: `build_at x,y,z face=up`.
+    builds: RefCell<Vec<String>>,
+    // Each `Blocks::rotated` call: the handle and the quarter count after the modulo.
+    block_rotations: RefCell<Vec<(crate::BlockHandle, u8)>>,
     // The id the next `join_server` gives.
     next_join: Cell<u64>,
+    // A focus loss a listener cancelled and nothing has replayed or ended; the fake has one mod.
+    focus_held: Cell<bool>,
+    focus_replays: Cell<u32>,
     input: FakeInput,
     window: Cell<Option<FakeWindow>>,
     window_requests: RefCell<Vec<String>>,
@@ -57,9 +70,12 @@ pub(crate) struct FakeState {
     requests: FakeRequests,
     network: FakeNetwork,
     render: FakeRender,
+    block_entities: crate::testing::FakeBlockEntities,
     camera: FakeCameraState,
     camera_free: FakeCameraFree,
+    options: FakeOptionsState,
     shapes: FakeShapes,
+    time: FakeTime,
 }
 
 impl FakeState {
@@ -76,6 +92,8 @@ impl FakeState {
     const CHUNK_BASE: usize = 0x5000_0000;
     const CHUNK_SPAN: usize = 0x10_0000;
     const CHUNK_STRIDE: usize = 8;
+    /// Where the block handles of the fakes start; laid out as the chunk handles.
+    const BLOCK_BASE: usize = 0x6000_0000;
     /// The held stack handle is the player handle plus this.
     const STACK_OFFSET: usize = 0x10;
     /// The slot stack handles start at the client handle plus this and are this far apart (36 of them fit in the
@@ -100,10 +118,18 @@ impl FakeState {
             areas: RefCell::new(vec![(Area::INPUT_LEASE.id, Area::INPUT_LEASE.version)]),
             client: RefCell::new(None),
             chunks: RefCell::new(Vec::new()),
+            blocks: RefCell::new(Vec::new()),
+            changed: Cell::new(None),
+            last_changed_token: Cell::new(0),
             inventory: Cell::new(FakeInventory::default()),
             lighting: FakeLighting::default(),
             client_writes: RefCell::new(Vec::new()),
+            rotation_writes: RefCell::new(Vec::new()),
+            builds: RefCell::new(Vec::new()),
+            block_rotations: RefCell::new(Vec::new()),
             next_join: Cell::new(1),
+            focus_held: Cell::new(false),
+            focus_replays: Cell::new(0),
             input: FakeInput::new(tag),
             window: Cell::new(None),
             window_requests: RefCell::new(Vec::new()),
@@ -115,9 +141,12 @@ impl FakeState {
             requests: FakeRequests::default(),
             network: FakeNetwork::default(),
             render: FakeRender::default(),
+            block_entities: crate::testing::FakeBlockEntities::default(),
             camera: FakeCameraState::default(),
             camera_free: FakeCameraFree::default(),
+            options: FakeOptionsState::default(),
             shapes: FakeShapes::default(),
+            time: FakeTime::default(),
         }
     }
 
@@ -149,8 +178,20 @@ impl FakeState {
         &self.render
     }
 
+    pub(crate) fn block_entities(&self) -> &crate::testing::FakeBlockEntities {
+        &self.block_entities
+    }
+
     pub(crate) fn camera(&self) -> &FakeCameraState {
         &self.camera
+    }
+
+    pub(crate) fn options(&self) -> &FakeOptionsState {
+        &self.options
+    }
+
+    pub(crate) fn time(&self) -> &FakeTime {
+        &self.time
     }
 
     pub(crate) fn camera_free(&self) -> &FakeCameraFree {
@@ -163,6 +204,26 @@ impl FakeState {
 
     pub(crate) fn lighting(&self) -> &FakeLighting {
         &self.lighting
+    }
+
+    /// The world of the client for a block state call of the area `area`: `NOT_READY` with the gate shut or no world
+    /// joined (epoch 0), `NOT_AVAILABLE` without the area, `FAILED` for a client with no `FakeWorld`.
+    pub(crate) fn block_world(&self, area: Area) -> Result<crate::testing::FakeWorld, AmmlStatus> {
+        if !self.gate.get() || self.epoch.get() == 0 {
+            return Err(AmmlStatus::NOT_READY);
+        }
+        if !self.area_offered(area.id, area.version) {
+            return Err(AmmlStatus::NOT_AVAILABLE);
+        }
+        self.client.borrow().as_ref().and_then(|client| client.world.clone()).ok_or(AmmlStatus::FAILED)
+    }
+
+    pub(crate) fn note_block_rotation(&self, block: crate::BlockHandle, quarters: u8) {
+        self.block_rotations.borrow_mut().push((block, quarters));
+    }
+
+    pub(crate) fn block_rotations(&self) -> Vec<(crate::BlockHandle, u8)> {
+        self.block_rotations.borrow().clone()
     }
 
     /// The handle of the off-hand stack of the local player; never read as memory.
@@ -242,6 +303,7 @@ impl FakeState {
     pub(crate) fn set_client(&self, client: FakeClient) {
         *self.client.borrow_mut() = Some(client);
         self.chunks.borrow_mut().clear();
+        self.blocks.borrow_mut().clear();
     }
 
     pub(crate) fn set_inventory(&self, inventory: FakeInventory) {
@@ -275,6 +337,46 @@ impl FakeState {
             return None;
         }
         self.chunks.borrow().get(offset / Self::CHUNK_STRIDE).copied()
+    }
+
+    /// A token for the next `BlockChanged` raise: never 0, never the same twice.
+    pub(crate) fn next_changed_token(&self) -> u32 {
+        let token = self.last_changed_token.get().wrapping_add(1).max(1);
+        self.last_changed_token.set(token);
+        token
+    }
+
+    /// Sets the token and new state of the `BlockChanged` event that runs, and gives the pair that was set before.
+    pub(crate) fn replace_changed_state(
+        &self,
+        running: Option<(u32, crate::BlockHandle)>,
+    ) -> Option<(u32, crate::BlockHandle)> {
+        self.changed.replace(running)
+    }
+
+    /// The token and new state of the `BlockChanged` event that runs.
+    pub(crate) fn changed_state(&self) -> Option<(u32, crate::BlockHandle)> {
+        self.changed.get()
+    }
+
+    /// A handle for the block at `pos`; never read as memory. The handles of the fake stay valid until the next
+    /// `set_client`.
+    pub(crate) fn block_handle(&self, pos: crate::BlockPos) -> usize {
+        let mut blocks = self.blocks.borrow_mut();
+        let index = blocks.iter().position(|at| *at == pos).unwrap_or_else(|| {
+            blocks.push(pos);
+            blocks.len() - 1
+        });
+        Self::BLOCK_BASE + (self.tag as usize) * Self::CHUNK_SPAN + index * Self::CHUNK_STRIDE
+    }
+
+    /// The block position a handle names; `None` for a handle this fake did not give.
+    pub(crate) fn block_of_handle(&self, handle: usize) -> Option<crate::BlockPos> {
+        let offset = handle.checked_sub(Self::BLOCK_BASE + (self.tag as usize) * Self::CHUNK_SPAN)?;
+        if offset % Self::CHUNK_STRIDE != 0 {
+            return None;
+        }
+        self.blocks.borrow().get(offset / Self::CHUNK_STRIDE).copied()
     }
 
     /// The handle of the fake client; unique per fake, never read as memory.
@@ -321,8 +423,53 @@ impl FakeState {
         id
     }
 
+    /// Records a focus loss that a listener cancelled.
+    pub(crate) fn hold_focus_loss(&self) {
+        self.focus_held.set(true);
+    }
+
+    /// A focus gain: the held loss is forgotten.
+    pub(crate) fn forget_focus_loss(&self) {
+        self.focus_held.set(false);
+    }
+
+    /// Takes the held loss for a replay and counts the replay; false when none was held.
+    pub(crate) fn replay_focus_loss(&self) -> bool {
+        if !self.focus_held.replace(false) {
+            return false;
+        }
+        self.focus_replays.set(self.focus_replays.get() + 1);
+        true
+    }
+
+    pub(crate) fn focus_replays(&self) -> u32 {
+        self.focus_replays.get()
+    }
+
     pub(crate) fn client_writes(&self) -> Vec<String> {
         self.client_writes.borrow().clone()
+    }
+
+    /// Records a `set_rotation` and makes the fake client's rotation the written one.
+    pub(crate) fn write_rotation(&self, rotation: crate::Rotation, head_yaw: Option<f32>) {
+        if let Some(client) = self.client.borrow_mut().as_mut() {
+            client.rotation = Some(rotation);
+        }
+        self.rotation_writes.borrow_mut().push((rotation, head_yaw));
+    }
+
+    /// Records a `build_at` the game took.
+    pub(crate) fn record_build(&self, pos: crate::BlockPos, face: crate::Face) {
+        let face = format!("{face:?}").to_lowercase();
+        self.builds.borrow_mut().push(format!("build_at {},{},{} face={face}", pos.x, pos.y, pos.z));
+    }
+
+    pub(crate) fn builds(&self) -> Vec<String> {
+        self.builds.borrow().clone()
+    }
+
+    pub(crate) fn rotation_writes(&self) -> Vec<(crate::Rotation, Option<f32>)> {
+        self.rotation_writes.borrow().clone()
     }
 
     /// Makes `state` the fake loader of this thread. False when the thread already has one.

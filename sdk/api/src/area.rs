@@ -47,22 +47,46 @@ impl Area {
     pub const CLIENT_START_LOCAL_WORLD: Self = Self::v1("client.start_local_world");
     /// `Client::join_server` and the `JoinServerResult` event.
     pub const CLIENT_JOIN_SERVER: Self = Self::v1("client.join_server");
+    /// `Client::join_server_direct`; its answer is the `JoinServerResult` of `CLIENT_JOIN_SERVER`.
+    pub const CLIENT_JOIN_SERVER_DIRECT: Self = Self::v1("client.join_server_direct");
     /// `Client::open_menu`.
     pub const CLIENT_OPEN_MENU: Self = Self::v1("client.open_menu");
+    /// `Client::on_title_screen`: whether the client shows the title screen (no world, the router's last route the
+    /// main menu).
+    pub const CLIENT_TITLE_SCREEN: Self = Self::v1("client.title_screen");
+    /// `Client::go_to_title`: back to the title screen with the menu stack emptied.
+    pub const CLIENT_GO_TO_TITLE: Self = Self::v1("client.go_to_title");
+    /// `LocalPlayer::hit_result`: what the crosshair points at, from the game's own hit result.
+    pub const PLAYER_HIT_RESULT: Self = Self::v1("player.hit_result");
     /// `Client::send_command`.
     pub const CLIENT_SEND_COMMAND: Self = Self::v1("client.send_command");
     /// `Hud::select_hotbar_slot`, served through the client table.
     pub const HUD_SELECT_HOTBAR: Self = Self::v1("hud.select_hotbar");
+    /// `Client::replay_app_focus_lost`: the game's handler of an app focus loss that a listener cancelled.
+    pub const CLIENT_FOCUS_REPLAY: Self = Self::v1("client.focus_replay");
+    /// `Client::in_gameplay`: whether the game says a world is being played (`MinecraftGame::isInGame`).
+    pub const CLIENT_IN_GAMEPLAY: Self = Self::v1("client.in_gameplay");
     /// `Client::note_activity`: the game's any-input handler, with no input event.
     pub const CLIENT_ACTIVITY: Self = Self::v1("client.activity");
     /// `Client::world_info`: the storage folder, level name, seed, realm flag, commands flag and connection of the
     /// joined world.
     pub const CLIENT_WORLD_INFO: Self = Self::v1("client.world_info");
     /// `LocalPlayer::is_alive` (version 1). Version 2 (`Area::ACTOR_READ.at(2)`) adds `position`, `eye_position`,
-    /// `rotation` and `dimension`; version 3 (`Area::ACTOR_READ.at(3)`) adds `head_position` and `block_source`.
+    /// `rotation` and `dimension`; version 3 (`Area::ACTOR_READ.at(3)`) adds `head_position` and `block_source`;
+    /// version 4 (`Area::ACTOR_READ.at(4)`) adds `view_vector` and `aabb`.
     pub const ACTOR_READ: Self = Self::v1("actor.read");
     /// `LocalPlayer::health`.
     pub const ACTOR_HEALTH: Self = Self::v1("actor.health");
+    /// `LocalPlayer::game_type`.
+    pub const ACTOR_GAME_TYPE: Self = Self::v1("actor.game_type");
+    /// `LocalPlayer::permission_level`.
+    pub const ACTOR_PERMISSION: Self = Self::v1("actor.permission");
+    /// `LocalPlayer::set_rotation`.
+    pub const ACTOR_LOOK_WRITE: Self = Self::v1("actor.look_write");
+    /// `GameMode::build_at` and `GameMode::build_delay`.
+    pub const PLAYER_BUILD: Self = Self::v1("player.build");
+    /// `GameMode::max_pick_range`.
+    pub const PLAYER_PICK_RANGE: Self = Self::v1("player.pick_range");
     /// `Dimension::sky_darken`.
     pub const WORLD_SKY_DARKEN: Self = Self::v1("world.sky_darken");
     /// `BlockSource::chunk`, `LevelChunk::{load_state, read_columns}` and `Blocks::type_name`.
@@ -80,9 +104,33 @@ impl Area {
     pub const WORLD_RAYCAST: Self = Self::v1("world.raycast");
     /// `BlockSource::actors_in`.
     pub const WORLD_ACTORS_IN: Self = Self::v1("world.actors_in");
+    /// `Blocks::{from_state, rotated, name, item}`: block states as owned `BlockHandle`s.
+    pub const WORLD_BLOCK_STATES: Self = Self::v1("world.block_states");
+    /// `BlockSource::block` and the `Block` reads: type, name, air, built over, interactive, item and handle. The
+    /// name and type id need `WORLD_CHUNK_READ` for `Blocks::type_name`.
+    pub const WORLD_BLOCKS: Self = Self::v1("world.blocks");
+    /// `BlockSource::kinds_in_box`: the distinct block types of a box. Needs `WORLD_CHUNK_READ` for the type names.
+    pub const WORLD_KINDS_IN_BOX: Self = Self::v1("world.kinds_in_box");
     /// `WorldRenderedExt::canvas`, `WorldCanvas::camera_position` and `WorldCanvas::free` (version 1). Version 2
-    /// (`Area::RENDER_WORLD_CANVAS.at(2)`) adds `WorldCanvas::build` and `WorldCanvas::draw`.
+    /// (`Area::RENDER_WORLD_CANVAS.at(2)`) adds `WorldCanvas::build` and `WorldCanvas::draw`. Version 3
+    /// (`Area::RENDER_WORLD_CANVAS.at(3)`) adds `WorldCanvas::clip_matrix` and the draw of block meshes
+    /// (`MeshStyle::GHOST`).
     pub const RENDER_WORLD_CANVAS: Self = Self::v1("render.world_canvas");
+    /// `WorldRenderedExt::mesher` and `BlockMesher::build`: a grid of blocks built into a ghost mesh with the game's block
+    /// tessellator. Offered only with `RENDER_WORLD_CANVAS.at(3)`, which draws the mesh.
+    pub const RENDER_BLOCK_MESHER: Self = Self::v1("render.block_mesher");
+    /// `MesherOptions::water_tint`: water cells of a block mesh take the biome colour of their chunk. Offered only with
+    /// `RENDER_BLOCK_MESHER`; without it water stays the texture's grey.
+    pub const RENDER_WATER_TINT: Self = Self::v1("render.water_tint");
+    /// `Ctx::block_entities` and `BlockEntityPassExt::draw_block_entity`: block entity ghosts, the game's own block
+    /// actors drawn in the `BlockEntityPass`.
+    pub const RENDER_BLOCK_ENTITIES: Self = Self::v1("render.block_entities");
+    /// `GhostEntityOptions::chest_pair`: a chest ghost made the lead of a large chest. Offered only with
+    /// `RENDER_BLOCK_ENTITIES`.
+    pub const RENDER_CHEST_PAIR: Self = Self::v1("render.chest_pair");
+    /// `GhostEntityOptions::skull`: a skull ghost drawn with a face and a turn. Offered only with
+    /// `RENDER_BLOCK_ENTITIES`.
+    pub const RENDER_SKULL_POSE: Self = Self::v1("render.skull_pose");
     /// `Camera::set_pose` and `Camera::rendered_position` of a `CameraSetup` camera.
     pub const CAMERA_POSE: Self = Self::v1("camera.pose");
     /// `Camera::projection` of a `CameraSetup` camera.
@@ -91,7 +139,16 @@ impl Area {
     pub const CAMERA_FREE: Self = Self::v1("camera.free");
     /// `CameraControl::active_camera`: which vanilla camera the client shows the world through.
     pub const CAMERA_ACTIVE: Self = Self::v1("camera.active");
-    /// `Inventory::request_moves` and `Inventory::request_swap`, with the `InventoryRequestDone` event.
+    /// `CameraControl::hide_actor`: hide the local player's body.
+    pub const CAMERA_HIDE_ACTOR: Self = Self::v1("camera.hide_actor");
+    /// `Options::view_distance_chunks`.
+    pub const OPTIONS_VIEW_DISTANCE: Self = Self::v1("options.view_distance");
+    /// `Options::get_int`, `set_int` and `release_transient`.
+    pub const OPTIONS_INT: Self = Self::v1("options.int");
+    /// `Time::hold`, `TimeHold::step_us` and the `Time` reads, with the `TimeStepApplied` event.
+    pub const TIME_CONTROL: Self = Self::v1("time.control");
+    /// `Inventory::request_moves` and `Inventory::request_swap`, with the `InventoryRequestDone` event. Version 2
+    /// (`Area::INVENTORY_REQUEST.at(2)`) adds `Inventory::request_pick`.
     pub const INVENTORY_REQUEST: Self = Self::v1("inventory.request");
     /// `LocalPlayer::held_item`, `LocalPlayer::inventory` and the `ItemView` and `Inventory` reads. Version 2 adds
     /// the off hand and the block of an item; version 3 (`Area::INVENTORY_READ.at(3)`) adds `Inventory::slot`,
@@ -124,6 +181,10 @@ impl Area {
     pub const NETWORK_SKIN_GEOMETRY: Self = Self::v1("network.skin_geometry");
     /// `SkinRef::is_persona`, `SkinRef::is_premium` and `SkinRef::resource_patch`.
     pub const NETWORK_SKIN_DETAILS: Self = Self::v1("network.skin_details");
+    /// `Network::set_client_chunk_cache`: the client's chunk cache status packet, edited before it is sent.
+    pub const NETWORK_CHUNK_CACHE: Self = Self::v1("network.chunk_cache");
+    /// `Network::protocol_version`: the network protocol number of the build.
+    pub const NETWORK_PROTOCOL: Self = Self::v1("network.protocol");
 
     /// The same area at table version `version`: the lowest version that serves every call the mod makes. A call
     /// appended to an area's table in a later loader names its version; a mod that makes it declares
@@ -154,7 +215,7 @@ impl Area {
 
     /// Whether the area is served through the actor table.
     pub(crate) fn is_actor(&self) -> bool {
-        self.id.starts_with("actor.")
+        self.id.starts_with("actor.") || self.id.starts_with("player.")
     }
 
     /// Whether the area is served through the inventory table.
@@ -190,6 +251,16 @@ impl Area {
     /// Whether the area is served through the camera table.
     pub(crate) fn is_camera(&self) -> bool {
         self.id.starts_with("camera.")
+    }
+
+    /// Whether the area is served through the options table.
+    pub(crate) fn is_options(&self) -> bool {
+        self.id.starts_with("options.")
+    }
+
+    /// Whether the area is served through the time table.
+    pub(crate) fn is_time(&self) -> bool {
+        self.id.starts_with("time.")
     }
 
     /// Whether the area is served through the overlay table.

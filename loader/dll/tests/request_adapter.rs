@@ -2,13 +2,13 @@ use std::ffi::c_void;
 use std::hint::black_box;
 use std::sync::Mutex;
 
-use amml::{ModListener, RequestAdapter, RequestPort, UiFlags};
+use amml::{BlockHandles, ModListener, RequestAdapter, RequestPort, UiFlags};
 use amml_abi::{
-    AmmlBand, AmmlEventContext, AmmlEventHeader, AmmlInventoryMove, AmmlRequestOptions, AmmlRequestOutcome, AmmlStatus,
-    InventoryRequestDone,
+    AmmlBand, AmmlBlockHandle, AmmlEventContext, AmmlEventHeader, AmmlInventoryMove, AmmlRequestOptions,
+    AmmlRequestOutcome, AmmlStatus, InventoryRequestDone,
 };
 use amml_data::{EntryKind, Resolved};
-use amml_runtime::{RequestMove, RequestSlot, RequestStep};
+use amml_runtime::{CreativeEntry, RequestMove, RequestSlot, RequestStep};
 
 use crate::support::{FakeVtable, Harness};
 
@@ -107,11 +107,24 @@ struct Port {
     during_send: Option<Box<dyn FnMut()>>,
     // The game takes no `SendRequests` packet.
     refuse_requests: bool,
+    // The local player is in creative mode, and the creative entry the stand-in registry has for any block.
+    creative: bool,
+    entry: Option<CreativeEntry>,
+    // A slot the stand-in game holds no stack in.
+    empty_slot: Option<u8>,
 }
 
 impl Port {
     fn new() -> Self {
-        Self { screen: false, ran: Vec::new(), during_send: None, refuse_requests: false }
+        Self {
+            screen: false,
+            ran: Vec::new(),
+            during_send: None,
+            refuse_requests: false,
+            creative: true,
+            entry: Some(CreativeEntry { creative_net_id: 300, count: 64 }),
+            empty_slot: None,
+        }
     }
 }
 
@@ -121,7 +134,22 @@ impl RequestPort for Port {
     }
 
     fn read_slots(&mut self) -> Option<Vec<Option<RequestSlot>>> {
-        Some((0..36).map(|slot| Some(RequestSlot { net_id: 100 + slot, count: 8, max: 64, key: 7 })).collect())
+        let empty = self.empty_slot;
+        Some(
+            (0..36)
+                .map(|slot| {
+                    (empty != Some(slot as u8)).then_some(RequestSlot { net_id: 100 + slot, count: 8, max: 64, key: 7 })
+                })
+                .collect(),
+        )
+    }
+
+    fn is_creative(&mut self) -> bool {
+        self.creative
+    }
+
+    fn creative_entry(&mut self, _block: usize) -> Option<CreativeEntry> {
+        self.entry
     }
 
     fn run(&mut self, step: &RequestStep) -> bool {
@@ -271,10 +299,8 @@ fn a_second_request_while_one_runs_is_refused_and_a_hidden_open_needs_the_hud() 
     assert_eq!(adapter.request_with(&mut port, 2, &swap(), options(false)), Err(AmmlStatus::REFUSED));
     adapter.disable_owner(1);
     assert_eq!(adapter.request_with(&mut port, 2, &[], options(false)), Err(AmmlStatus::INVALID_ARGUMENT));
-    assert_eq!(
-        adapter.request_with(&mut port, 2, &[RequestMove::Pick], options(false)),
-        Err(AmmlStatus::NOT_AVAILABLE)
-    );
+    let far_slot = RequestMove::Pick { slot: 9, creative_net_id: 1, count: 1 };
+    assert_eq!(adapter.request_with(&mut port, 2, &[far_slot], options(false)), Err(AmmlStatus::INVALID_ARGUMENT));
 }
 
 #[test]
@@ -343,4 +369,144 @@ fn a_packet_the_game_does_not_take_ends_not_sent_and_predicts_nothing() {
     assert!(matches!(port.ran[1], RequestStep::SendRequests(_)));
     assert_eq!(port.ran[2], RequestStep::SendClose(5));
     assert_eq!(*ENDED.lock().unwrap(), [(1, AmmlRequestOutcome::NOT_SENT.0, 0, 1)]);
+}
+
+// A block handle the loader holds for the mod 1 in the current world.
+fn block_handle(harness: &Harness) -> AmmlBlockHandle {
+    let epoch = harness.state.events().gate().epoch();
+    AmmlBlockHandle(harness.state.resources().insert(BlockHandles::BLOCK, 1, epoch, 0x7000).unwrap().0)
+}
+
+// An `ItemStackResponsePacket` with one answer that names `slot` of the hotbar container with `net_id`: the element's
+// containers vector at +18h, a container (name at +0, slots vector at +10h) and a slot info (slot at +1, net id at +4).
+fn pick_response_packet(wire: i32, result: u8, slot: u8, net_id: i32) -> usize {
+    let info: &'static mut [u8] = Box::leak(vec![0u8; 0x58].into_boxed_slice());
+    info[1] = slot;
+    info[4..8].copy_from_slice(&net_id.to_le_bytes());
+    let info_begin = info.as_ptr().expose_provenance();
+    let container: &'static mut [u8] = Box::leak(vec![0u8; 0x28].into_boxed_slice());
+    container[0] = 28;
+    container[0x10..0x18].copy_from_slice(&info_begin.to_le_bytes());
+    container[0x18..0x20].copy_from_slice(&(info_begin + 0x58).to_le_bytes());
+    let container_begin = container.as_ptr().expose_provenance();
+    let element: &'static mut [u8] = Box::leak(vec![0u8; 0x30].into_boxed_slice());
+    element[0] = result;
+    element[0x10..0x14].copy_from_slice(&wire.to_le_bytes());
+    element[0x18..0x20].copy_from_slice(&container_begin.to_le_bytes());
+    element[0x20..0x28].copy_from_slice(&(container_begin + 0x28).to_le_bytes());
+    let begin = element.as_ptr().expose_provenance();
+    let packet: &'static mut [u8] = Box::leak(vec![0u8; 0x50].into_boxed_slice());
+    packet[0x30..0x38].copy_from_slice(&begin.to_le_bytes());
+    packet[0x38..0x40].copy_from_slice(&(begin + 0x30).to_le_bytes());
+    packet.as_ptr().expose_provenance()
+}
+
+#[test]
+fn pick_outside_creative_is_refused() {
+    let harness = start();
+    let adapter = adapter();
+    let mut port = Port::new();
+    port.creative = false;
+
+    let result = adapter.pick_with(&mut port, 1, block_handle(&harness), 4);
+
+    assert_eq!(result, Err(AmmlStatus::REFUSED));
+    // The refusal took nothing: the next request runs.
+    assert!(adapter.request_with(&mut port, 1, &swap(), options(false)).is_ok());
+}
+
+#[test]
+fn pick_with_no_creative_entry_is_refused() {
+    let harness = start();
+    let adapter = adapter();
+    let mut port = Port::new();
+    port.entry = None;
+
+    let result = adapter.pick_with(&mut port, 1, block_handle(&harness), 4);
+
+    assert_eq!(result, Err(AmmlStatus::REFUSED));
+    assert!(adapter.book().is_idle());
+}
+
+#[test]
+fn pick_above_the_hotbar_is_refused() {
+    let harness = start();
+    let mut port = Port::new();
+
+    let result = adapter().pick_with(&mut port, 1, block_handle(&harness), 9);
+
+    assert_eq!(result, Err(AmmlStatus::REFUSED));
+}
+
+#[test]
+fn stale_block_is_stale() {
+    let harness = start();
+    let adapter = adapter();
+    let mut port = Port::new();
+    let handle = block_handle(&harness);
+    harness.state.resources().take_owner(1);
+
+    assert_eq!(adapter.pick_with(&mut port, 1, handle, 4), Err(AmmlStatus::STALE));
+    assert_eq!(adapter.pick_with(&mut port, 1, AmmlBlockHandle(0xDEAD), 4), Err(AmmlStatus::STALE));
+    assert!(adapter.book().is_idle());
+}
+
+#[test]
+fn pick_prediction_is_undone_on_refused() {
+    let harness = start();
+    listen(&harness);
+    let adapter = adapter();
+    let mut port = Port::new();
+    port.empty_slot = Some(4);
+    adapter.pick_with(&mut port, 1, block_handle(&harness), 4).unwrap();
+
+    adapter.tick_with(&mut port, 0);
+    assert_eq!(port.ran[1], RequestStep::PredictPick { slot: 4, creative_net_id: 300, count: 64 });
+    handle(RESPONSE, response_packet(&[(-100_001, 1)]));
+
+    adapter.tick_with(&mut port, 0);
+
+    assert_eq!(port.ran.last(), Some(&RequestStep::UnpredictPick { slot: 4 }));
+    assert_eq!(*ENDED.lock().unwrap(), [(1, AmmlRequestOutcome::REFUSED.0, 0, 1)]);
+}
+
+#[test]
+fn an_accepted_pick_takes_the_net_id_of_the_response() {
+    let harness = start();
+    listen(&harness);
+    let adapter = adapter();
+    let mut port = Port::new();
+    port.empty_slot = Some(4);
+    adapter.pick_with(&mut port, 1, block_handle(&harness), 4).unwrap();
+    adapter.tick_with(&mut port, 0);
+
+    handle(RESPONSE, pick_response_packet(-100_001, 0, 4, 77));
+    adapter.tick_with(&mut port, 0);
+
+    assert_eq!(port.ran.last(), Some(&RequestStep::AdoptNetId { slot: 4, net_id: 77 }));
+    assert_eq!(*ENDED.lock().unwrap(), [(1, AmmlRequestOutcome::DONE.0, 1, 1)]);
+}
+
+#[test]
+fn an_occupied_slot_pick_is_sent_and_a_refusal_gives_the_held_stack_back() {
+    let harness = start();
+    listen(&harness);
+    let adapter = adapter();
+    // Every slot of the stand-in game holds a stack, so hotbar slot 4 is occupied.
+    let mut port = Port::new();
+    adapter.pick_with(&mut port, 1, block_handle(&harness), 4).unwrap();
+
+    adapter.tick_with(&mut port, 0);
+
+    // The request goes out at once with the destroy of the held stack, and the prediction replaces it.
+    let RequestStep::SendRequests(bytes) = &port.ran[0] else { panic!("{:?}", port.ran) };
+    assert_eq!(bytes[4], 3, "{bytes:?}");
+    assert_eq!(port.ran[1], RequestStep::PredictPick { slot: 4, creative_net_id: 300, count: 64 });
+    handle(RESPONSE, response_packet(&[(-100_001, 1)]));
+
+    adapter.tick_with(&mut port, 0);
+
+    // The refusal gives the replaced stack back: the port that predicted it restores it at this step.
+    assert_eq!(port.ran.last(), Some(&RequestStep::UnpredictPick { slot: 4 }));
+    assert_eq!(*ENDED.lock().unwrap(), [(1, AmmlRequestOutcome::REFUSED.0, 0, 1)]);
 }

@@ -1,15 +1,15 @@
 use amml_abi::{
     AmmlInputBlocks, AmmlInputTable, AmmlLeaseMode, AmmlLeaseRequest, AmmlLeaseState, AmmlModifiers, AmmlMouseButton,
-    AmmlMoveIntent, AmmlStatus, AmmlStr,
+    AmmlMoveIntent, AmmlOtherLeases, AmmlStatus, AmmlStr,
 };
 use amml_runtime::{LeaseTerms, ResourceId};
 
 use crate::{Boundary, LoaderState};
 
-const TABLE_VERSION: u32 = 2;
+const TABLE_VERSION: u32 = 3;
 
 pub(crate) static INPUT: AmmlInputTable = AmmlInputTable {
-    size: AmmlInputTable::SIZE_V2,
+    size: AmmlInputTable::SIZE_V3,
     version: TABLE_VERSION,
     modifiers: InputTable::modifiers,
     is_down: InputTable::is_down,
@@ -25,6 +25,7 @@ pub(crate) static INPUT: AmmlInputTable = AmmlInputTable {
     end_lease: InputTable::end_lease,
     set_ranking: InputTable::set_ranking,
     set_coexist: Some(InputTable::set_coexist),
+    held_by_others: Some(InputTable::held_by_others),
 };
 
 /// The input table behind `AmmlServices::input`, and its `extern "C"` functions. Each function reads
@@ -249,6 +250,26 @@ impl InputTable {
             };
             let pairs = ids.as_chunks::<2>().0.iter().map(|[first, second]| (first.clone(), second.clone())).collect();
             Self::status(state.input().set_coexist(owner, pairs))
+        })
+    }
+
+    unsafe extern "C" fn held_by_others(module: AmmlStr, out: *mut AmmlOtherLeases) -> AmmlStatus {
+        Boundary::guard(|| {
+            let Some(state) = LoaderState::get() else {
+                return AmmlStatus::FAILED;
+            };
+            if out.is_null() {
+                return AmmlStatus::INVALID_ARGUMENT;
+            }
+            // SAFETY: the caller promises `module` is valid for the call.
+            let owner = match unsafe { module.as_str() }.and_then(|module| state.live_mod(module)) {
+                Ok(owner) => owner,
+                Err(_) => return AmmlStatus::INVALID_ARGUMENT,
+            };
+            let (leases, blocks) = state.input().book().active_of_others(owner);
+            // SAFETY: `out` is non-null and the caller promises it is writable.
+            unsafe { out.write(AmmlOtherLeases { leases, blocks }) };
+            AmmlStatus::OK
         })
     }
 

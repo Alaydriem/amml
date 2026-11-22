@@ -5,12 +5,15 @@ use amml_abi::{
     AmmlWorldText,
 };
 
-use crate::{Boundary, ClientAdapter, HudAdapter, LoaderState, SessionActions, SessionAdapter, WorldInfoAdapter};
+use crate::{
+    Boundary, ClientAdapter, FocusAdapter, HudAdapter, LoaderState, RouterAdapter, SessionActions, SessionAdapter,
+    WorldInfoAdapter,
+};
 
-const TABLE_VERSION: u32 = 4;
+const TABLE_VERSION: u32 = 8;
 
 pub(crate) static CLIENT: AmmlClientTable = AmmlClientTable {
-    size: AmmlClientTable::SIZE_V4,
+    size: AmmlClientTable::SIZE_V8,
     version: TABLE_VERSION,
     current: ClientTable::current,
     local_player: ClientTable::local_player,
@@ -28,6 +31,11 @@ pub(crate) static CLIENT: AmmlClientTable = AmmlClientTable {
     note_activity: Some(ClientTable::note_activity),
     world_info: Some(ClientTable::world_info),
     world_text: Some(ClientTable::world_text),
+    replay_app_focus_lost: Some(ClientTable::replay_app_focus_lost),
+    in_gameplay: Some(ClientTable::in_gameplay),
+    join_server_direct: Some(ClientTable::join_server_direct),
+    title_screen: Some(ClientTable::title_screen),
+    go_to_title: Some(ClientTable::go_to_title),
 };
 
 /// The client table behind `AmmlServices::client`, and its `extern "C"` functions. Each function checks
@@ -216,6 +224,62 @@ impl ClientTable {
         })
     }
 
+    unsafe extern "C" fn join_server_direct(
+        module: AmmlStr,
+        client: *const c_void,
+        host: AmmlStr,
+        port: u16,
+        name: AmmlStr,
+        out: *mut u64,
+    ) -> AmmlStatus {
+        Boundary::guard(|| {
+            let Some(state) = LoaderState::get() else {
+                return AmmlStatus::FAILED;
+            };
+            if out.is_null() {
+                return AmmlStatus::INVALID_ARGUMENT;
+            }
+            // SAFETY: the caller promises the three views are valid for the call.
+            let texts = unsafe { (module.as_str(), host.as_str(), name.as_str()) };
+            let (module, host, name) = match texts {
+                (Ok(module), Ok(host), Ok(name)) => (module, host, name),
+                _ => return AmmlStatus::INVALID_ARGUMENT,
+            };
+            let owner = match state.live_mod(module) {
+                Ok(owner) => owner,
+                Err(status) => return status,
+            };
+            match Self::actions().and_then(|actions| actions.join_server_direct(owner, client, host, port, name)) {
+                Ok(id) => {
+                    // SAFETY: `out` is non-null and the caller promises it is writable.
+                    unsafe { out.write(id) };
+                    AmmlStatus::OK
+                }
+                Err(status) => status,
+            }
+        })
+    }
+
+    unsafe extern "C" fn title_screen(client: *const c_void, out: *mut u8) -> AmmlStatus {
+        Boundary::guard(|| {
+            if out.is_null() {
+                return AmmlStatus::INVALID_ARGUMENT;
+            }
+            match RouterAdapter::with(Err(AmmlStatus::NOT_AVAILABLE), |adapter| adapter.on_title_screen(client)) {
+                Ok(value) => {
+                    // SAFETY: `out` is non-null and the caller promises it is writable.
+                    unsafe { out.write(u8::from(value)) };
+                    AmmlStatus::OK
+                }
+                Err(status) => status,
+            }
+        })
+    }
+
+    unsafe extern "C" fn go_to_title(client: *const c_void) -> AmmlStatus {
+        Boundary::guard(|| Self::status(Self::actions().and_then(|actions| actions.go_to_title(client))))
+    }
+
     unsafe extern "C" fn open_menu(client: *const c_void, menu: AmmlMenu) -> AmmlStatus {
         Boundary::guard(|| Self::status(Self::actions().and_then(|actions| actions.open_menu(client, menu))))
     }
@@ -233,6 +297,41 @@ impl ClientTable {
 
     unsafe extern "C" fn note_activity(client: *const c_void) -> AmmlStatus {
         Boundary::guard(|| Self::status(Self::adapter().and_then(|adapter| adapter.note_activity(client))))
+    }
+
+    unsafe extern "C" fn in_gameplay(client: *const c_void, out: *mut u8) -> AmmlStatus {
+        Boundary::guard(|| {
+            if out.is_null() {
+                return AmmlStatus::INVALID_ARGUMENT;
+            }
+            match Self::adapter().and_then(|adapter| adapter.in_gameplay(client)) {
+                Ok(value) => {
+                    // SAFETY: `out` is non-null and the caller promises it is writable.
+                    unsafe { out.write(u8::from(value)) };
+                    AmmlStatus::OK
+                }
+                Err(status) => status,
+            }
+        })
+    }
+
+    unsafe extern "C" fn replay_app_focus_lost(module: AmmlStr, client: *const c_void) -> AmmlStatus {
+        Boundary::guard(|| {
+            let Some(state) = LoaderState::get() else {
+                return AmmlStatus::FAILED;
+            };
+            // SAFETY: the caller promises `module` is valid for the call.
+            let module = match unsafe { module.as_str() } {
+                Ok(module) => module,
+                Err(status) => return status,
+            };
+            let owner = match state.live_mod(module) {
+                Ok(owner) => owner,
+                Err(status) => return status,
+            };
+            let focus = FocusAdapter::get().ok_or(AmmlStatus::NOT_AVAILABLE);
+            Self::status(focus.and_then(|focus| focus.replay(owner, client)))
+        })
     }
 
     unsafe extern "C" fn world_info(client: *const c_void, out: *mut AmmlWorldInfo) -> AmmlStatus {

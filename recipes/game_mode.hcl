@@ -1,6 +1,7 @@
 entry "GameMode.buildBlock" {
   kind     = "vslot"
-  notes    = "Slot of bool GameMode::buildBlock(BlockPos const&, uchar face, HandSlot, bool isSimTick) in the GameMode vtable: 6 on 26.51 (LeviLamina header order: dtor, startDestroyBlock, destroyBlock, continueDestroyBlock, stopDestroyBlock, startBuildBlock 5, buildBlock 6; the GameMode table has the 20 header virtuals). The GameMode constructor stores the table and the player at +8; the base body at slot 6 takes the position in rdx, the face in r8b, the hand slot in r9b and isSimTick as the fifth argument. The client's game mode is a derived class (its constructor calls the GameMode constructor, size 110h); its slot 6 is a leaf that tests a flag and a global and then jumps to the base body. Recipe 0 is GameMode::startBuildBlock (slot 5), which calls slot 6 with isSimTick false: `sub rsp,..; mov dword ptr [rcx+..],0; mov rax,[rcx]; mov rax,[rax+disp]; mov byte ptr [rsp+20h],0; call [guard]`. Recipe 1 is GameMode::continueBuildBlock (slot 7), which calls slot 6 with isSimTick true: `mov r14d,[rsi+..]; mov r13d,[rsi+..]; movzx r8d,byte ptr [rbp+..]; mov rax,[rsi]; mov rax,[rax+disp]; mov r10,[guard]; mov byte ptr [rsp+20h],1`. Both read the displacement as a slot. The two recipes are in two functions. Every displacement, immediate and branch byte is a wildcard. Range window 0..12. Recipe 1 now starts at `movzx r8d,byte ptr [rbp+..]` (offset 8 to the slot load). What changed in 6ad79ee4-17d51891a1119914 (26.60): the two loads before it became `mov r15d,[rsi+..]; movq xmm6,[rsi+..]`, so the 26.51 pattern did not match; the slot is 6 on both builds and recipe 0 agrees. Would have survived with a better recipe."
+  hooked   = true
+  notes    = "Slot of bool GameMode::buildBlock(BlockPos const&, uchar face, HandSlot, bool isSimTick) in the GameMode vtable: 6 on 26.51 (LeviLamina header order: dtor, startDestroyBlock, destroyBlock, continueDestroyBlock, stopDestroyBlock, startBuildBlock 5, buildBlock 6; the GameMode table has the 20 header virtuals). The GameMode constructor stores the table and the player at +8; the base body at slot 6 takes the position in rdx, the face in r8b, the hand slot in r9b and isSimTick as the fifth argument. The client's game mode is a derived class (its constructor calls the GameMode constructor, size 110h); its slot 6 is a leaf that tests a flag and a global and then jumps to the base body. Recipe 0 is GameMode::startBuildBlock (slot 5), which calls slot 6 with isSimTick false: `sub rsp,..; mov dword ptr [rcx+..],0; mov rax,[rcx]; mov rax,[rax+disp]; mov byte ptr [rsp+20h],0; call [guard]`. Recipe 1 is GameMode::continueBuildBlock (slot 7), which calls slot 6 with isSimTick true: `mov r14d,[rsi+..]; mov r13d,[rsi+..]; movzx r8d,byte ptr [rbp+..]; mov rax,[rsi]; mov rax,[rax+disp]; mov r10,[guard]; mov byte ptr [rsp+20h],1`. Both read the displacement as a slot. The two recipes are in two functions. Every displacement, immediate and branch byte is a wildcard. Range window 0..12. Recipe 1 now starts at `movzx r8d,byte ptr [rbp+..]` (offset 8 to the slot load). What changed in 6ad79ee4-17d51891a1119914 (26.60): the two loads before it became `mov r15d,[rsi+..]; movq xmm6,[rsi+..]`, so the 26.51 pattern did not match; the slot is 6 on both builds and recipe 0 agrees. Would have survived with a better recipe. Recipe 2 is the head of the base body after the prologue: `mov ebx,r9d; mov r14d,r8d` (26.63; `mov edi,r8d` on 70.26) `; mov r15,rdx; mov rsi,rcx; movzx r13d,byte ptr [rbp+..]` (the fifth argument isSimTick, read from the caller frame), then function_start_of and slot_of GameMode.vtable; the REX and ModRM bytes of the face and position moves are wildcards. It is in a third function and shares no bytes with recipes 0 and 1; it gives the slot from the body, which `signature` needs to probe the slot target. Arguments on 26.63 (6aed1906-b127418e74d2f2f9) and 70.26 (6afa4e47-dadc375797a3d31a): rcx the game mode, rdx the BlockPos const&, r8b the face, r9b the hand slot, the isSimTick byte at [rsp+28h] on entry (the body reads [rbp+140h] with a 158h frame on 26.63 and [rbp+110h] with a 128h frame on 70.26, both entry rsp+28h); the bool result in al. Base body 0x376af50 on 26.63, 0x41390d0 on 70.26. SurvivalMode.vtable slot 6 is not this body on either build: it is a leaf without .pdata (0x376ff60, 0x413de60) that tests the trial-mode flag (`cmp byte ptr [rcx+0C8h],1; jne base`) and a global (`cmp byte ptr [rip+..],0; je base`) and else returns false, so a hook on the base body sees survival, creative and adventure builds. `hooked = true`: the loader hooks the function in this slot for the player-action events; `signature` probes the slot target of GameMode.vtable, which its slot_of step names."
 
   recipe {
     step "pattern" {
@@ -24,6 +25,12 @@ entry "GameMode.buildBlock" {
       kind  = "displacement"
     }
     step "displacement_to_slot" {}
+  }
+
+  recipe {
+    step "pattern" { bytes = "44 89 CB ?? 89 ?? 49 89 ?? 48 89 CE 44 0F B6 AD ?? ?? ?? ??" }
+    step "function_start_of" {}
+    step "slot_of" { vtable = "GameMode.vtable" }
   }
 
   check "range" {
@@ -311,5 +318,39 @@ entry "GameMode.useItemResult" {
   check "range" {
     min = 0
     max = 1
+  }
+}
+
+entry "GameMode.buildingTickDelay" {
+  kind  = "field"
+  notes = "Offset of std::chrono::milliseconds GameMode::buildingTickDelay: A8h on 26.63 (6aed1906-b127418e74d2f2f9) and 70.26 (6afa4e47-dadc375797a3d31a). The GameMode constructor stores the three delays as qwords in header order: creativeDestructionTickDelay 250 (A0h), buildingTickDelay 200 (A8h), destroySoundDelay 200 (B0h). No client code reads the A8h member on either build (no `[reg+0A8h]` read of a GameMode was found; the destroy code reads A0h and B0h): the old mod uses it as its own repeat interval. Recipe 0 finds the GameMode constructor by its head (`lea rax,[rip+..]; mov [rcx],rax; mov [rcx+8],rdx; mov qword ptr [rcx+10h],-1; mov dword ptr [rcx+18h],-1; mov byte ptr [rcx+1Ch],0`, the GameMode.vtable recipe 0 bytes), then the run of three disp32 qword stores in it (`mov qword ptr [rcx+..],imm32` three times; the only such run in the function) and reads the displacement of the second store. Recipe 1 is GameMode::continueDestroyBlock (slot 3): `movss [rsi+..],xmm7; mov rax,[rbp+..]; cmp [rsi+..],rax; jge; imul rcx,[rsi+..],imm32` (now compared with mNoDestroySoundUntil, then destroySoundDelay in ms times 1000000); it reads the imul displacement (destroySoundDelay, B0h) and adds -8, the member before it. It depends on the header order of the two delays; the constructor stores of recipe 0 show that order on both builds. The two recipes are in two functions. Every displacement, immediate and branch byte is a wildcard. Range window 80h..E0h. Not derived on builds before 26.63. No build gate: the same member on both builds."
+
+  recipe {
+    step "pattern" { bytes = "48 8D 05 ?? ?? ?? ?? 48 89 01 48 89 51 ?? 48 C7 41 ?? ?? ?? ?? ?? C7 41 ?? ?? ?? ?? ?? C6 41 ?? ??" }
+    step "pattern" {
+      bytes  = "48 C7 81 ?? ?? ?? ?? ?? ?? ?? ?? 48 C7 81 ?? ?? ?? ?? ?? ?? ?? ?? 48 C7 81 ?? ?? ?? ?? ?? ?? ?? ??"
+      offset = 11
+    }
+    step "operand" {
+      index = 0
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "F3 0F 11 7E ?? 48 8B 45 ?? 48 39 86 ?? ?? ?? ?? 0F 8D ?? ?? ?? ?? 48 69 8E ?? ?? ?? ?? ?? ?? ?? ??"
+      offset = 22
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+    step "add" { value = -8 }
+  }
+
+  check "range" {
+    min = 128
+    max = 224
   }
 }

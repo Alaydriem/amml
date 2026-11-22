@@ -15,7 +15,9 @@ use crate::{InstanceSettings, LoaderDirs};
 /// them itself.
 ///
 /// In both hosts the shared data root is `%LOCALAPPDATA%\amml\mod-data`, outside the game folder, so a
-/// mod can keep files that every game instance reads. It is `None` when `LOCALAPPDATA` is not set.
+/// mod can keep files that every game instance reads. It is `None` when `LOCALAPPDATA` is not set. An instance whose
+/// `instance.hcl` sets a `data_dir` other than the play data folder `%LOCALAPPDATA%\amml\data` (a test instance) gets
+/// `<data_dir>\mod-data` instead (`loader_dirs`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HostPaths {
     pub exe: PathBuf,
@@ -36,6 +38,7 @@ impl HostPaths {
     pub const STANDALONE_FOLDER: &'static str = "amml";
     pub const MODS_FOLDER: &'static str = "amml";
     pub const MOD_DATA_FOLDER: &'static str = "mod-data";
+    pub const PLAY_DATA_FOLDER: &'static str = "data";
     pub const SETTINGS_FILE: &'static str = "amml.hcl";
     pub const INSTANCE_FILE: &'static str = "instance.hcl";
 
@@ -84,11 +87,28 @@ impl HostPaths {
     }
 
     /// The folders handed to `LoaderState`: the instance folder is `<game>`, and the game data folder
-    /// is the `data_dir` of `instance.hcl` when it sets one (an unreadable file sets none).
+    /// is the `data_dir` of `instance.hcl` when it sets one (an unreadable file sets none). The shared mod data root is
+    /// `<data_dir>\mod-data` for a `data_dir` that is not the play data folder (the sibling `data` of the shared root,
+    /// `%LOCALAPPDATA%\amml\data`, compared without case and separator differences); otherwise the shared root.
     pub fn loader_dirs(&self) -> LoaderDirs {
-        let mut dirs = LoaderDirs::new(self.mods.clone(), self.logs.clone(), self.mod_data.clone());
+        let game_data = InstanceSettings::load(&self.instance, &self.game).ok().and_then(|settings| settings.data_dir);
+        let mod_data = match &game_data {
+            Some(data_dir) if !self.is_play_data(data_dir) => Some(data_dir.join(Self::MOD_DATA_FOLDER)),
+            _ => self.mod_data.clone(),
+        };
+        let mut dirs = LoaderDirs::new(self.mods.clone(), self.logs.clone(), mod_data);
         dirs.instance = Some(self.game.clone());
-        dirs.game_data = InstanceSettings::load(&self.instance, &self.game).ok().and_then(|settings| settings.data_dir);
+        dirs.game_data = game_data;
         dirs
+    }
+
+    // Whether `data_dir` is the play data folder, the `data` folder beside the shared mod data root.
+    fn is_play_data(&self, data_dir: &Path) -> bool {
+        let Some(play) = self.mod_data.as_deref().and_then(Path::parent).map(|amml| amml.join(Self::PLAY_DATA_FOLDER))
+        else {
+            return false;
+        };
+        let text = |path: &Path| path.to_string_lossy().replace('/', "\\").trim_end_matches('\\').to_lowercase();
+        text(&play) == text(data_dir)
     }
 }

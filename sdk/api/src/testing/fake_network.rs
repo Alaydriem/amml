@@ -13,12 +13,37 @@ use crate::{PlayerListAction, Uuid};
 pub(crate) struct FakeNetwork {
     next_serial: Cell<u64>,
     running: RefCell<Option<FakeNetworkRun>>,
+    protocol: Cell<u32>,
+    chunk_cache_wish: Cell<Option<bool>>,
 }
 
 impl FakeNetwork {
     const INDEX_BITS: u32 = 16;
     // The most animated images the loader gives for one skin.
     const MAX_ANIMATED: usize = 16;
+
+    /// The protocol number `Network::protocol_version` gives.
+    pub(crate) fn set_protocol(&self, protocol: u32) {
+        self.protocol.set(protocol);
+    }
+
+    pub(crate) fn protocol(&self) -> u32 {
+        self.protocol.get()
+    }
+
+    /// The fake mod's chunk cache wish.
+    pub(crate) fn set_chunk_cache_wish(&self, enabled: bool) {
+        self.chunk_cache_wish.set(Some(enabled));
+    }
+
+    pub(crate) fn chunk_cache_wish(&self) -> Option<bool> {
+        self.chunk_cache_wish.get()
+    }
+
+    /// The fake mod is disabled: its wish ends.
+    pub(crate) fn disable_owner(&self) {
+        self.chunk_cache_wish.set(None);
+    }
 
     /// A player list dispatch starts. At most 4096 entries are given.
     pub(crate) fn enter_list(&self, action: PlayerListAction, mut entries: Vec<FakePlayerEntry>) {

@@ -11,4 +11,8 @@ pub enum RequestAction {
     PlaceOnto { count: u8, from: SlotRef, to: SlotRef },
     /// Throws `count` items of `from` out, not randomly.
     Drop { count: u8, from: SlotRef },
+    /// Makes `count` items of the creative item `creative_net_id` and takes them into the slot `to`; one request of two
+    /// actions. With `replacing` (the held count and the held slot with its net id) the held stack is destroyed first:
+    /// three actions.
+    CraftCreative { creative_net_id: u32, count: u8, to: SlotRef, replacing: Option<(u8, SlotRef)> },
 }

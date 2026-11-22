@@ -24,6 +24,10 @@ const EVENTS: &[&str] = &[
     "registry.provider_ready",
     "registry.provider_gone",
     "mods.loaded",
+    "time.step_applied",
+    "time.frame_end",
+    "time.latency_barrier",
+    "player.moved",
 ];
 
 const AREAS: &[(&str, u32)] = &[
@@ -40,6 +44,10 @@ const AREAS: &[(&str, u32)] = &[
     ("network.skin_animated", 1),
     ("network.skin_geometry", 1),
     ("network.skin_details", 1),
+    ("network.chunk_cache", 1),
+    ("network.protocol", 1),
+    ("time.control", 1),
+    ("camera.hide_actor", 1),
 ];
 
 fn check_build(file: &str) {

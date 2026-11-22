@@ -254,3 +254,82 @@ fn build_needs_the_version_2_canvas() {
 
     assert_eq!(*results.lock().unwrap(), vec![Err(ApiError::NotAvailable)]);
 }
+
+fn clip() -> [[f32; 4]; 4] {
+    [[1.0, 0.0, 0.0, 0.0], [0.0, 2.0, 0.0, 0.0], [0.0, 0.0, -1.0, -1.0], [0.0, 0.0, -0.2, 0.0]]
+}
+
+#[test]
+fn clip_matrix_from_the_fake_canvas() {
+    let fake = FakeGame::new();
+    fake.offer::<WorldRendered>();
+    fake.offer_area(Area::RENDER_WORLD_CANVAS.at(3));
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let record = seen.clone();
+    let _listener = fake
+        .ctx()
+        .events()
+        .listen::<WorldRendered>(HookOrder::NORMAL, move |event, _| {
+            record.lock().unwrap().push(event.canvas().and_then(|canvas| canvas.clip_matrix()));
+        })
+        .unwrap();
+
+    fake.raise_world_rendered(&FakeCanvas { clip_matrix: Some(clip()), ..Default::default() });
+    // A frame the game has no camera in gives no matrix.
+    fake.raise_world_rendered(&FakeCanvas::default());
+
+    assert_eq!(*seen.lock().unwrap(), vec![Some(clip()), None]);
+}
+
+#[test]
+fn clip_matrix_needs_the_version_3_canvas() {
+    let fake = FakeGame::new();
+    fake.offer::<WorldRendered>();
+    fake.offer_area(Area::RENDER_WORLD_CANVAS.at(2));
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let record = seen.clone();
+    let _listener = fake
+        .ctx()
+        .events()
+        .listen::<WorldRendered>(HookOrder::NORMAL, move |event, _| {
+            record.lock().unwrap().push(event.canvas().and_then(|canvas| canvas.clip_matrix()));
+        })
+        .unwrap();
+
+    fake.raise_world_rendered(&FakeCanvas { clip_matrix: Some(clip()), ..Default::default() });
+
+    assert_eq!(*seen.lock().unwrap(), vec![None]);
+}
+
+#[test]
+fn colour_quads_with_the_ghost_style_are_not_available() {
+    let fake = FakeGame::new();
+    fake.offer::<WorldRendered>();
+    fake.offer_area(Area::RENDER_WORLD_CANVAS.at(3));
+    let results = Arc::new(Mutex::new(Vec::new()));
+    let record = results.clone();
+    let _listener = fake
+        .ctx()
+        .events()
+        .listen::<WorldRendered>(HookOrder::NORMAL, move |event, _| {
+            record.lock().unwrap().push(event.canvas().unwrap().build(&[quad(0.0)], MeshStyle::GHOST).map(|_| ()));
+        })
+        .unwrap();
+    let canvas = FakeCanvas::default();
+
+    fake.raise_world_rendered(&canvas);
+
+    assert_eq!(*results.lock().unwrap(), vec![Err(ApiError::NotAvailable)]);
+    assert!(canvas.calls.borrow().is_empty());
+    assert_eq!(
+        MeshStyle::GHOST,
+        MeshStyle {
+            blend: Blend::Alpha,
+            depth_test: true,
+            depth_write: true,
+            two_sided: false,
+            light: MeshLight::Full,
+            texture: MeshTexture::TerrainAtlas,
+        }
+    );
+}

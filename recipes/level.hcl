@@ -226,3 +226,46 @@ entry "Level.getItemRegistry" {
     max = 400
   }
 }
+
+entry "Level.isClientSide" {
+  kind  = "vslot"
+  notes = "Slot of the ILevel virtual whose byte the block actor factory takes as its flag on 70.26 (6afa4e47-dadc375797a3d31a): 317 (13Dh). rcx = the level; it returns a byte in al. Its body in the Level, ServerLevel and third Level vtables is `movzx eax,byte ptr [rcx+238h]; ret` (0x2fd45c0); the Level constructor copies that byte from its argument block (`movzx eax,byte ptr [rsi+141h]; mov [rcx+238h],al`, 0x2fa3601). The name is the header name of the client-side flag; no text in the exe names it. BlockActor::loadStatic calls it on its ILevel (r9) and passes the result by pointer to the factory std::function (`mov rax,[r9]; mov rax,[rax+9E8h]; mov rcx,r9; call [guard]; ...; mov [rbp+2Fh],al; ...; lea r9,[rbp+2Fh]`, 0x72cf900); the factory is VanillaBlockActorFactory.createBlockActorWithFlag (r8b). A caller of that factory passes what this slot returns for its level, as the game does. Level has no vtable global, so both recipes are call sites. Recipe 0 is the call in BlockActor.loadStatic (`mov rax,[r9]; mov rax,[rax+disp32]; mov rcx,r9; call [guard]`), offset 3. Recipe 1 is a second caller of the factory (0x45373a0): first its factory call (`mov rcx,[rip+factory]; test rcx,rcx; je; mov [rbp+..],al; mov rax,[rcx]; mov rax,[rax+10h]; mov r10,[rip+..]; mov [rsp+20h],r14; lea rdx,[rbp+..]; lea r8,[rbp+..]; lea r9,[rbp+..]; call r10`), then in the same function the level call before it (`mov r14,[rbx+..]; mov rcx,[rdi+..]; mov rax,[rcx]; mov rax,[rax+disp32]; call [guard]`), offset 11. Both read the displacement as a slot. The two recipes are in two functions. Every displacement, immediate and branch byte is a wildcard. Range window 309..325. Layout gate: entry_is VanillaBlockActorFactory.createBlockActorForm = 1 (70.26); the 26.63 factory takes no flag and its callers make no such call, so this name refuses there as not for this build."
+
+  recipe {
+    step "ref" { entry = "BlockActor.loadStatic" }
+    step "pattern" {
+      bytes  = "49 8B 01 48 8B 80 ?? ?? ?? ?? 4C 89 C9 FF 15"
+      offset = 3
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+    step "displacement_to_slot" {}
+  }
+
+  recipe {
+    step "pattern" {
+      bytes = "48 8B 0D ?? ?? ?? ?? 48 85 C9 74 ?? 88 45 ?? 48 8B 01 48 8B 40 ?? 4C 8B 15 ?? ?? ?? ?? 4C 89 74 24 ?? 48 8D 55 ?? 4C 8D 45 ?? 4C 8D 4D ?? 41 FF D2"
+    }
+    step "pattern" {
+      bytes  = "4C 8B 73 ?? 48 8B 4F ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15"
+      offset = 11
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+    step "displacement_to_slot" {}
+  }
+
+  check "range" {
+    min = 309
+    max = 325
+  }
+
+  check "entry_is" {
+    entry = "VanillaBlockActorFactory.createBlockActorForm"
+    value = 1
+  }
+}

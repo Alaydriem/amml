@@ -95,7 +95,7 @@ fn a_required_area_that_is_not_available_marks_the_mod() {
 }
 
 // Every entry the `actor.read` area needs; `Actor.isAlive` first.
-const ACTOR_READ_ENTRIES: [&str; 11] = [
+const ACTOR_READ_ENTRIES: [&str; 12] = [
     "Actor.isAlive",
     "ClientInstance.getLocalPlayer",
     "Actor.stateVectorComponent",
@@ -107,6 +107,7 @@ const ACTOR_READ_ENTRIES: [&str; 11] = [
     "Dimension.getDimensionId",
     "Actor.getAttachPos",
     "Dimension.getBlockSourceFromMainChunkSource",
+    "Actor.getViewVector",
 ];
 
 fn actor_read_at(version: u32) -> ModUses {
@@ -119,9 +120,9 @@ fn actor_read_at(version: u32) -> ModUses {
 #[test]
 fn an_area_version_above_the_catalog_needs_a_newer_loader() {
     let data = data_with(&ACTOR_READ_ENTRIES);
-    let report = CompatChecker::check(&data, &[actor_read_at(4)], &[]);
+    let report = CompatChecker::check(&data, &[actor_read_at(5)], &[]);
     assert!(report.rows[0].loader_too_old && !report.rows[0].available);
-    assert_eq!(report.rows[0].missing, ["loader too old: it serves area `actor.read` up to version 3"]);
+    assert_eq!(report.rows[0].missing, ["loader too old: it serves area `actor.read` up to version 4"]);
     assert_eq!(report.exit_code(), 1);
     assert!(report.render().contains("  feature death: loader too old\n"), "{}", report.render());
 }
@@ -129,7 +130,7 @@ fn an_area_version_above_the_catalog_needs_a_newer_loader() {
 #[test]
 fn an_area_at_the_catalog_version_is_available_when_its_entries_resolve() {
     let data = data_with(&ACTOR_READ_ENTRIES);
-    let report = CompatChecker::check(&data, &[actor_read_at(3)], &[]);
+    let report = CompatChecker::check(&data, &[actor_read_at(4)], &[]);
     assert!(report.rows[0].available && !report.rows[0].loader_too_old);
     assert!(!report.render().contains("loader too old"));
 }

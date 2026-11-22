@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use amml::{ModLoader, SessionAdapter};
 use amml_abi::{
-    AmmlApi, AmmlInputBlocks, AmmlInputTable, AmmlLeaseMode, AmmlLeaseRequest, AmmlLeaseState, AmmlReleaseReason,
-    AmmlServices, AmmlStatus, AmmlStr,
+    AmmlApi, AmmlInputBlocks, AmmlInputTable, AmmlLeaseMode, AmmlLeaseRequest, AmmlLeaseState, AmmlOtherLeases,
+    AmmlReleaseReason, AmmlServices, AmmlStatus, AmmlStr,
 };
 use amml_runtime::{LeaseTerms, ModRegistry};
 
-use crate::support::{CLIENT_A, EventsMod, Harness, RecordingFeeds, SessionGame};
+use crate::support::{CLIENT_A, EventsMod, Harness, LogFile, RecordingFeeds, SessionGame};
 
 const W: u16 = 0x57;
 
@@ -245,4 +245,46 @@ fn coexist_pairs_need_an_even_count_and_a_live_mod() {
     assert_eq!(odd, AmmlStatus::INVALID_ARGUMENT);
     assert_ne!(unknown, AmmlStatus::OK);
     assert!(table.size >= AmmlInputTable::SIZE_V2);
+}
+
+#[test]
+fn held_by_others_counts_the_active_leases_of_the_other_mods_only() {
+    let harness = start();
+    let plain = EventsMod::build("plain", &[]);
+    harness.install_mod("events", "events", &plain, "events.dll", 3);
+    let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
+    let loader = ModLoader::new(harness.state);
+    assert!(loader.load_all(&scan.mods).iter().all(|report| report.is_ok()));
+    let table = input(&harness);
+    let held = table.held_by_others.unwrap();
+    let ask = || {
+        let mut out = AmmlOtherLeases { leases: 0xEE, blocks: AmmlInputBlocks(0xEE) };
+        // SAFETY: the module view lives for the call and `out` is writable.
+        let status = unsafe { held(AmmlStr::from_str("@events/events"), &mut out) };
+        (status, out.leases, out.blocks)
+    };
+
+    let none = ask();
+    let terms = |blocks| LeaseTerms { mode: AmmlLeaseMode::SHARED, blocks, passthrough: Vec::new(), preempt: false };
+    harness.state.input().acquire(0, "@events/events", terms(AmmlInputBlocks::KEYS)).unwrap();
+    let own = ask();
+    harness.state.input().acquire(5, "@other/mod", terms(AmmlInputBlocks::LOOK)).unwrap();
+    let other = ask();
+    let mut out = AmmlOtherLeases::default();
+    // SAFETY: as above.
+    let unknown = unsafe { held(AmmlStr::from_str("@nobody/here"), &mut out) };
+
+    assert_eq!(none, (AmmlStatus::OK, 0, AmmlInputBlocks(0)));
+    assert_eq!(own, (AmmlStatus::OK, 0, AmmlInputBlocks(0)));
+    assert_eq!(other, (AmmlStatus::OK, 1, AmmlInputBlocks::LOOK));
+    assert_eq!(unknown, AmmlStatus::INVALID_ARGUMENT);
+    assert!(table.size >= AmmlInputTable::SIZE_V3);
+}
+
+#[test]
+fn the_loader_logs_an_area_adapter_line_for_its_own_input_lease_area() {
+    let harness = start();
+
+    let log = LogFile::wait_for(&harness.logs().join("loader.log"), "input.lease");
+    assert!(log.contains("area adapter {\"area\":\"input.lease\",\"shape\":\"loader\"}"), "{log}");
 }

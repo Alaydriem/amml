@@ -93,3 +93,18 @@ fn projection_of_a_matrix_without_focal_lengths_is_none() {
     matrix[1][1] = 1.0;
     assert_eq!(CameraMath::projection(&matrix), None);
 }
+
+#[test]
+fn clip_applies_the_view_first_and_the_projection_second() {
+    // The view moves the world by (-2, -6, 0.25); the projection scales x and y and divides by depth. Matrices are
+    // stored by columns.
+    let view = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [-2.0, -6.0, 0.25, 1.0]];
+    let projection = [[2.0, 0.0, 0.0, 0.0], [0.0, 3.0, 0.0, 0.0], [0.0, 0.0, -1.0, -1.0], [0.0, 0.0, -0.5, 0.0]];
+
+    let clip = CameraMath::clip(&projection, &view);
+
+    // The point (1, 1, 1) lands at view (-1, -5, 1.25), then at clip (-2, -15, -1.75, -1.25).
+    let point = [1.0, 1.0, 1.0, 1.0];
+    let at: Vec<f32> = (0..4).map(|row| (0..4).map(|column| clip[column][row] * point[column]).sum()).collect();
+    assert_eq!(at, [-2.0, -15.0, -1.75, -1.25]);
+}

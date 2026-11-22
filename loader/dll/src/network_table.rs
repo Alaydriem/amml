@@ -1,11 +1,11 @@
 use amml_abi::{AmmlImageView, AmmlNetworkTable, AmmlPlayerListEntry, AmmlStatus, AmmlStr};
 
-use crate::{Boundary, NetworkAdapter};
+use crate::{Boundary, LoaderState, NetworkAdapter};
 
-const TABLE_VERSION: u32 = 1;
+const TABLE_VERSION: u32 = 2;
 
 pub(crate) static NETWORK: AmmlNetworkTable = AmmlNetworkTable {
-    size: AmmlNetworkTable::SIZE_V1,
+    size: AmmlNetworkTable::SIZE_V2,
     version: TABLE_VERSION,
     player_list_entry: NetworkTable::player_list_entry,
     player_list_text: NetworkTable::player_list_text,
@@ -18,11 +18,14 @@ pub(crate) static NETWORK: AmmlNetworkTable = AmmlNetworkTable {
     skin_geometry_json: NetworkTable::skin_geometry_json,
     skin_is_premium: NetworkTable::skin_is_premium,
     skin_resource_patch: NetworkTable::skin_resource_patch,
+    protocol_version: Some(NetworkTable::protocol_version),
+    set_client_chunk_cache: Some(NetworkTable::set_client_chunk_cache),
 };
 
 /// The network table behind `AmmlServices::network`, and its `extern "C"` functions. Each function checks its output
-/// pointers (`INVALID_ARGUMENT`), then delegates to `NetworkAdapter` inside the boundary. The adapter answers only on the
-/// thread that runs a network event, inside the dispatch of that event (`REFUSED` otherwise); with no network adapter
+/// pointers (`INVALID_ARGUMENT`), then delegates to `NetworkAdapter` inside the boundary. The player list and skin
+/// reads answer only on the thread that runs a network event, inside the dispatch of that event (`REFUSED` otherwise);
+/// `protocol_version` answers on any thread and `set_client_chunk_cache` on the game thread. With no network adapter
 /// every call gives `NOT_AVAILABLE`.
 pub struct NetworkTable;
 
@@ -104,6 +107,27 @@ impl NetworkTable {
 
     unsafe extern "C" fn skin_resource_patch(skin: u64, out: *mut AmmlStr) -> AmmlStatus {
         Self::write(out, |adapter| adapter.skin_resource_patch(skin))
+    }
+
+    unsafe extern "C" fn protocol_version(out: *mut u32) -> AmmlStatus {
+        Self::write(out, NetworkAdapter::protocol_version)
+    }
+
+    unsafe extern "C" fn set_client_chunk_cache(module: AmmlStr, enabled: u8) -> AmmlStatus {
+        Boundary::guard(|| {
+            let Some(state) = LoaderState::get() else { return AmmlStatus::FAILED };
+            // SAFETY: the caller promises `module` is valid for the call.
+            let owner = match unsafe { module.as_str() }.and_then(|module| state.live_mod(module)) {
+                Ok(owner) => owner,
+                Err(status) => return status,
+            };
+            match NetworkAdapter::with(Err(AmmlStatus::NOT_AVAILABLE), |adapter| {
+                adapter.set_client_chunk_cache(owner, enabled != 0)
+            }) {
+                Ok(()) => AmmlStatus::OK,
+                Err(status) => status,
+            }
+        })
     }
 
     // Checks `out`, runs `read` on the adapter and writes its value to `out`, all inside the boundary.

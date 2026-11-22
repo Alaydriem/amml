@@ -12,8 +12,8 @@ pub(crate) struct FakeNetworkTable;
 impl FakeNetworkTable {
     pub(crate) fn table() -> AmmlNetworkTable {
         AmmlNetworkTable {
-            size: AmmlNetworkTable::SIZE_V1,
-            version: 1,
+            size: AmmlNetworkTable::SIZE_V2,
+            version: 2,
             player_list_entry: Self::player_list_entry,
             player_list_text: Self::player_list_text,
             player_skin: Self::player_skin,
@@ -25,7 +25,28 @@ impl FakeNetworkTable {
             skin_geometry_json: Self::skin_geometry_json,
             skin_is_premium: Self::skin_is_premium,
             skin_resource_patch: Self::skin_resource_patch,
+            protocol_version: Some(Self::protocol_version),
+            set_client_chunk_cache: Some(Self::set_client_chunk_cache),
         }
+    }
+
+    unsafe extern "C" fn protocol_version(out: *mut u32) -> AmmlStatus {
+        Self::write(out, Some(Area::NETWORK_PROTOCOL), |network| Ok(network.protocol()))
+    }
+
+    // The gate and the offer of the area, as the loader checks them; then the fake mod's wish.
+    unsafe extern "C" fn set_client_chunk_cache(_module: AmmlStr, enabled: u8) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        if !state.gate().get() {
+            return AmmlStatus::NOT_READY;
+        }
+        if !state.area_offered(Area::NETWORK_CHUNK_CACHE.id, Area::NETWORK_CHUNK_CACHE.version) {
+            return AmmlStatus::NOT_AVAILABLE;
+        }
+        state.network().set_chunk_cache_wish(enabled != 0);
+        AmmlStatus::OK
     }
 
     unsafe extern "C" fn player_list_entry(index: u32, out: *mut AmmlPlayerListEntry) -> AmmlStatus {

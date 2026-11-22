@@ -2,23 +2,27 @@
 
 use std::ffi::c_void;
 
-use amml_abi::AmmlCameraKind;
 use amml_abi::{
     AMML_API_VERSION, AmmlActorTable, AmmlAmount, AmmlApi, AmmlApplyStats, AmmlBand, AmmlBlockHandle, AmmlCameraTable,
     AmmlCaptureFrame, AmmlCaptureRequest, AmmlClientFlag, AmmlClientTable, AmmlColor, AmmlContainerAction,
-    AmmlContainerEntry, AmmlCoreTable, AmmlCursorClip, AmmlDirKind, AmmlEventsTable, AmmlHand, AmmlInputBlocks,
-    AmmlInputMode, AmmlInputTable, AmmlInventoryMove, AmmlInventoryTable, AmmlItemDraw, AmmlItemDrawFlags,
-    AmmlItemSnapshot, AmmlLeaseMode, AmmlLeaseRequest, AmmlLeaseState, AmmlLightSource, AmmlLightingTable,
-    AmmlLogLevel, AmmlMenu, AmmlMeshId, AmmlModifiers, AmmlMouseButton, AmmlMoveIntent, AmmlNetworkTable,
-    AmmlOverlayTable, AmmlPoint, AmmlPose, AmmlProjection, AmmlRect, AmmlRegistryTable, AmmlRenderTable,
-    AmmlRequestOptions, AmmlRotation, AmmlScreen, AmmlScreenKind, AmmlServices, AmmlShapeOp, AmmlShotLayers, AmmlSize,
-    AmmlSlotAt, AmmlStartWorldOutcome, AmmlStatus, AmmlStr, AmmlTextAlign, AmmlTextureId, AmmlTextureSource,
-    AmmlUiProfile, AmmlUiTable, AmmlUv, AmmlVec3, AmmlWindowTable, AmmlWorldInfo, AmmlWorldTable, AmmlWorldText,
-    EventCallbackFn,
+    AmmlContainerEntry, AmmlCoreTable, AmmlCursorClip, AmmlDirKind, AmmlEventsTable, AmmlHand, AmmlHitResult,
+    AmmlInputBlocks, AmmlInputMode, AmmlInputTable, AmmlInventoryMove, AmmlInventoryTable, AmmlItemDraw,
+    AmmlItemDrawFlags, AmmlItemSnapshot, AmmlLeaseMode, AmmlLeaseRequest, AmmlLeaseState, AmmlLightSource,
+    AmmlLightingTable, AmmlLogLevel, AmmlMenu, AmmlMeshId, AmmlModifiers, AmmlMouseButton, AmmlMoveIntent,
+    AmmlNetworkTable, AmmlOptionKey, AmmlOptionsTable, AmmlOtherLeases, AmmlOverlayTable, AmmlPoint, AmmlPose,
+    AmmlProjection, AmmlRect, AmmlRegistryTable, AmmlRenderTable, AmmlRequestOptions, AmmlRotation, AmmlScreen,
+    AmmlScreenKind, AmmlServices, AmmlShapeOp, AmmlShotLayers, AmmlSize, AmmlSlotAt, AmmlStartWorldOutcome, AmmlStatus,
+    AmmlStr, AmmlTextAlign, AmmlTextureId, AmmlTextureSource, AmmlUiProfile, AmmlUiTable, AmmlUv, AmmlVec3,
+    AmmlWindowTable, AmmlWorldInfo, AmmlWorldTable, AmmlWorldText, EventCallbackFn,
 };
+use amml_abi::{AmmlAabb, AmmlActorTarget, AmmlCameraKind, AmmlGameType, AmmlPermissionLevel};
+use amml_abi::{AmmlBlockEntityGhost, AmmlGhostEntityOptions};
+use amml_abi::{AmmlBlockGrid, AmmlMeshBuilt, AmmlMeshGroup, AmmlMesherOptions};
+use amml_abi::{AmmlBlockInfo, AmmlBlockMatch, AmmlBlockPos, AmmlKindsResult, AmmlStateEntry, AmmlStateValue};
 use amml_abi::{AmmlChatField, AmmlImageView, AmmlInlineIcon};
 use amml_abi::{AmmlChunkLoad, AmmlColumnReadStats, AmmlColumnRequest, AmmlColumnSample, AmmlSurfaceSample};
-use amml_abi::{AmmlColorQuad, AmmlMeshStyle, AmmlTransform};
+use amml_abi::{AmmlColorQuad, AmmlMeshStyle, AmmlPersistence, AmmlTransform};
+use amml_abi::{AmmlHoldRequest, AmmlTimeHold, AmmlTimeState, AmmlTimeTable};
 use amml_runtime::{InjectedOp, LeaseTerms};
 
 use crate::testing::{
@@ -47,6 +51,8 @@ pub(crate) struct FakeTables {
     _world: Box<AmmlWorldTable>,
     _render: Box<AmmlRenderTable>,
     _camera: Box<AmmlCameraTable>,
+    _options: Box<AmmlOptionsTable>,
+    _time: Box<AmmlTimeTable>,
 }
 
 impl FakeTables {
@@ -62,11 +68,11 @@ impl FakeTables {
     /// but the actor table, `SIZE_V2`
     /// to the client and input tables only, `SIZE_V1` to none, as a loader before them.
     pub(crate) fn new(services_size: u32) -> Self {
-        Self::with_inventory(services_size, AmmlInventoryTable::SIZE_V6)
+        Self::with_inventory(services_size, AmmlInventoryTable::SIZE_V7)
     }
 
-    /// `new` with an inventory table of `inventory_size`: `SIZE_V4` has no `request_moves` and `SIZE_V5` no
-    /// `item_change_stamp`, as a loader before them.
+    /// `new` with an inventory table of `inventory_size`: `SIZE_V4` has no `request_moves`, `SIZE_V5` no
+    /// `item_change_stamp` and `SIZE_V6` no `request_pick`, as a loader before them.
     pub(crate) fn with_inventory(services_size: u32, inventory_size: u32) -> Self {
         let events = Box::new(AmmlEventsTable {
             size: std::mem::size_of::<AmmlEventsTable>() as u32,
@@ -89,8 +95,8 @@ impl FakeTables {
             require: Self::require,
         });
         let client = Box::new(AmmlClientTable {
-            size: AmmlClientTable::SIZE_V4,
-            version: 4,
+            size: AmmlClientTable::SIZE_V8,
+            version: 8,
             current: Self::client_current,
             local_player: Self::client_local_player,
             flag: Self::client_flag,
@@ -107,10 +113,15 @@ impl FakeTables {
             note_activity: Some(Self::client_note_activity),
             world_info: Some(Self::client_world_info),
             world_text: Some(Self::client_world_text),
+            replay_app_focus_lost: Some(Self::client_replay_app_focus_lost),
+            in_gameplay: Some(Self::client_in_gameplay),
+            join_server_direct: Some(Self::client_join_server_direct),
+            title_screen: Some(Self::client_title_screen),
+            go_to_title: Some(Self::client_go_to_title),
         });
         let input = Box::new(AmmlInputTable {
-            size: AmmlInputTable::SIZE_V2,
-            version: 2,
+            size: AmmlInputTable::SIZE_V3,
+            version: 3,
             modifiers: Self::input_modifiers,
             is_down: Self::input_is_down,
             acquire: Self::input_acquire,
@@ -125,6 +136,7 @@ impl FakeTables {
             end_lease: Self::input_end_lease,
             set_ranking: Self::input_set_ranking,
             set_coexist: Some(Self::input_set_coexist),
+            held_by_others: Some(Self::input_held_by_others),
         });
         let window = Box::new(AmmlWindowTable {
             size: AmmlWindowTable::SIZE_V2,
@@ -153,8 +165,8 @@ impl FakeTables {
             copy_back_buffer: Self::overlay_copy_back_buffer,
         });
         let actor = Box::new(AmmlActorTable {
-            size: AmmlActorTable::SIZE_V3,
-            version: 3,
+            size: AmmlActorTable::SIZE_V6,
+            version: 6,
             is_alive: Self::actor_is_alive,
             position: Some(Self::actor_position),
             eye_position: Some(Self::actor_eye_position),
@@ -164,12 +176,22 @@ impl FakeTables {
             head_position: Some(Self::actor_head_position),
             block_source: Some(Self::actor_block_source),
             health: Some(Self::actor_health),
+            view_vector: Some(Self::actor_view_vector),
+            aabb: Some(Self::actor_aabb),
+            game_type: Some(Self::actor_game_type),
+            permission_level: Some(Self::actor_permission_level),
+            set_rotation: Some(Self::actor_set_rotation),
+            build_at: Some(Self::actor_build_at),
+            build_delay: Some(Self::actor_build_delay),
+            max_pick_range: Some(Self::actor_max_pick_range),
+            hit_result: Some(Self::actor_hit_result),
         });
         let v2 = services_size >= AmmlServices::SIZE_V2;
         let v3 = services_size >= AmmlServices::SIZE_V3;
         let inventory = Box::new(AmmlInventoryTable {
             size: inventory_size,
             version: match inventory_size {
+                size if size >= AmmlInventoryTable::SIZE_V7 => 7,
                 size if size >= AmmlInventoryTable::SIZE_V6 => 6,
                 size if size >= AmmlInventoryTable::SIZE_V5 => 5,
                 _ => 4,
@@ -188,6 +210,7 @@ impl FakeTables {
             request_moves: (inventory_size >= AmmlInventoryTable::SIZE_V5).then_some(Self::inventory_request_moves),
             item_change_stamp: (inventory_size >= AmmlInventoryTable::SIZE_V6)
                 .then_some(Self::inventory_item_change_stamp as amml_abi::InventoryItemChangeStampFn),
+            request_pick: (inventory_size >= AmmlInventoryTable::SIZE_V7).then_some(Self::inventory_request_pick),
         });
         let lighting = Box::new(AmmlLightingTable {
             size: AmmlLightingTable::SIZE_V1,
@@ -236,10 +259,12 @@ impl FakeTables {
         let v9 = services_size >= AmmlServices::SIZE_V9;
         let v10 = services_size >= AmmlServices::SIZE_V10;
         let v11 = services_size >= AmmlServices::SIZE_V11;
+        let v12 = services_size >= AmmlServices::SIZE_V12;
+        let v13 = services_size >= AmmlServices::SIZE_V13;
         let network = Box::new(FakeNetworkTable::table());
         let world = Box::new(AmmlWorldTable {
-            size: AmmlWorldTable::SIZE_V6,
-            version: 6,
+            size: AmmlWorldTable::SIZE_V9,
+            version: 9,
             sky_darken: Self::world_sky_darken,
             chunk: Some(Self::world_chunk),
             chunk_load_state: Some(Self::world_chunk_load_state),
@@ -252,18 +277,38 @@ impl FakeTables {
             shapes_target_epoch: Some(Self::world_shapes_target_epoch),
             raycast: Some(Self::world_raycast),
             actors_in: Some(Self::world_actors_in),
+            block_from_state: Some(Self::world_block_from_state),
+            block_rotated: Some(Self::world_block_rotated),
+            block_handle_name: Some(Self::world_block_handle_name),
+            block_handle_item: Some(Self::world_block_handle_item),
+            block_at: Some(Self::world_block_at),
+            block_info: Some(Self::world_block_info),
+            block_built_over: Some(Self::world_block_built_over),
+            block_item: Some(Self::world_block_item),
+            block_handle_of: Some(Self::world_block_handle_of),
+            block_changed_state: Some(Self::world_block_changed_state),
+            kinds_in_box: Some(Self::world_kinds_in_box),
         });
         let render = Box::new(AmmlRenderTable {
-            size: AmmlRenderTable::SIZE_V2,
-            version: 2,
+            size: AmmlRenderTable::SIZE_V6,
+            version: 6,
             canvas_camera_position: Self::render_canvas_camera_position,
             mesh_free: Self::render_mesh_free,
             mesh_build: Some(Self::render_mesh_build),
             mesh_draw: Some(Self::render_mesh_draw),
+            canvas_clip_matrix: Some(Self::render_canvas_clip_matrix),
+            mesher_build: Some(Self::render_mesher_build),
+            mesher_group_begin: Some(Self::render_mesher_group_begin),
+            mesher_group_append: Some(Self::render_mesher_group_append),
+            mesher_group_finish: Some(Self::render_mesher_group_finish),
+            block_entity_create: Some(Self::render_block_entity_create),
+            block_entity_free: Some(Self::render_block_entity_free),
+            block_entity_draw: Some(Self::render_block_entity_draw),
+            mesher_group_discard: Some(Self::render_mesher_group_discard),
         });
         let camera = Box::new(AmmlCameraTable {
-            size: AmmlCameraTable::SIZE_V3,
-            version: 3,
+            size: AmmlCameraTable::SIZE_V4,
+            version: 4,
             set_pose: Self::camera_set_pose,
             rendered_position: Self::camera_rendered_position,
             projection: Self::camera_projection,
@@ -271,10 +316,31 @@ impl FakeTables {
             release_free: Some(Self::camera_release_free),
             free_available: Some(Self::camera_free_available),
             active_camera: Some(Self::camera_active_camera),
+            hide_actor: Some(Self::camera_hide_actor),
+        });
+        let options = Box::new(AmmlOptionsTable {
+            size: AmmlOptionsTable::SIZE_V1,
+            version: 1,
+            view_distance_chunks: Self::options_view_distance,
+            get_int: Self::options_get_int,
+            set_int: Self::options_set_int,
+            release_transient: Self::options_release_transient,
+        });
+        let time = Box::new(AmmlTimeTable {
+            size: AmmlTimeTable::SIZE_V1,
+            version: 1,
+            hold: Self::time_hold,
+            step_us: Self::time_step_us,
+            release: Self::time_release,
+            state: Self::time_state,
         });
         let services = Box::new(AmmlServices {
             size: services_size,
-            version: if v11 {
+            version: if v13 {
+                13
+            } else if v12 {
+                12
+            } else if v11 {
                 11
             } else if v10 {
                 10
@@ -312,6 +378,8 @@ impl FakeTables {
             world: if v9 { &raw const *world } else { std::ptr::null() },
             render: if v10 { &raw const *render } else { std::ptr::null() },
             camera: if v11 { &raw const *camera } else { std::ptr::null() },
+            options: if v12 { &raw const *options } else { std::ptr::null() },
+            time: if v13 { &raw const *time } else { std::ptr::null() },
         });
         let api = Box::new(AmmlApi {
             size: AmmlApi::SIZE_V3,
@@ -344,6 +412,8 @@ impl FakeTables {
             _world: world,
             _render: render,
             _camera: camera,
+            _options: options,
+            _time: time,
         }
     }
 
@@ -1519,7 +1589,37 @@ impl FakeTables {
         Self::write(out_id, id.0)
     }
 
-    // The loader's argument rule of a move: slots below 36, no swap or place of a slot with itself, no zero count.
+    unsafe extern "C" fn inventory_request_pick(
+        _module: AmmlStr,
+        player: *const c_void,
+        block: AmmlBlockHandle,
+        slot: u8,
+        out_id: *mut u64,
+    ) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        if out_id.is_null() {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        let fake = match state.client_check(state.client_handle(), Area::INVENTORY_REQUEST.at(2)) {
+            Ok(fake) => fake,
+            Err(status) => return status,
+        };
+        if !fake.local_player || player.addr() != state.player_handle() {
+            return AmmlStatus::REFUSED;
+        }
+        let Some(block) = crate::BlockHandle::from_raw(block) else {
+            return AmmlStatus::INVALID_ARGUMENT;
+        };
+        if slot >= 9 || state.requests().running() {
+            return AmmlStatus::REFUSED;
+        }
+        let id = state.requests().take_pick(block, slot);
+        Self::write(out_id, id.0)
+    }
+
+    // The loader rule of a move: slots below 36, no swap or place of a slot with itself, no zero count.
     fn move_fits(item: &InventoryMove) -> bool {
         match *item {
             InventoryMove::Swap { a, b } => a < 36 && b < 36 && a != b,
@@ -1690,6 +1790,117 @@ impl FakeTables {
         }
     }
 
+    unsafe extern "C" fn actor_view_vector(player: *const c_void, out: *mut AmmlVec3) -> AmmlStatus {
+        match Self::actor_check_in(player, Area::ACTOR_READ.at(4)).map(|(_, fake)| fake.view_vector) {
+            Ok(Some(value)) => Self::write(out, AmmlVec3 { x: value.x, y: value.y, z: value.z }),
+            Ok(None) => AmmlStatus::NOT_AVAILABLE,
+            Err(status) => status,
+        }
+    }
+
+    unsafe extern "C" fn actor_aabb(player: *const c_void, out: *mut AmmlAabb) -> AmmlStatus {
+        match Self::actor_check_in(player, Area::ACTOR_READ.at(4)).map(|(_, fake)| fake.aabb) {
+            Ok(Some(value)) => Self::write(out, AmmlAabb::from(value)),
+            Ok(None) => AmmlStatus::NOT_AVAILABLE,
+            Err(status) => status,
+        }
+    }
+
+    unsafe extern "C" fn actor_game_type(player: *const c_void, out: *mut AmmlGameType) -> AmmlStatus {
+        match Self::actor_check_in(player, Area::ACTOR_GAME_TYPE).map(|(_, fake)| fake.game_type) {
+            Ok(Some(value)) => Self::write(out, AmmlGameType::from(value)),
+            Ok(None) => AmmlStatus::NOT_AVAILABLE,
+            Err(status) => status,
+        }
+    }
+
+    unsafe extern "C" fn actor_permission_level(player: *const c_void, out: *mut AmmlPermissionLevel) -> AmmlStatus {
+        match Self::actor_check_in(player, Area::ACTOR_PERMISSION).map(|(_, fake)| fake.permission_level) {
+            Ok(Some(value)) => Self::write(out, AmmlPermissionLevel::from(value)),
+            Ok(None) => AmmlStatus::NOT_AVAILABLE,
+            Err(status) => status,
+        }
+    }
+
+    // A write that is not finite gives `INVALID_ARGUMENT` and changes nothing, as the loader does.
+    unsafe extern "C" fn actor_set_rotation(
+        player: *const c_void,
+        rotation: *const AmmlRotation,
+        head_yaw: f32,
+        has_head_yaw: u8,
+    ) -> AmmlStatus {
+        if rotation.is_null() {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        // SAFETY: the caller passes a readable rotation.
+        let rotation = unsafe { rotation.read() };
+        let head = (has_head_yaw != 0).then_some(head_yaw);
+        if !rotation.pitch.is_finite() || !rotation.yaw.is_finite() || head.is_some_and(|head| !head.is_finite()) {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        match Self::actor_check_in(player, Area::ACTOR_LOOK_WRITE) {
+            Ok((state, _)) => {
+                state.write_rotation(crate::Rotation::from(rotation), head);
+                AmmlStatus::OK
+            }
+            Err(status) => status,
+        }
+    }
+
+    // A face that is not one of the six or a click that is not finite gives `INVALID_ARGUMENT`, as the loader does. The
+    // build raises `BuildBlock` with the origin `THIS_MOD` (the fake has one mod); a cancel gives 0 and records nothing.
+    unsafe extern "C" fn actor_build_at(
+        _module: AmmlStr,
+        player: *const c_void,
+        pos: *const AmmlBlockPos,
+        face: amml_abi::AmmlFace,
+        click: *const AmmlVec3,
+        out: *mut u8,
+    ) -> AmmlStatus {
+        if pos.is_null() || click.is_null() || out.is_null() {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        // SAFETY: the caller passes a readable position and click point.
+        let (pos, click) = unsafe { (pos.read(), click.read()) };
+        if face.0 > amml_abi::AmmlFace::EAST.0 || !click.x.is_finite() || !click.y.is_finite() || !click.z.is_finite() {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        match Self::actor_check_in(player, Area::PLAYER_BUILD) {
+            Ok((state, _)) => {
+                let built = FakeGame::raise_own_build(&state, crate::BlockPos::from(pos), crate::Face::from(face));
+                if built {
+                    state.record_build(crate::BlockPos::from(pos), crate::Face::from(face));
+                }
+                Self::write(out, u8::from(built))
+            }
+            Err(status) => status,
+        }
+    }
+
+    unsafe extern "C" fn actor_build_delay(player: *const c_void, out: *mut u32) -> AmmlStatus {
+        match Self::actor_check_in(player, Area::PLAYER_BUILD).map(|(_, fake)| fake.build_delay) {
+            Ok(Some(value)) => Self::write(out, value),
+            Ok(None) => AmmlStatus::NOT_AVAILABLE,
+            Err(status) => status,
+        }
+    }
+
+    unsafe extern "C" fn actor_hit_result(player: *const c_void, out: *mut AmmlHitResult) -> AmmlStatus {
+        match Self::actor_check_in(player, Area::PLAYER_HIT_RESULT).map(|(_, fake)| fake.hit_result) {
+            Ok(Some(hit)) => Self::write(out, AmmlHitResult::from(hit)),
+            Ok(None) => AmmlStatus::NOT_AVAILABLE,
+            Err(status) => status,
+        }
+    }
+
+    unsafe extern "C" fn actor_max_pick_range(player: *const c_void, out: *mut f32) -> AmmlStatus {
+        match Self::actor_check_in(player, Area::PLAYER_PICK_RANGE).map(|(_, fake)| fake.max_pick_range) {
+            Ok(Some(value)) => Self::write(out, value),
+            Ok(None) => AmmlStatus::NOT_AVAILABLE,
+            Err(status) => status,
+        }
+    }
+
     unsafe extern "C" fn actor_health(player: *const c_void, out: *mut i32) -> AmmlStatus {
         match Self::actor_check_in(player, Area::ACTOR_HEALTH).map(|(_, fake)| fake.health) {
             Ok(Some(value)) => Self::write(out, value),
@@ -1708,6 +1919,28 @@ impl FakeTables {
         }
         match state.render().camera_position(frame) {
             Ok(position) => Self::write(out, AmmlVec3 { x: position.x, y: position.y, z: position.z }),
+            Err(status) => status,
+        }
+    }
+
+    // The clip matrix of the running `WorldRendered` dispatch of `frame`, as the loader gives it (area version 3).
+    unsafe extern "C" fn render_canvas_clip_matrix(frame: u64, out: *mut [[f32; 4]; 4]) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        let area = Area::RENDER_WORLD_CANVAS.at(3);
+        if !state.area_offered(area.id, area.version) {
+            return AmmlStatus::NOT_AVAILABLE;
+        }
+        if out.is_null() {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        match state.render().clip_matrix(frame) {
+            Ok(matrix) => {
+                // SAFETY: `out` is non-null and the caller promises it is writable.
+                unsafe { out.write_unaligned(matrix) };
+                AmmlStatus::OK
+            }
             Err(status) => status,
         }
     }
@@ -1751,6 +1984,233 @@ impl FakeTables {
             Ok(mesh) => Self::write(out, mesh.into()),
             Err(status) => status,
         }
+    }
+
+    // Makes a ghost of the fake mod with the loader's checks (area `render.block_entities`, the gate and the world, then
+    // the options).
+    unsafe extern "C" fn render_block_entity_create(
+        _module: AmmlStr,
+        block: AmmlBlockHandle,
+        nbt: *const u8,
+        nbt_len: usize,
+        options: *const AmmlGhostEntityOptions,
+        out: *mut AmmlBlockEntityGhost,
+    ) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        let area = Area::RENDER_BLOCK_ENTITIES;
+        if !state.area_offered(area.id, area.version) {
+            return AmmlStatus::NOT_AVAILABLE;
+        }
+        if out.is_null() || options.is_null() || (nbt.is_null() && nbt_len != 0) {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        if !state.gate().get() || state.epoch().get() == 0 {
+            return AmmlStatus::NOT_READY;
+        }
+        // SAFETY: the caller promises readable options for the call.
+        let options = unsafe { options.read() };
+        let (pair, skull) = (Area::RENDER_CHEST_PAIR, Area::RENDER_SKULL_POSE);
+        let offered = (state.area_offered(pair.id, pair.version), state.area_offered(skull.id, skull.version));
+        match state.block_entities().create(block, nbt_len, &options, offered.0, offered.1) {
+            Ok(ghost) => Self::write(out, ghost),
+            Err(status) => status,
+        }
+    }
+
+    unsafe extern "C" fn render_block_entity_free(_module: AmmlStr, ghost: AmmlBlockEntityGhost) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        match state.block_entities().free(ghost) {
+            Ok(()) => AmmlStatus::OK,
+            Err(status) => status,
+        }
+    }
+
+    // Draws a ghost of the fake mod inside the running `BlockEntityPass` dispatch of `frame`.
+    unsafe extern "C" fn render_block_entity_draw(
+        _module: AmmlStr,
+        frame: u64,
+        ghost: AmmlBlockEntityGhost,
+        pos: *const AmmlBlockPos,
+    ) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        let area = Area::RENDER_BLOCK_ENTITIES;
+        if !state.area_offered(area.id, area.version) {
+            return AmmlStatus::NOT_AVAILABLE;
+        }
+        if pos.is_null() {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        // SAFETY: the caller promises a readable position for the call.
+        let pos = unsafe { pos.read() };
+        match state.block_entities().draw(frame, ghost, [pos.x, pos.y, pos.z]) {
+            Ok(()) => AmmlStatus::OK,
+            Err(status) => status,
+        }
+    }
+
+    // Builds a grid into a mesh of the fake mod in the running dispatch of `frame`, with the loader's checks (area
+    // `render.block_mesher`, the frame, the grid); nothing is skipped.
+    unsafe extern "C" fn render_mesher_build(
+        _module: AmmlStr,
+        frame: u64,
+        grid: *const AmmlBlockGrid,
+        options: *const AmmlMesherOptions,
+        out: *mut AmmlMeshBuilt,
+        _skipped: *mut u32,
+        _skipped_cap: u32,
+    ) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        let mesher = Area::RENDER_BLOCK_MESHER;
+        if !state.area_offered(mesher.id, mesher.version) {
+            return AmmlStatus::NOT_AVAILABLE;
+        }
+        if grid.is_null() || options.is_null() || out.is_null() {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        // SAFETY: the caller promises a readable grid for the call.
+        let grid = unsafe { grid.read() };
+        let slice = |pointer: *const u16, count: u32| {
+            if count == 0 {
+                &[][..]
+            } else {
+                // SAFETY: the caller promises `count` values readable at `pointer` for the call.
+                unsafe { std::slice::from_raw_parts(pointer, count as usize) }
+            }
+        };
+        let cells = slice(grid.cells, grid.cell_count);
+        let palette = if grid.palette_len == 0 {
+            &[][..]
+        } else {
+            // SAFETY: the caller promises `palette_len` handles readable at `palette` for the call.
+            unsafe { std::slice::from_raw_parts(grid.palette, grid.palette_len as usize) }
+        };
+        match state.render().mesher_build(frame, grid.dims, cells, palette) {
+            Ok((mesh, quads)) => {
+                let mesh = mesh.map(AmmlMeshId::from).unwrap_or_default();
+                Self::write(out, AmmlMeshBuilt { mesh, quads, skipped_count: 0 })
+            }
+            Err(status) => status,
+        }
+    }
+
+    // Opens a group of the fake mod in the running dispatch of `frame`, with the loader's checks (area
+    // `render.block_mesher`, the frame, the slot).
+    unsafe extern "C" fn render_mesher_group_begin(
+        _module: AmmlStr,
+        frame: u64,
+        slot_size: *const [u32; 3],
+        out: *mut AmmlMeshGroup,
+    ) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        let mesher = Area::RENDER_BLOCK_MESHER;
+        if !state.area_offered(mesher.id, mesher.version) {
+            return AmmlStatus::NOT_AVAILABLE;
+        }
+        if slot_size.is_null() || out.is_null() {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        // SAFETY: the caller promises a readable slot size for the call.
+        let slot_size = unsafe { slot_size.read() };
+        match state.render().group_begin(frame, slot_size) {
+            Ok(group) => Self::write(out, group),
+            Err(status) => status,
+        }
+    }
+
+    // Appends a grid to a group of the fake mod in the running dispatch of `frame`, with the loader's checks.
+    unsafe extern "C" fn render_mesher_group_append(
+        _module: AmmlStr,
+        frame: u64,
+        group: AmmlMeshGroup,
+        grid: *const AmmlBlockGrid,
+        offset: *const AmmlBlockPos,
+        options: *const AmmlMesherOptions,
+    ) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        let mesher = Area::RENDER_BLOCK_MESHER;
+        if !state.area_offered(mesher.id, mesher.version) {
+            return AmmlStatus::NOT_AVAILABLE;
+        }
+        if grid.is_null() || offset.is_null() || options.is_null() {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        // SAFETY: the caller promises a readable grid and offset for the call.
+        let (grid, offset) = unsafe { (grid.read(), offset.read()) };
+        let (cells, palette) = Self::grid_slices(&grid);
+        match state.render().group_append(frame, group, (grid.dims, cells, palette), [offset.x, offset.y, offset.z]) {
+            Ok(()) => AmmlStatus::OK,
+            Err(status) => status,
+        }
+    }
+
+    // Ends a group of the fake mod into a mesh of it in the running dispatch of `frame`.
+    unsafe extern "C" fn render_mesher_group_finish(
+        _module: AmmlStr,
+        frame: u64,
+        group: AmmlMeshGroup,
+        out: *mut AmmlMeshBuilt,
+    ) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        let mesher = Area::RENDER_BLOCK_MESHER;
+        if !state.area_offered(mesher.id, mesher.version) {
+            return AmmlStatus::NOT_AVAILABLE;
+        }
+        if out.is_null() {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        match state.render().group_finish(frame, group) {
+            Ok((mesh, quads)) => {
+                let mesh = mesh.map(AmmlMeshId::from).unwrap_or_default();
+                Self::write(out, AmmlMeshBuilt { mesh, quads, skipped_count: 0 })
+            }
+            Err(status) => status,
+        }
+    }
+
+    // Ends a group of the fake mod without a mesh, from any frame or none.
+    unsafe extern "C" fn render_mesher_group_discard(_module: AmmlStr, group: AmmlMeshGroup) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        let mesher = Area::RENDER_BLOCK_MESHER;
+        if !state.area_offered(mesher.id, mesher.version) {
+            return AmmlStatus::NOT_AVAILABLE;
+        }
+        match state.render().group_discard(group) {
+            Ok(()) => AmmlStatus::OK,
+            Err(status) => status,
+        }
+    }
+
+    // The cells and the palette of a grid the caller promises are readable for their counts.
+    fn grid_slices(grid: &AmmlBlockGrid) -> (&[u16], &[AmmlBlockHandle]) {
+        let cells = if grid.cell_count == 0 {
+            &[][..]
+        } else {
+            // SAFETY: the caller promises `cell_count` cells readable at `cells` for the call.
+            unsafe { std::slice::from_raw_parts(grid.cells, grid.cell_count as usize) }
+        };
+        let palette = if grid.palette_len == 0 {
+            &[][..]
+        } else {
+            // SAFETY: the caller promises `palette_len` handles readable at `palette` for the call.
+            unsafe { std::slice::from_raw_parts(grid.palette, grid.palette_len as usize) }
+        };
+        (cells, palette)
     }
 
     // Draws a mesh of the fake mod in the running dispatch of `frame`: records the line.
@@ -1878,6 +2338,21 @@ impl FakeTables {
         }
     }
 
+    // A `hide_actor` of the fake mod: the area as the loader checks it (any thread, no gate), then the target.
+    unsafe extern "C" fn camera_hide_actor(_module: AmmlStr, target: AmmlActorTarget, on: u8) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        if !state.area_offered(Area::CAMERA_HIDE_ACTOR.id, Area::CAMERA_HIDE_ACTOR.version) {
+            return AmmlStatus::NOT_AVAILABLE;
+        }
+        if target != AmmlActorTarget::LOCAL_PLAYER {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        state.camera().set_body_hidden(on != 0);
+        AmmlStatus::OK
+    }
+
     // The active camera of the fake client, when the area is offered and a world is joined.
     unsafe extern "C" fn camera_active_camera(client: *const c_void, out: *mut AmmlCameraKind) -> AmmlStatus {
         let Some(state) = FakeState::current() else {
@@ -1891,6 +2366,132 @@ impl FakeTables {
             Some(kind) => Self::write(out, kind.to_abi()),
             None => AmmlStatus::FAILED,
         }
+    }
+
+    // The gate and the offer of an options area, as the loader checks them.
+    fn options_check(state: &FakeState) -> Result<(), AmmlStatus> {
+        if !state.gate().get() {
+            return Err(AmmlStatus::NOT_READY);
+        }
+        if !state.area_offered(Area::OPTIONS_INT.id, Area::OPTIONS_INT.version) {
+            return Err(AmmlStatus::NOT_AVAILABLE);
+        }
+        Ok(())
+    }
+
+    // The view distance of the fake client.
+    unsafe extern "C" fn options_view_distance(client: *const c_void, out: *mut u32) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        if let Err(status) = state.client_check(client.addr(), Area::OPTIONS_VIEW_DISTANCE) {
+            return status;
+        }
+        Self::write(out, state.options().view_distance())
+    }
+
+    unsafe extern "C" fn options_get_int(key: AmmlOptionKey, out: *mut i32) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        if let Err(status) = Self::options_check(&state) {
+            return status;
+        }
+        match state.options().get_int(key) {
+            Ok(value) => Self::write(out, value),
+            Err(status) => status,
+        }
+    }
+
+    unsafe extern "C" fn options_set_int(
+        _module: AmmlStr,
+        key: AmmlOptionKey,
+        value: i32,
+        persistence: AmmlPersistence,
+    ) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        if persistence != AmmlPersistence::TRANSIENT {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        if let Err(status) = Self::options_check(&state) {
+            return status;
+        }
+        Self::status(state.options().set_int(key, value))
+    }
+
+    unsafe extern "C" fn options_release_transient(_module: AmmlStr, key: AmmlOptionKey) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        if let Err(status) = Self::options_check(&state) {
+            return status;
+        }
+        Self::status(state.options().release(key))
+    }
+
+    // The gate and the offer of the time area, as the loader checks them.
+    fn time_check(state: &FakeState) -> Result<(), AmmlStatus> {
+        if !state.area_offered(Area::TIME_CONTROL.id, Area::TIME_CONTROL.version) {
+            return Err(AmmlStatus::NOT_AVAILABLE);
+        }
+        if !state.gate().get() {
+            return Err(AmmlStatus::NOT_READY);
+        }
+        Ok(())
+    }
+
+    // A hold of the fake mod; it needs a joined world (epoch above 0).
+    unsafe extern "C" fn time_hold(
+        _module: AmmlStr,
+        request: *const AmmlHoldRequest,
+        out: *mut AmmlTimeHold,
+    ) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        if request.is_null() || out.is_null() {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        if let Err(status) = Self::time_check(&state) {
+            return status;
+        }
+        if state.epoch().get() == 0 {
+            return AmmlStatus::NOT_READY;
+        }
+        // SAFETY: `request` is non-null and the caller promises it is readable.
+        match state.time().hold(unsafe { request.read() }) {
+            Ok(hold) => Self::write(out, hold),
+            Err(status) => status,
+        }
+    }
+
+    unsafe extern "C" fn time_step_us(hold: AmmlTimeHold, micros: i64) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        if let Err(status) = Self::time_check(&state) {
+            return status;
+        }
+        Self::status(state.time().step_us(hold, micros))
+    }
+
+    unsafe extern "C" fn time_release(hold: AmmlTimeHold) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        Self::status(state.time().release(hold))
+    }
+
+    unsafe extern "C" fn time_state(out: *mut AmmlTimeState) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        if !state.area_offered(Area::TIME_CONTROL.id, Area::TIME_CONTROL.version) {
+            return AmmlStatus::NOT_AVAILABLE;
+        }
+        Self::write(out, state.time().state())
     }
 
     // Whether the fake world has the free preset.
@@ -2098,7 +2699,17 @@ impl FakeTables {
             Ok(fake) => fake,
             Err(status) => return status,
         };
-        let Some(name) = fake.world.and_then(|world| world.names.get(&crate::BlockTypeId(id)).cloned()) else {
+        let named = |world: &crate::testing::FakeWorld| {
+            let id = crate::BlockTypeId(id);
+            world.names.get(&id).cloned().or_else(|| {
+                world
+                    .blocks
+                    .values()
+                    .find(|block| block.type_id == id && !block.name.is_empty())
+                    .map(|block| block.name.to_string())
+            })
+        };
+        let Some(name) = fake.world.as_ref().and_then(named) else {
             return AmmlStatus::INVALID_ARGUMENT;
         };
         let bytes = name.as_bytes();
@@ -2108,6 +2719,342 @@ impl FakeTables {
             unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, copied) };
         }
         Self::write(out_len, bytes.len())
+    }
+
+    // The block of the fake world for a name and states, from `FakeWorld::states` (exact) or `default_states`; the
+    // states are sorted by name and their values written as text, as the maps hold them.
+    unsafe extern "C" fn world_block_from_state(
+        _module: AmmlStr,
+        name: AmmlStr,
+        states: *const AmmlStateEntry,
+        count: u32,
+        out: *mut AmmlBlockMatch,
+    ) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        let world = match state.block_world(Area::WORLD_BLOCK_STATES) {
+            Ok(world) => world,
+            Err(status) => return status,
+        };
+        if out.is_null() || (states.is_null() && count != 0) {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        // SAFETY: the caller promises `name` is valid for the call.
+        let Ok(name) = (unsafe { name.as_str() }) else {
+            return AmmlStatus::INVALID_ARGUMENT;
+        };
+        let entries: &[AmmlStateEntry] = if count == 0 {
+            &[]
+        } else {
+            // SAFETY: the caller promises `count` entries are readable for the call.
+            unsafe { std::slice::from_raw_parts(states, count as usize) }
+        };
+        let mut wanted = Vec::new();
+        for entry in entries {
+            // SAFETY: the caller promises the texts of every entry are valid for the call.
+            let Ok(key) = (unsafe { entry.name.as_str() }) else {
+                return AmmlStatus::INVALID_ARGUMENT;
+            };
+            let value = match entry.value.kind {
+                AmmlStateValue::INT => entry.value.int.to_string(),
+                AmmlStateValue::BOOL => (entry.value.int != 0).to_string(),
+                // SAFETY: as above.
+                AmmlStateValue::TEXT => match unsafe { entry.value.text.as_str() } {
+                    Ok(text) => text.to_string(),
+                    Err(status) => return status,
+                },
+                _ => return AmmlStatus::INVALID_ARGUMENT,
+            };
+            wanted.push((key.to_string(), value));
+        }
+        wanted.sort();
+        let exact = world.states.get(&(name.to_string(), wanted)).copied();
+        let found =
+            match exact.map(|block| (block, 1)).or_else(|| world.default_states.get(name).map(|block| (*block, 0))) {
+                Some((block, exact)) => AmmlBlockMatch { block: block.raw(), exact, _reserved: [0; 7] },
+                None => AmmlBlockMatch { block: AmmlBlockHandle::NONE, exact: 0, _reserved: [0; 7] },
+            };
+        // SAFETY: `out` is non-null and the caller promises it is writable.
+        unsafe { out.write(found) };
+        AmmlStatus::OK
+    }
+
+    // The turned block of the fake world (`FakeWorld::rotated`, the same handle when absent); each call is recorded.
+    unsafe extern "C" fn world_block_rotated(
+        _module: AmmlStr,
+        block: AmmlBlockHandle,
+        quarters: u8,
+        out: *mut AmmlBlockHandle,
+    ) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        let world = match state.block_world(Area::WORLD_BLOCK_STATES) {
+            Ok(world) => world,
+            Err(status) => return status,
+        };
+        let Some(handle) = crate::BlockHandle::from_raw(block) else {
+            return AmmlStatus::STALE;
+        };
+        if out.is_null() {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        let quarters = quarters % 4;
+        state.note_block_rotation(handle, quarters);
+        let turned = world.rotated.get(&(handle, quarters)).copied().unwrap_or(handle);
+        // SAFETY: `out` is non-null and the caller promises it is writable.
+        unsafe { out.write(turned.raw()) };
+        AmmlStatus::OK
+    }
+
+    // The fake world and the block a block handle names, for a call of `world.blocks`.
+    fn world_block_check(block: *const c_void) -> Result<(crate::testing::FakeBlock, crate::BlockPos), AmmlStatus> {
+        let state = FakeState::current().ok_or(AmmlStatus::FAILED)?;
+        let fake = state.client_check(state.client_handle(), Area::WORLD_BLOCKS)?;
+        let pos = state.block_of_handle(block.addr()).ok_or(AmmlStatus::REFUSED)?;
+        let world = fake.world.ok_or(AmmlStatus::REFUSED)?;
+        Ok((world.blocks.get(&pos).copied().unwrap_or_else(|| world.air_block()), pos))
+    }
+
+    // The block of the fake world at a position, as a handle; null when the world has none there.
+    unsafe extern "C" fn world_block_at(
+        source: *const c_void,
+        pos: *const AmmlBlockPos,
+        out: *mut *const c_void,
+    ) -> AmmlStatus {
+        if pos.is_null() || out.is_null() {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        let (state, fake) = match Self::world_source_check_in(source, Area::WORLD_BLOCKS) {
+            Ok(checked) => checked,
+            Err(status) => return status,
+        };
+        // SAFETY: `pos` is non-null and the caller promises it is readable.
+        let pos = crate::BlockPos::from(unsafe { pos.read() });
+        if fake.world.is_none() {
+            return AmmlStatus::REFUSED;
+        }
+        Self::write(out, std::ptr::with_exposed_provenance(state.block_handle(pos)))
+    }
+
+    unsafe extern "C" fn world_block_info(block: *const c_void, out: *mut AmmlBlockInfo) -> AmmlStatus {
+        if out.is_null() {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        match Self::world_block_check(block) {
+            Ok((found, _)) => Self::write(
+                out,
+                AmmlBlockInfo {
+                    type_id: found.type_id.0,
+                    is_air: u8::from(found.is_air),
+                    is_interactive: u8::from(found.interactive && !found.is_air),
+                    _reserved: [0; 2],
+                },
+            ),
+            Err(status) => status,
+        }
+    }
+
+    unsafe extern "C" fn world_block_built_over(
+        source: *const c_void,
+        block: *const c_void,
+        pos: *const AmmlBlockPos,
+        out: *mut u8,
+    ) -> AmmlStatus {
+        if pos.is_null() || out.is_null() {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        if let Err(status) = Self::world_source_check_in(source, Area::WORLD_BLOCKS) {
+            return status;
+        }
+        match Self::world_block_check(block) {
+            Ok((found, _)) => Self::write(out, u8::from(found.built_over)),
+            Err(status) => status,
+        }
+    }
+
+    unsafe extern "C" fn world_block_item(
+        block: *const c_void,
+        out: *mut AmmlItemSnapshot,
+        name_buf: *mut u8,
+        name_cap: usize,
+        name_len: *mut usize,
+    ) -> AmmlStatus {
+        if out.is_null() || name_len.is_null() {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        let item = match Self::world_block_check(block) {
+            Ok((found, _)) => found.item,
+            Err(status) => return status,
+        };
+        let Some(item) = item else {
+            return AmmlStatus::NOT_AVAILABLE;
+        };
+        // SAFETY: `out` is non-null and the caller promises a v1 snapshot is writable.
+        unsafe { out.write(item.raw_snapshot()) };
+        let name = item.type_name.as_bytes();
+        let copied = name.len().min(name_cap);
+        if copied > 0 && !name_buf.is_null() {
+            // SAFETY: the caller promises `name_buf` is writable for `name_cap` bytes, and `copied <= name_cap`.
+            unsafe { std::ptr::copy_nonoverlapping(name.as_ptr(), name_buf, copied) };
+        }
+        Self::write(name_len, name.len())
+    }
+
+    unsafe extern "C" fn world_block_handle_of(
+        _module: AmmlStr,
+        block: *const c_void,
+        out: *mut AmmlBlockHandle,
+    ) -> AmmlStatus {
+        if out.is_null() {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        match Self::world_block_check(block) {
+            Ok((found, _)) => match found.handle {
+                Some(handle) => Self::write(out, handle.raw()),
+                None => AmmlStatus::NOT_AVAILABLE,
+            },
+            Err(status) => status,
+        }
+    }
+
+    // The distinct block types of a box of the fake world, as the loader gives them: every chunk of the box must be in
+    // `chunks` and loaded, the box must have no inverted axis and at most 65536 cells, the cells are read x, then z, then y,
+    // and a cell not in `blocks` is air.
+    unsafe extern "C" fn world_kinds_in_box(
+        source: *const c_void,
+        min: *const AmmlBlockPos,
+        max: *const AmmlBlockPos,
+        ids: *mut u32,
+        cap: u32,
+        out: *mut AmmlKindsResult,
+    ) -> AmmlStatus {
+        if min.is_null() || max.is_null() || out.is_null() || (ids.is_null() && cap != 0) {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        let (_, fake) = match Self::world_source_check_in(source, Area::WORLD_KINDS_IN_BOX) {
+            Ok(checked) => checked,
+            Err(status) => return status,
+        };
+        let Some(world) = fake.world else {
+            return AmmlStatus::REFUSED;
+        };
+        // SAFETY: `min` and `max` are non-null and the caller promises they are readable.
+        let (min, max) = unsafe { (min.read(), max.read()) };
+        let span = |low: i32, high: i32| i64::from(high) - i64::from(low) + 1;
+        let (dx, dy, dz) = (span(min.x, max.x), span(min.y, max.y), span(min.z, max.z));
+        if dx < 1 || dy < 1 || dz < 1 || dx.saturating_mul(dy).saturating_mul(dz) > 65536 {
+            return AmmlStatus::REFUSED;
+        }
+        let mut result = AmmlKindsResult { kind: AmmlKindsResult::NOT_LOADED, ..AmmlKindsResult::default() };
+        let loaded =
+            |cx: i32, cz: i32| world.chunks.get(&(cx, cz)).is_some_and(|chunk| chunk.load == crate::ChunkLoad::Loaded);
+        let chunks_loaded = (min.x >> 4..=max.x >> 4).all(|cx| (min.z >> 4..=max.z >> 4).all(|cz| loaded(cx, cz)));
+        if !chunks_loaded {
+            return Self::write(out, result);
+        }
+        let air = world.air_block().type_id;
+        let mut found: Vec<u32> = Vec::new();
+        for x in min.x..=max.x {
+            for z in min.z..=max.z {
+                for y in min.y..=max.y {
+                    result.cells += 1;
+                    let id = world.blocks.get(&crate::BlockPos { x, y, z }).map_or(air, |block| block.type_id).0;
+                    if found.contains(&id) {
+                        continue;
+                    }
+                    if found.len() >= cap as usize {
+                        result.kind = AmmlKindsResult::TOO_MANY;
+                        return Self::write(out, result);
+                    }
+                    found.push(id);
+                }
+            }
+        }
+        for (index, id) in found.iter().enumerate() {
+            // SAFETY: `ids` is non-null and the caller promises `cap` entries are writable; `found.len() <= cap`.
+            unsafe { ids.add(index).write(*id) };
+        }
+        result.kind = AmmlKindsResult::KINDS;
+        result.count = u32::try_from(found.len()).unwrap_or(u32::MAX);
+        Self::write(out, result)
+    }
+
+    // The new state of the `BlockChanged` event that runs (`FakeGame::raise_block_changed_v2`); `STALE` for any other
+    // token and outside the raise.
+    unsafe extern "C" fn world_block_changed_state(
+        _module: AmmlStr,
+        token: u64,
+        out: *mut AmmlBlockHandle,
+    ) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        if out.is_null() {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        match state.changed_state() {
+            Some((running, handle)) if token != 0 && u64::from(running) == token => Self::write(out, handle.raw()),
+            _ => AmmlStatus::STALE,
+        }
+    }
+
+    unsafe extern "C" fn world_block_handle_name(
+        block: AmmlBlockHandle,
+        buf: *mut u8,
+        cap: usize,
+        out_len: *mut usize,
+    ) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        let world = match state.block_world(Area::WORLD_BLOCK_STATES) {
+            Ok(world) => world,
+            Err(status) => return status,
+        };
+        let name = crate::BlockHandle::from_raw(block).and_then(|handle| world.block_names.get(&handle).cloned());
+        let Some(name) = name else {
+            return AmmlStatus::STALE;
+        };
+        let copied = name.len().min(cap);
+        if copied > 0 && !buf.is_null() {
+            // SAFETY: the caller promises `buf` is writable for `cap` bytes, and `copied <= cap`.
+            unsafe { std::ptr::copy_nonoverlapping(name.as_ptr(), buf, copied) };
+        }
+        Self::write(out_len, name.len())
+    }
+
+    unsafe extern "C" fn world_block_handle_item(
+        block: AmmlBlockHandle,
+        out: *mut AmmlItemSnapshot,
+        name_buf: *mut u8,
+        name_cap: usize,
+        name_len: *mut usize,
+    ) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        let world = match state.block_world(Area::WORLD_BLOCK_STATES) {
+            Ok(world) => world,
+            Err(status) => return status,
+        };
+        let item = crate::BlockHandle::from_raw(block).and_then(|handle| world.block_items.get(&handle).copied());
+        let Some(item) = item else {
+            return AmmlStatus::STALE;
+        };
+        if out.is_null() {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        // SAFETY: `out` is non-null and the caller promises a v1 snapshot is writable.
+        unsafe { out.write(item.raw_snapshot()) };
+        let name = item.type_name.as_bytes();
+        let copied = name.len().min(name_cap);
+        if copied > 0 && !name_buf.is_null() {
+            // SAFETY: the caller promises `name_buf` is writable for `name_cap` bytes, and `copied <= name_cap`.
+            unsafe { std::ptr::copy_nonoverlapping(name.as_ptr(), name_buf, copied) };
+        }
+        Self::write(name_len, name.len())
     }
 
     // The surfaces of the fake world for a column, from `FakeWorld::surfaces`: lowest first, in the range asked, at most
@@ -2363,6 +3310,36 @@ impl FakeTables {
         Self::write(out, state.next_join())
     }
 
+    unsafe extern "C" fn client_join_server_direct(
+        _: AmmlStr,
+        client: *const c_void,
+        host: AmmlStr,
+        port: u16,
+        name: AmmlStr,
+        out: *mut u64,
+    ) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        let fake = match state.client_check(client.addr(), Area::CLIENT_JOIN_SERVER_DIRECT) {
+            Ok(fake) => fake,
+            Err(status) => return status,
+        };
+        // SAFETY: the caller promises the views are valid for the call.
+        let (Ok(host), Ok(name)) = (unsafe { host.as_str() }, unsafe { name.as_str() }) else {
+            return AmmlStatus::INVALID_ARGUMENT;
+        };
+        if host.parse::<std::net::IpAddr>().is_err() || port == 0 {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        if fake.local_player {
+            return AmmlStatus::REFUSED;
+        }
+        let shown = if name.is_empty() { host } else { name };
+        state.write_client(|_| {}, format!("join_server_direct {host}:{port} {shown}"));
+        Self::write(out, state.next_join())
+    }
+
     unsafe extern "C" fn client_open_menu(client: *const c_void, menu: AmmlMenu) -> AmmlStatus {
         let Some(state) = FakeState::current() else {
             return AmmlStatus::FAILED;
@@ -2489,6 +3466,52 @@ impl FakeTables {
             unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, copied) };
         }
         Self::write(out_len, bytes.len())
+    }
+
+    unsafe extern "C" fn client_in_gameplay(client: *const c_void, out: *mut u8) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        match state.client_check(client.addr(), Area::CLIENT_IN_GAMEPLAY) {
+            Ok(fake) => Self::write(out, u8::from(fake.in_gameplay)),
+            Err(status) => status,
+        }
+    }
+
+    unsafe extern "C" fn client_title_screen(client: *const c_void, out: *mut u8) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        match state.client_check(client.addr(), Area::CLIENT_TITLE_SCREEN) {
+            Ok(fake) => Self::write(out, u8::from(fake.title_screen && !fake.local_player)),
+            Err(status) => status,
+        }
+    }
+
+    unsafe extern "C" fn client_go_to_title(client: *const c_void) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        let fake = match state.client_check(client.addr(), Area::CLIENT_GO_TO_TITLE) {
+            Ok(fake) => fake,
+            Err(status) => return status,
+        };
+        if fake.local_player {
+            return AmmlStatus::REFUSED;
+        }
+        state.write_client(|client| client.title_screen = true, "go_to_title".to_string());
+        AmmlStatus::OK
+    }
+
+    unsafe extern "C" fn client_replay_app_focus_lost(_module: AmmlStr, client: *const c_void) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        if let Err(status) = state.client_check(client.addr(), Area::CLIENT_FOCUS_REPLAY) {
+            return status;
+        }
+        state.replay_focus_loss();
+        AmmlStatus::OK
     }
 
     unsafe extern "C" fn client_note_activity(client: *const c_void) -> AmmlStatus {
@@ -2680,6 +3703,14 @@ impl FakeTables {
             Some(ranked) => Self::status(state.input().set_ranking(ranked)),
             None => AmmlStatus::INVALID_ARGUMENT,
         }
+    }
+
+    unsafe extern "C" fn input_held_by_others(_: AmmlStr, out: *mut AmmlOtherLeases) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        let (leases, blocks) = state.input().others();
+        Self::write(out, AmmlOtherLeases { leases, blocks })
     }
 
     unsafe extern "C" fn input_set_coexist(_: AmmlStr, ids: *const AmmlStr, count: usize) -> AmmlStatus {

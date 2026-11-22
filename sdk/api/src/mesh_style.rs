@@ -2,8 +2,8 @@ use amml_abi::AmmlMeshStyle;
 
 use crate::{Blend, MeshLight, MeshTexture};
 
-/// How the loader builds and draws one world mesh. This version draws the `OVERLAY` style, with or without
-/// `two_sided`; any other blend, depth, light or texture gives `NotAvailable`.
+/// How the loader builds and draws one world mesh. A build from colour quads serves the `OVERLAY` style, with or
+/// without `two_sided`; any other blend, depth, light or texture gives `NotAvailable`, `GHOST` included.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct MeshStyle {
     pub blend: Blend,
@@ -16,6 +16,20 @@ pub struct MeshStyle {
 }
 
 impl MeshStyle {
+    /// What a block mesh of the block mesher is drawn with: the client's blend-block material and the terrain atlas.
+    /// Alpha blend, hidden behind the world, full light, one side. The depth write is the one of the vanilla
+    /// `entity_alphablend` material definition (`entity.material`: the state `Blending` only, no `DisableDepthWrite`, on
+    /// 26.63 and 70.26): it writes depth. `WorldCanvas::build` from colour quads gives `NotAvailable` for it: colour
+    /// quads carry no UV, so only `BlockMesher` makes such a mesh.
+    pub const GHOST: Self = Self {
+        blend: Blend::Alpha,
+        depth_test: true,
+        depth_write: true,
+        two_sided: false,
+        light: MeshLight::Full,
+        texture: MeshTexture::TerrainAtlas,
+    };
+
     /// Alpha blend, hidden behind the world, no depth write, one side, full light, the white texture.
     pub const OVERLAY: Self = Self {
         blend: Blend::Alpha,

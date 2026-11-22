@@ -11,8 +11,10 @@ use crate::lent_chat::LentChat;
 use crate::lent_network::LentNetwork;
 use crate::lent_render::LentRender;
 use crate::lent_scope::LentScope;
+use crate::lent_strings::LentStrings;
 use crate::lent_surfaces::LentSurfaces;
 use crate::lent_tables::LentTables;
+use crate::lent_wire::LentWire;
 use crate::{Event, EventCtx, Logger, PanicText, WorldEpoch};
 
 thread_local! {
@@ -97,6 +99,10 @@ impl<F: Send + 'static> ListenerCell<F> {
         let chat = LentChat::lend(event.cast::<E>().cast_const(), cell.lent.ui, cell.module);
         let render = LentRender::lend(event.cast::<E>().cast_const(), cell.lent.render, cell.module);
         let camera = LentCamera::lend(event.cast::<E>().cast_const(), cell.lent.camera, cell.module);
+        // SAFETY: the header says the struct holds at least `size_of::<E>()` bytes, live for the call.
+        let wire = unsafe { LentWire::lend(event.cast::<E>().cast_const()) };
+        // SAFETY: the header says the struct holds at least `size_of::<E>()` bytes, live for the call.
+        let strings = unsafe { LentStrings::lend(event.cast::<E>().cast_const()) };
         let outcome = catch_unwind(AssertUnwindSafe(|| {
             let mut call = cell.call.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             // SAFETY: the header says the struct holds at least `size_of::<E>()` bytes, and by the
@@ -104,6 +110,8 @@ impl<F: Send + 'static> ListenerCell<F> {
             let event = unsafe { &mut *event.cast::<E>() };
             (call)(event, &context);
         }));
+        drop(strings);
+        drop(wire);
         drop(camera);
         drop(render);
         drop(chat);

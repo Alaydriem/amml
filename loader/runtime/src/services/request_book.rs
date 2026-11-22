@@ -1,6 +1,6 @@
 use amml_abi::AmmlRequestOutcome;
 
-use crate::structs::{ActiveRequest, RequestPhase};
+use crate::structs::{ActiveRequest, RequestPhase, RequestShown};
 use crate::{
     ProtocolValues, RequestAction, RequestDone, RequestMove, RequestRefusal, RequestSlot, RequestStep, RequestTick,
     SlotRef, StackRequestEncoder,
@@ -9,8 +9,8 @@ use crate::{
 /// The slots of the player inventory as one read gives them: 36 entries, `None` for an empty slot.
 type Slots = Vec<Option<RequestSlot>>;
 
-/// The slots the client shows for a move it predicts: the two slots and the net id of the stack moved into the second.
-type Shown = Option<(u8, u8, i32)>;
+/// What the client shows for a move it predicts.
+type Shown = Option<RequestShown>;
 
 /// For each move of a plan: the action, and what the client shows.
 type Plan = (Vec<RequestAction>, Vec<Shown>);
@@ -60,6 +60,7 @@ impl RequestBook {
     pub const FIRST_WIRE_ID: i32 = -100_001;
     const WIRE_STEP: i32 = 2;
     const SLOTS: usize = 36;
+    const HOTBAR_SLOTS: u8 = 9;
 
     pub fn new() -> Self {
         Self {
@@ -109,6 +110,7 @@ impl RequestBook {
             wire_ids: Vec::new(),
             answers: Vec::new(),
             predicted: Vec::new(),
+            slot_net_ids: Vec::new(),
             settle_from: None,
             cancel_pending: false,
             detached: false,
@@ -158,6 +160,21 @@ impl RequestBook {
         for (wire_id, accepted) in answers {
             if let Some(index) = active.wire_ids.iter().position(|id| id == wire_id) {
                 active.answers[index].get_or_insert(*accepted);
+            }
+        }
+    }
+
+    /// The slots the server named in its answers, as (wire request id, slot, net id): a pick takes the net id of its
+    /// slot from them. An id that is not one of the sent requests, or a slot the move did not name, is ignored.
+    pub fn on_slot_net_ids(&mut self, named: &[(i32, u8, i32)]) {
+        let Some(active) = self.active.as_mut() else { return };
+        if !matches!(active.phase, RequestPhase::Sent { .. }) {
+            return;
+        }
+        for (wire_id, slot, net_id) in named {
+            let Some(index) = active.wire_ids.iter().position(|id| id == wire_id) else { continue };
+            if matches!(active.moves[index], RequestMove::Pick { slot: picked, .. } if picked == *slot) {
+                active.slot_net_ids[index].get_or_insert(*net_id);
             }
         }
     }
@@ -254,7 +271,7 @@ impl RequestBook {
             RequestMove::Swap { a, b } => a < slots && b < slots && a != b,
             RequestMove::Place { from, to, count } => from < slots && to < slots && from != to && count > 0,
             RequestMove::Drop { from, count } => from < slots && count > 0,
-            RequestMove::Pick => return Err(RequestRefusal::Unsupported),
+            RequestMove::Pick { slot, count, .. } => slot < Self::HOTBAR_SLOTS && count > 0,
         };
         if ok { Ok(()) } else { Err(RequestRefusal::BadMove) }
     }
@@ -343,10 +360,11 @@ impl RequestBook {
             self.next_wire = self.next_wire.wrapping_sub(Self::WIRE_STEP);
         }
         out.steps.push(RequestStep::SendRequests(StackRequestEncoder::batch(&requests)));
-        for (a, b, _) in predicted.iter().flatten() {
-            out.steps.push(RequestStep::Predict { a: *a, b: *b });
+        for shown in predicted.iter().flatten() {
+            out.steps.push(Self::show(shown));
         }
         active.answers = vec![None; active.moves.len()];
+        active.slot_net_ids = vec![None; active.moves.len()];
         active.predicted = predicted;
         active.phase = RequestPhase::Sent { container_id, sent_at: now };
         Some(active)
@@ -358,14 +376,26 @@ impl RequestBook {
     fn settle(&mut self, active: &ActiveRequest, container_id: Option<i8>, now: f64, out: &mut RequestTick) {
         let refused = active.answers.iter().any(|answer| *answer != Some(true));
         let outcome = if !refused {
+            // A pick the server accepted names the stack it made; the client's predicted stack takes that id.
+            for (shown, net_id) in active.predicted.iter().zip(&active.slot_net_ids) {
+                match (shown, net_id) {
+                    (Some(RequestShown::Pick { slot, .. }), Some(net_id)) => {
+                        out.steps.push(RequestStep::AdoptNetId { slot: *slot, net_id: *net_id });
+                    }
+                    (Some(RequestShown::Pick { slot, .. }), None) => {
+                        out.steps.push(RequestStep::NetIdMissing { slot: *slot });
+                    }
+                    _ => {}
+                }
+            }
             AmmlRequestOutcome::DONE
         } else {
-            for (a, b, net_id) in active.predicted.iter().rev().flatten() {
-                out.steps.push(RequestStep::Unpredict { a: *a, b: *b, net_id: *net_id });
+            for shown in active.predicted.iter().rev().flatten() {
+                out.steps.push(Self::unshow(shown));
             }
             for (answer, shown) in active.answers.iter().zip(&active.predicted) {
-                if let (Some(true), Some((a, b, _))) = (answer, shown) {
-                    out.steps.push(RequestStep::Predict { a: *a, b: *b });
+                if let (Some(true), Some(shown)) = (answer, shown) {
+                    out.steps.push(Self::show(shown));
                 }
             }
             if active.answers.iter().any(Option::is_none) {
@@ -378,6 +408,24 @@ impl RequestBook {
             self.close(now, container_id, out);
         }
         Self::end(active, outcome, out);
+    }
+
+    // The act that shows `shown` on the client.
+    fn show(shown: &RequestShown) -> RequestStep {
+        match *shown {
+            RequestShown::Swap { a, b, .. } => RequestStep::Predict { a, b },
+            RequestShown::Pick { slot, creative_net_id, count } => {
+                RequestStep::PredictPick { slot, creative_net_id, count }
+            }
+        }
+    }
+
+    // The act that takes `shown` back.
+    fn unshow(shown: &RequestShown) -> RequestStep {
+        match *shown {
+            RequestShown::Swap { a, b, net_id } => RequestStep::Unpredict { a, b, net_id },
+            RequestShown::Pick { slot, .. } => RequestStep::UnpredictPick { slot },
+        }
     }
 
     // Sends the close; the window for the server's answer opens before the send, as a local server may answer inside it.
@@ -426,7 +474,7 @@ impl RequestBook {
                 model.get(usize::from(b)).copied().flatten()?;
                 let action = RequestAction::Swap { from: slot_ref(model, a), to: slot_ref(model, b) };
                 model.swap(usize::from(a), usize::from(b));
-                Some((action, Some((a, b, first.net_id))))
+                Some((action, Some(RequestShown::Swap { a, b, net_id: first.net_id })))
             }
             RequestMove::Place { from, to, count } => {
                 let source = model.get(usize::from(from)).copied().flatten()?;
@@ -456,7 +504,11 @@ impl RequestBook {
                         )
                     }
                 };
-                let shown = (target.is_none() && source.count == count).then_some((from, to, source.net_id));
+                let shown = (target.is_none() && source.count == count).then_some(RequestShown::Swap {
+                    a: from,
+                    b: to,
+                    net_id: source.net_id,
+                });
                 let left = source.count - count;
                 model[usize::from(to)] = moved;
                 model[usize::from(from)] = (left > 0).then_some(RequestSlot { count: left, ..source });
@@ -472,7 +524,16 @@ impl RequestBook {
                 model[usize::from(from)] = (left > 0).then_some(RequestSlot { count: left, ..source });
                 Some((action, None))
             }
-            RequestMove::Pick => None,
+            RequestMove::Pick { slot, creative_net_id, count } => {
+                // A held stack is destroyed first; the made stack goes into the then empty slot.
+                let held = model.get(usize::from(slot)).copied()?;
+                let (container, at) = ProtocolValues::player_slot(slot);
+                let to = SlotRef { container, slot: at, net_id: 0 };
+                let replacing = held.map(|held| (held.count, SlotRef { container, slot: at, net_id: held.net_id }));
+                model[usize::from(slot)] = Some(RequestSlot { net_id: 0, count, max: count, key: 0 });
+                let shown = RequestShown::Pick { slot, creative_net_id, count };
+                Some((RequestAction::CraftCreative { creative_net_id, count, to, replacing }, Some(shown)))
+            }
         }
     }
 }

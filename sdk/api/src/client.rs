@@ -121,6 +121,45 @@ impl<'f> Client<'f> {
         status.is_ok().then_some(out != 0)
     }
 
+    /// Whether the game says a world is being played (`MinecraftGame::isInGame`). `None` without area
+    /// `client.in_gameplay`, on a loader before client table v6, or when the loader refuses the read (off the game
+    /// thread, for a client that is not the primary client, before the first frame).
+    pub fn in_gameplay(&self) -> Option<bool> {
+        let in_gameplay = self.tables.client.in_gameplay?;
+        let mut out = 0u8;
+        // SAFETY: the loader checks the handle before it reads game memory, and `out` is a live local.
+        #[allow(unsafe_code)]
+        let status = unsafe { in_gameplay(self.handle, &mut out) };
+        status.is_ok().then_some(out != 0)
+    }
+
+    /// Whether the client shows the title screen: no world is joined, the last route the game's Ore UI router took (a
+    /// route it refused does not count) is the main menu, and it has stood for 30 frames, so the page is drawn; right
+    /// after `go_to_title` it is still `false`. `Screen::Start` covers the title and every other menu page with no world (one Ore UI page
+    /// holds both); this read tells the title apart. A back navigation does not pass through the hooked router calls,
+    /// so on a title reached by going back it can stay `false`; `go_to_title` makes it `true`. `None` without area
+    /// `client.title_screen`, on a loader before client table v8, or when the loader refuses the read (off the game
+    /// thread, for a client that is not the primary client, before the first frame).
+    pub fn on_title_screen(&self) -> Option<bool> {
+        let title_screen = self.tables.client.title_screen?;
+        let mut out = 0u8;
+        // SAFETY: the loader checks the handle before it reads game state, and `out` is a live local.
+        #[allow(unsafe_code)]
+        let status = unsafe { title_screen(self.handle, &mut out) };
+        status.is_ok().then_some(out != 0)
+    }
+
+    /// Goes back to the title screen, as the game's own way back does: the route `/main-menu/?shouldFlushStack=true`
+    /// pushed through the client's Ore UI router, which empties the menu stack. `Refused` in a world or when the router
+    /// refuses the route; `NotAvailable` without area `client.go_to_title`.
+    pub fn go_to_title(&self) -> Result<(), ApiError> {
+        let go = self.tables.client.go_to_title.ok_or(ApiError::NotAvailable)?;
+        // SAFETY: the loader checks the handle.
+        #[allow(unsafe_code)]
+        let status = unsafe { go(self.handle) };
+        ApiError::check(status)
+    }
+
     /// Starts the local world `level_id` (the folder name under `minecraftWorlds`), as the Play screen does. The game
     /// answers at once; its "not ready" answer is `NotReady` (ask again on a later frame). `Refused` in a world;
     /// `NotAvailable` without area `client.start_local_world`.
@@ -157,6 +196,36 @@ impl<'f> Client<'f> {
         Ok(JoinId(out))
     }
 
+    /// Joins the server of `target` through the game's own `ClientInstance.connectByAddress`, which builds the
+    /// connection info and the join context and calls `startExternalNetworkWorld`: the path of the pre-port dejavu
+    /// replay join (a replay server on this machine needs it; a dedicated server takes `join_server`). `target.host`
+    /// must be an IPv4 or IPv6 address literal: the game builds the connection info again from the parsed address (type
+    /// 1 or 2) only for a literal, so a host name is `Loader(INVALID_ARGUMENT)`. `target.name` is not used (the game
+    /// passes its own server name). The game's call has no result, so the
+    /// `JoinServerResult` with the returned id comes with `JoinOutcome::Other` at the next frame once the game took the
+    /// join; whether the connection worked shows in the session events (`ConnectionStarted`, `WorldJoined`). A
+    /// `join_server` join that still waits for its answer is answered `Other` and replaced. `Refused` in a world;
+    /// `NotAvailable` without area `client.join_server_direct`.
+    pub fn join_server_direct(&self, target: JoinTarget<'_>) -> Result<JoinId, ApiError> {
+        let join = self.tables.client.join_server_direct.ok_or(ApiError::NotAvailable)?;
+        let mut out = 0u64;
+        let name = target.name.unwrap_or("");
+        // SAFETY: the strings live for the call, the loader checks the handle, and `out` is a live local.
+        #[allow(unsafe_code)]
+        let status = unsafe {
+            join(
+                AmmlStr::from_str(self.module),
+                self.handle,
+                AmmlStr::from_str(target.host),
+                target.port,
+                AmmlStr::from_str(name),
+                &mut out,
+            )
+        };
+        ApiError::check(status)?;
+        Ok(JoinId(out))
+    }
+
     /// Opens a menu page. `Refused` in a world or when the game refuses the page; `NotAvailable` without area
     /// `client.open_menu`.
     pub fn open_menu(&self, menu: Menu) -> Result<(), ApiError> {
@@ -175,6 +244,21 @@ impl<'f> Client<'f> {
         // SAFETY: the text lives for the call and the loader checks the handle.
         #[allow(unsafe_code)]
         let status = unsafe { send(self.handle, AmmlStr::from_str(text)) };
+        ApiError::check(status)
+    }
+
+    /// Passes on to the game the app focus loss that this mod holds (`AppFocusLost`): the game's handler runs once, and
+    /// no `AppFocusLost` is raised for it. A loss is held by the first mod whose listener cancelled it, only: a mod that
+    /// cancels a loss another mod cancelled first holds nothing. With no held loss of this mod (it cancelled none,
+    /// another mod cancelled first, a focus gain came since, or it replayed already) the result is `Ok` and nothing
+    /// runs. `Refused` off the game
+    /// thread or for a client that is not the primary client; `NotReady` before the game is ready; `NotAvailable`
+    /// without area `client.focus_replay` or on a loader before client table v5.
+    pub fn replay_app_focus_lost(&self) -> Result<(), ApiError> {
+        let replay = self.tables.client.replay_app_focus_lost.ok_or(ApiError::NotAvailable)?;
+        // SAFETY: the module id lives for the call, and the loader checks the handle before it calls into the game.
+        #[allow(unsafe_code)]
+        let status = unsafe { replay(AmmlStr::from_str(self.module), self.handle) };
         ApiError::check(status)
     }
 

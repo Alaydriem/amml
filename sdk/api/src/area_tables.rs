@@ -1,6 +1,7 @@
 use amml_abi::{
     AmmlActorTable, AmmlCameraTable, AmmlClientTable, AmmlInputTable, AmmlInventoryTable, AmmlLightingTable,
-    AmmlNetworkTable, AmmlOverlayTable, AmmlRenderTable, AmmlServices, AmmlUiTable, AmmlWindowTable, AmmlWorldTable,
+    AmmlNetworkTable, AmmlOptionsTable, AmmlOverlayTable, AmmlRenderTable, AmmlServices, AmmlTimeTable, AmmlUiTable,
+    AmmlWindowTable, AmmlWorldTable,
 };
 
 use crate::Area;
@@ -22,6 +23,8 @@ pub(crate) struct AreaTables {
     pub(crate) world: Option<AmmlWorldTable>,
     pub(crate) render: Option<AmmlRenderTable>,
     pub(crate) camera: Option<AmmlCameraTable>,
+    pub(crate) options: Option<AmmlOptionsTable>,
+    pub(crate) time: Option<AmmlTimeTable>,
 }
 
 impl AreaTables {
@@ -34,7 +37,22 @@ impl AreaTables {
     pub(crate) unsafe fn read(services: *const AmmlServices) -> Self {
         // SAFETY: the caller's guarantee is the contract of the `AmmlServices` readers, which check
         // `size` and the table's own size before they give a table.
-        let (client, input, window, overlay, actor, inventory, lighting, ui, network, world, render, camera) = unsafe {
+        let (
+            client,
+            input,
+            window,
+            overlay,
+            actor,
+            inventory,
+            lighting,
+            ui,
+            network,
+            world,
+            render,
+            camera,
+            options,
+            time,
+        ) = unsafe {
             (
                 AmmlServices::client(services),
                 AmmlServices::input(services),
@@ -48,6 +66,8 @@ impl AreaTables {
                 AmmlServices::world(services),
                 AmmlServices::render(services),
                 AmmlServices::camera(services),
+                AmmlServices::options(services),
+                AmmlServices::time(services),
             )
         };
         // SAFETY: each table given is at least its v1 size, so the whole v1 struct is readable; the input
@@ -66,6 +86,8 @@ impl AreaTables {
                 world: world.and_then(|table| AmmlWorldTable::read(table)),
                 render: render.and_then(|table| AmmlRenderTable::read(table)),
                 camera: camera.and_then(|table| AmmlCameraTable::read(table)),
+                options: options.and_then(|table| AmmlOptionsTable::read(table)),
+                time: time.and_then(|table| AmmlTimeTable::read(table)),
             }
         }
     }
@@ -89,13 +111,21 @@ impl AreaTables {
         } else if area.is_ui() {
             self.ui.is_some()
         } else if area.is_network() {
-            self.network.is_some()
+            match area.id {
+                "network.chunk_cache" => self.network.is_some_and(|table| table.set_client_chunk_cache.is_some()),
+                "network.protocol" => self.network.is_some_and(|table| table.protocol_version.is_some()),
+                _ => self.network.is_some(),
+            }
         } else if area.is_world() {
             self.world.is_some()
         } else if area.is_render() {
             self.render.is_some()
         } else if area.is_camera() {
             self.camera.is_some()
+        } else if area.is_options() {
+            self.options.is_some()
+        } else if area.is_time() {
+            self.time.is_some()
         } else {
             true
         }

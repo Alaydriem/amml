@@ -14,7 +14,7 @@ use windows::Win32::Graphics::Dxgi::{DXGI_ERROR_INVALID_CALL, DXGI_PRESENT_TEST,
 use windows::core::{HRESULT, Interface};
 
 use super::{BackBufferCopy, CaptureJob, DrawSurface, DrawWindow, FrameFlow, QueueSlot, StateBackup, SurfaceEnd};
-use crate::{EventHub, LoaderState, TextureAdapter, WorldRenderAdapter};
+use crate::{BlockEntityAdapter, EventHub, LoaderState, TextureAdapter, WorldRenderAdapter};
 
 static SHARED: OverlayShared = OverlayShared::new();
 
@@ -315,6 +315,7 @@ impl OverlayShared {
             }
             TextureAdapter::with((), TextureAdapter::device_reset);
             WorldRenderAdapter::with((), WorldRenderAdapter::device_reset);
+            BlockEntityAdapter::with((), BlockEntityAdapter::device_reset);
         }
         apply(&mut self.lock_flow());
         self.settle(state);

@@ -2,12 +2,12 @@ use std::ffi::c_void;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use amml_abi::{AmmlRotation, AmmlStatus, AmmlVec3};
+use amml_abi::{AmmlAabb, AmmlGameType, AmmlPermissionLevel, AmmlRotation, AmmlStatus, AmmlVec3};
 use amml_data::{AdapterCatalog, Availability, EntryId, NeedKind};
 
 use amml_msvc::MemberCall;
 
-use crate::{ClientAdapter, HandleStamp, LoaderState};
+use crate::{AabbShapeLayout, ClientAdapter, HandleStamp, LoaderState, PermissionShape, RotationComponentLayout};
 
 static ADAPTER: OnceLock<ActorAdapter> = OnceLock::new();
 
@@ -20,8 +20,21 @@ type PointerFn = unsafe extern "C" fn(*mut c_void) -> *mut c_void;
 type AttachPosFn = unsafe extern "C" fn(*mut c_void, *mut AmmlVec3, i32, f32) -> *mut AmmlVec3;
 /// `int ActorAttribute::getHealth(EntityContext const&)`: rcx the context, the health in eax.
 type HealthFn = unsafe extern "C" fn(*const c_void) -> i32;
+/// `Vec3 Actor::getViewVector(float) const`: rcx the actor, the result buffer in rdx, the alpha in xmm2; rax gives the
+/// buffer.
+type ViewVectorFn = unsafe extern "C" fn(*mut c_void, *mut AmmlVec3, f32) -> *mut AmmlVec3;
+/// `GameType Player::getPlayerGameType() const`: rcx the player, the type in eax.
+type GameTypeFn = unsafe extern "C" fn(*mut c_void) -> i32;
+/// `PlayerPermissionLevel Player::getPlayerPermissionLevel() const`: rcx the player, the level in al.
+type PermissionFn = unsafe extern "C" fn(*mut c_void) -> u8;
+/// `not_null<AbilitiesComponent*>* Player::getAbilitiesComponent(not_null<AbilitiesComponent*>*) const`: rcx the
+/// player, rdx an 8-byte slot that receives the component pointer; rax gives the slot.
+type AbilitiesFn = unsafe extern "C" fn(*mut c_void, *mut usize) -> *mut usize;
+/// `void Actor::setYHeadRotations(float, float)`: rcx the actor, the head yaw in xmm1, the previous head yaw in xmm2.
+type HeadRotationsFn = unsafe extern "C" fn(*mut c_void, f32, f32);
 
-/// The `actor.read` and `actor.health` areas: reads of the local player of the primary client through its Actor vtable.
+/// The `actor.read`, `actor.health`, `actor.game_type`, `actor.permission` and `actor.look_write` areas: reads and
+/// the look write of the local player of the primary client through its Actor vtable and component pointers.
 ///
 /// Every call needs the game gate open (`NOT_READY`), the area offered (`NOT_AVAILABLE`), the game thread and a
 /// player handle that is the current local player of the primary client (`REFUSED`). The handle is checked again
@@ -30,7 +43,11 @@ type HealthFn = unsafe extern "C" fn(*const c_void) -> i32;
 /// Positions come from the player's `StateVectorComponent.mPos` (the eyes: the local player's position is at eye
 /// height) and its `AABBShapeComponent` box (the feet: the box's lowest y). The loader logs `actor position measured`
 /// once per world with both heights. The rotation is `ActorRotationComponent.mRot` (pitch, then yaw), in degrees, with
-/// the signs of `AmmlRotation`.
+/// the signs of `AmmlRotation`. The write stores the pitch and yaw to `mRot` and to the previous rotation 8 bytes after
+/// it, then calls `setYHeadRotations(head, head)` for a head yaw.
+///
+/// The permission level has two shapes, picked once by which catalog shape resolved: the getter (26.63), or the byte
+/// of the abilities component (70.x). The loader logs `actor permission read` once per world with the shape and value.
 pub struct ActorAdapter {
     state: &'static LoaderState,
     // Slot of the Actor vtable.
@@ -50,33 +67,56 @@ pub struct ActorAdapter {
     get_attach_pos: Option<usize>,
     get_health: Option<usize>,
     entity_context_at: Option<usize>,
-    // The world epoch whose position was measured last.
+    // `Actor::getViewVector`, `Player::getPlayerGameType` and `Actor::setYHeadRotations`.
+    get_view_vector: Option<usize>,
+    get_game_type: Option<usize>,
+    set_head_rotations: Option<usize>,
+    // The permission shape that resolved, with its getter and the byte offset in the abilities component.
+    permission: Option<PermissionShape>,
+    get_permission: Option<usize>,
+    get_abilities: Option<usize>,
+    permission_at: Option<usize>,
+    // The world epoch whose position was measured last, and whose permission was logged last.
     measured: AtomicU64,
+    permission_logged: AtomicU64,
 }
 
 impl ActorAdapter {
     pub const READ: &'static str = "actor.read";
     pub const HEALTH: &'static str = "actor.health";
+    pub const GAME_TYPE: &'static str = "actor.game_type";
+    pub const PERMISSION: &'static str = "actor.permission";
+    pub const LOOK_WRITE: &'static str = "actor.look_write";
+    const AREAS: [&'static str; 5] = [Self::READ, Self::HEALTH, Self::GAME_TYPE, Self::PERMISSION, Self::LOOK_WRITE];
     const AREA_VERSION: u32 = 1;
     // The reads appended in version 2 of the area.
     const READS_VERSION: u32 = 2;
     // The head position and the block source, appended in version 3 of the area.
     const EXTRA_VERSION: u32 = 3;
+    // The view vector, appended in version 4 of the area.
+    const VIEW_VERSION: u32 = 4;
+    // The alpha the view vector is asked for: the current frame, not an interpolation.
+    const VIEW_ALPHA: f32 = 1.0;
     // `SharedTypes::Legacy::ActorLocation::Head`.
     const HEAD_LOCATION: i32 = 3;
     // `AABB::min.y`, `AABB::max.y`: the box is two Vec3 (min, then max) at the start of AABBShapeComponent.
     const AABB_MIN_Y: usize = 4;
     const AABB_MAX_Y: usize = 16;
 
-    /// Offers `actor.read` and `actor.health` when their catalog shapes resolved and logs one `area adapter` or
-    /// `area not available` line each. Returns the rows. Works once per process: a second call offers nothing and
+    /// Offers the actor areas when their catalog shapes resolved and logs one `area adapter` or `area not available`
+    /// line each. Returns the rows. Works once per process: a second call offers nothing and
     /// gives the catalog rows.
     pub fn install(state: &'static LoaderState) -> Vec<Availability> {
         let resolved = |name: &str| state.table().get(&EntryId(name.to_string())).is_some();
         let rows: Vec<Availability> = AdapterCatalog::availability(&resolved)
             .into_iter()
-            .filter(|row| row.kind == NeedKind::Area && (row.id == Self::READ || row.id == Self::HEALTH))
+            .filter(|row| row.kind == NeedKind::Area && Self::AREAS.contains(&row.id))
             .collect();
+        let permission = rows
+            .iter()
+            .find(|row| row.id == Self::PERMISSION)
+            .and_then(|row| row.shape)
+            .and_then(PermissionShape::from_catalog);
         let slot = |name: &str| state.resolve(name).ok().and_then(|value| usize::try_from(value).ok());
         let adapter = Self {
             state,
@@ -92,7 +132,15 @@ impl ActorAdapter {
             get_attach_pos: slot("Actor.getAttachPos").filter(|address| *address != 0),
             get_health: slot("ActorAttribute.getHealth").filter(|address| *address != 0),
             entity_context_at: slot("Actor.mEntityContext"),
+            get_view_vector: slot("Actor.getViewVector").filter(|address| *address != 0),
+            get_game_type: slot("Player.getPlayerGameType").filter(|address| *address != 0),
+            set_head_rotations: slot("Actor.setYHeadRotations").filter(|address| *address != 0),
+            permission,
+            get_permission: slot("Player.getPlayerPermissionLevel").filter(|address| *address != 0),
+            get_abilities: slot("Player.getAbilitiesComponent").filter(|address| *address != 0),
+            permission_at: slot("AbilitiesComponent.mPlayerPermissions"),
             measured: AtomicU64::new(0),
+            permission_logged: AtomicU64::new(0),
         };
         if ADAPTER.set(adapter).is_err() {
             curia::warn!("the actor adapter is already installed");
@@ -151,6 +199,113 @@ impl ActorAdapter {
         let component = Self::component(player, self.rotation_at)?;
         let at = self.rot_at.ok_or(AmmlStatus::NOT_AVAILABLE)?;
         Ok(AmmlRotation { pitch: Self::read_f32(component, at), yaw: Self::read_f32(component, at + 4) })
+    }
+
+    /// The view direction of `player` as a unit vector: `getViewVector(1.0)`.
+    pub fn view_vector(&self, player: *const c_void) -> Result<AmmlVec3, AmmlStatus> {
+        let player = self.enter_at(player, Self::VIEW_VERSION)?;
+        let function = self.get_view_vector.ok_or(AmmlStatus::NOT_AVAILABLE)?;
+        // SAFETY: the entry is `Vec3 Actor::getViewVector(float) const`, a member function that returns a class through
+        // a hidden pointer.
+        let function = unsafe { std::mem::transmute::<usize, ViewVectorFn>(function) };
+        let mut out = AmmlVec3 { x: 0.0, y: 0.0, z: 0.0 };
+        // SAFETY: called on the live local player, on the game thread; `out` is a Vec3 buffer the callee fills.
+        unsafe { function(std::ptr::with_exposed_provenance_mut(player), &raw mut out, Self::VIEW_ALPHA) };
+        Ok(out)
+    }
+
+    /// The collision box of `player`, from its `AABBShapeComponent`.
+    pub fn aabb(&self, player: *const c_void) -> Result<AmmlAabb, AmmlStatus> {
+        let player = self.enter_at(player, Self::VIEW_VERSION)?;
+        let shape = Self::component(player, self.aabb_at)?;
+        // SAFETY: a live `AABBShapeComponent`, laid out as the mirror.
+        let [min_x, min_y, min_z, max_x, max_y, max_z] =
+            unsafe { std::ptr::with_exposed_provenance::<AabbShapeLayout>(shape).read_unaligned() }.aabb;
+        Ok(AmmlAabb { min: AmmlVec3 { x: min_x, y: min_y, z: min_z }, max: AmmlVec3 { x: max_x, y: max_y, z: max_z } })
+    }
+
+    /// The game mode of `player`: the raw value of `getPlayerGameType`.
+    pub fn game_type(&self, player: *const c_void) -> Result<AmmlGameType, AmmlStatus> {
+        let player = self.enter_in(player, Self::GAME_TYPE, 1)?;
+        let function = self.get_game_type.ok_or(AmmlStatus::NOT_AVAILABLE)?;
+        // SAFETY: the entry is `GameType Player::getPlayerGameType() const`, a member function that takes only `this`.
+        let function = unsafe { std::mem::transmute::<usize, GameTypeFn>(function) };
+        // SAFETY: called on the live local player, on the game thread.
+        Ok(AmmlGameType(unsafe { function(std::ptr::with_exposed_provenance_mut(player)) }))
+    }
+
+    /// The player permission level of `player`, read as its build's shape says. The loader logs the shape and value
+    /// once per world.
+    pub fn permission_level(&self, player: *const c_void) -> Result<AmmlPermissionLevel, AmmlStatus> {
+        let player = self.enter_in(player, Self::PERMISSION, 1)?;
+        let shape = self.permission.ok_or(AmmlStatus::NOT_AVAILABLE)?;
+        let value = match shape {
+            PermissionShape::Getter => {
+                let function = self.get_permission.ok_or(AmmlStatus::NOT_AVAILABLE)?;
+                // SAFETY: the entry is `PlayerPermissionLevel Player::getPlayerPermissionLevel() const`, a member
+                // function that takes only `this` and returns the level in `al`.
+                let function = unsafe { std::mem::transmute::<usize, PermissionFn>(function) };
+                // SAFETY: called on the live local player of a loaded world, on the game thread.
+                unsafe { function(std::ptr::with_exposed_provenance_mut(player)) }
+            }
+            PermissionShape::Abilities => {
+                let function = self.get_abilities.ok_or(AmmlStatus::NOT_AVAILABLE)?;
+                let at = self.permission_at.ok_or(AmmlStatus::NOT_AVAILABLE)?;
+                // SAFETY: the entry is `not_null<AbilitiesComponent*>* Player::getAbilitiesComponent(
+                // not_null<AbilitiesComponent*>*) const`: `this`, then an 8-byte slot for the component pointer.
+                let function = unsafe { std::mem::transmute::<usize, AbilitiesFn>(function) };
+                let mut component = 0usize;
+                // SAFETY: called on the live local player of a loaded world, on the game thread; `component` is the
+                // slot the callee fills.
+                unsafe { function(std::ptr::with_exposed_provenance_mut(player), &raw mut component) };
+                if component == 0 {
+                    return Err(AmmlStatus::NOT_AVAILABLE);
+                }
+                let address = component.checked_add(at).ok_or(AmmlStatus::FAILED)?;
+                // SAFETY: `component` is the live abilities component the game gave, and `at` the derived offset of the
+                // player permission byte in it.
+                unsafe { std::ptr::with_exposed_provenance::<u8>(address).read() }
+            }
+        };
+        self.note_permission(shape, value);
+        Ok(AmmlPermissionLevel(value))
+    }
+
+    /// Turns `player` to `rotation` (pitch and yaw in degrees) and, for `Some(head_yaw)`, its head too. The
+    /// rotation goes to `mRot` and to the previous rotation, so the game does not interpolate from the old angle. The
+    /// arguments must be finite (`INVALID_ARGUMENT`).
+    pub fn set_rotation(
+        &self,
+        player: *const c_void,
+        rotation: AmmlRotation,
+        head_yaw: Option<f32>,
+    ) -> Result<(), AmmlStatus> {
+        if !rotation.pitch.is_finite() || !rotation.yaw.is_finite() || head_yaw.is_some_and(|head| !head.is_finite()) {
+            return Err(AmmlStatus::INVALID_ARGUMENT);
+        }
+        let player = self.enter_in(player, Self::LOOK_WRITE, 1)?;
+        let component = Self::component(player, self.rotation_at)?;
+        let at = self.rot_at.ok_or(AmmlStatus::NOT_AVAILABLE)?;
+        let head = match head_yaw {
+            Some(head) => {
+                let function = self.set_head_rotations.ok_or(AmmlStatus::NOT_AVAILABLE)?;
+                // SAFETY: the entry is `void Actor::setYHeadRotations(float, float)`, a member function.
+                Some((head, unsafe { std::mem::transmute::<usize, HeadRotationsFn>(function) }))
+            }
+            None => None,
+        };
+        let layout =
+            RotationComponentLayout { rot: [rotation.pitch, rotation.yaw], previous: [rotation.pitch, rotation.yaw] };
+        // SAFETY: `component` is the live rotation component of the local player and `at` the derived offset of
+        // `mRot`, followed by the previous rotation (16 bytes); written on the game thread.
+        unsafe {
+            std::ptr::with_exposed_provenance_mut::<RotationComponentLayout>(component + at).write_unaligned(layout)
+        };
+        if let Some((head, function)) = head {
+            // SAFETY: called on the live local player, on the game thread.
+            unsafe { function(std::ptr::with_exposed_provenance_mut(player), head, head) };
+        }
+        Ok(())
     }
 
     /// The dimension of `player`, as a handle for `dimension_id`; null from the game is `NOT_AVAILABLE`.
@@ -276,6 +431,14 @@ impl ActorAdapter {
                 aabb_max_y: max_y,
                 eye_height: eye_y - min_y
             });
+        }
+    }
+
+    // Logs the permission shape and value once per world.
+    fn note_permission(&self, shape: PermissionShape, value: u8) {
+        let epoch = self.state.events().gate().epoch().0;
+        if self.permission_logged.swap(epoch, Ordering::AcqRel) != epoch {
+            curia::info!("actor permission read", { shape: shape.name(), value: value });
         }
     }
 

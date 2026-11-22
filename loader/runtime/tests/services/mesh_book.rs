@@ -1,4 +1,4 @@
-use amml_runtime::{MeshBook, MeshFree, MeshKey, MeshRefusal};
+use amml_runtime::{MeshBook, MeshFree, MeshKey, MeshKind, MeshRefusal};
 
 const OWNER: usize = 1;
 const OTHER: usize = 2;
@@ -104,4 +104,18 @@ fn a_forgotten_mode_is_recorded_again_without_a_switch() {
     assert!(book.is_current(mesh));
     assert!(book.note_vibrant(true));
     assert!(!book.is_current(mesh));
+}
+
+#[test]
+fn a_block_mesh_keeps_its_kind_and_follows_the_same_free_rules() {
+    let book = MeshBook::new();
+    let colour = book.create(OWNER, 0x100);
+    let block = book.create_block(OWNER, 0x200);
+
+    assert_eq!(book.entry(OWNER, colour), Ok((0x100, MeshKind::Colour)));
+    assert_eq!(book.entry(OWNER, block), Ok((0x200, MeshKind::Block)));
+    assert_eq!(book.entry(OTHER, block), Err(MeshRefusal::NotOwner));
+    book.free(OWNER, block).unwrap();
+    assert_eq!(book.entry(OWNER, block), Err(MeshRefusal::Stale));
+    assert_eq!(book.take_due(), vec![MeshFree { key: block, handle: 0x200 }]);
 }

@@ -3,16 +3,18 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use amml_abi::{
-    AmmlColorQuad, AmmlEvent, AmmlMeshId, AmmlMeshStyle, AmmlPhase, AmmlStatus, AmmlThread, AmmlTransform,
-    WorldRendered,
+    AmmlBlockHandle, AmmlColorQuad, AmmlEvent, AmmlMeshBuilt, AmmlMeshGroup, AmmlMeshId, AmmlMeshStyle,
+    AmmlMesherOptions, AmmlPhase, AmmlStatus, AmmlThread, AmmlTransform, WorldRendered,
 };
 use amml_data::{AdapterCatalog, Availability, EntryId, NeedKind};
 use amml_msvc::MsvcHeap;
-use amml_runtime::{MaterialChoice, MeshBook, MeshKey, MeshRefusal, RenderScope, WorldPlacement, WorldTransform};
+use amml_runtime::{
+    CacheWindow, MaterialChoice, MeshBook, MeshKey, MeshKind, MeshRefusal, RenderScope, WorldPlacement, WorldTransform,
+};
 
 use crate::{
-    ClientAdapter, EventHub, LoaderState, MeshCalls, MeshParts, RenderCall, RenderLevelDetours, SessionAdapter,
-    TextureAdapter, ThreadNote, ViewCameraReader,
+    ActorAdapter, BlockHandles, BlockMesher, BlockReadAdapter, ClientAdapter, EventHub, LoaderState, MeshCalls,
+    MeshParts, RenderCall, RenderLevelDetours, SessionAdapter, TextureAdapter, ThreadNote, ViewCameraReader,
 };
 
 static ADAPTER: OnceLock<WorldRenderAdapter> = OnceLock::new();
@@ -35,26 +37,38 @@ thread_local! {
 /// freed mesh is destroyed on the `renderLevel` thread at the next call, with one exception: at a render device reset
 /// the queued meshes are dropped without the game destructor (their memory is kept), because their game buffers
 /// belong to the device that ends.
+///
+/// It also answers the block mesher (`render.block_mesher`, offered only with the canvas): `BlockMesher` builds a grid of
+/// the mod into a block mesh of this book, inside the dispatch, on the game thread.
 pub struct WorldRenderAdapter {
     state: &'static LoaderState,
     meshes: MeshBook,
     camera: Option<ViewCameraReader>,
     mesh: Option<MeshParts>,
+    mesher: Option<BlockMesher>,
     frames: AtomicU64,
     vibrant: AtomicBool,
     // Whether the last `ClientTick` read the graphics mode.
     reading: AtomicBool,
     active: bool,
     thread: ThreadNote,
+    ghost_thread: ThreadNote,
+    mesher_thread: ThreadNote,
 }
 
 impl WorldRenderAdapter {
     pub const WORLD_CANVAS: &'static str = "render.world_canvas";
+    pub const BLOCK_MESHER: &'static str = "render.block_mesher";
     /// The most quads one mesh holds: two windings of 4 vertices each stay under the 16-bit index limit.
     pub const MAX_QUADS: u32 = 8191;
-    // `camera_position` came with version 1, `build` and `draw` with version 2.
+    // `camera_position` came with version 1, `build` and `draw` with version 2, `clip_matrix` and the draw of a block
+    // mesh with version 3.
     const CAMERA_VERSION: u32 = 1;
     const MESH_VERSION: u32 = 2;
+    const GHOST_VERSION: u32 = 3;
+    const MESHER_VERSION: u32 = 1;
+    pub const WATER_TINT: &'static str = "render.water_tint";
+    const WATER_VERSION: u32 = 1;
 
     /// Hooks `LevelRenderer::renderLevel` (the one shared detour) when a row of this adapter resolved, and offers
     /// `render.world_rendered` and `render.world_canvas`. The canvas is offered only when every mirror of the mesh
@@ -81,17 +95,22 @@ impl WorldRenderAdapter {
         } else {
             None
         };
+        let mesher = Self::mesher_for(state, &mut rows, calls.is_some());
+        Self::water_for(&mut rows, mesher.as_ref());
         let hooked = rows.iter().any(|row| row.shape.is_some()) && RenderLevelDetours::install(state);
         let adapter = Self {
             state,
             meshes: MeshBook::new(),
             camera: ViewCameraReader::new(state),
             mesh: calls.map(MeshParts::new),
+            mesher,
             frames: AtomicU64::new(0),
             vibrant: AtomicBool::new(false),
             reading: AtomicBool::new(false),
             active: hooked,
             thread: ThreadNote::new(),
+            ghost_thread: ThreadNote::new(),
+            mesher_thread: ThreadNote::new(),
         };
         if ADAPTER.set(adapter).is_err() {
             curia::warn!("the world render adapter is already installed");
@@ -138,7 +157,55 @@ impl WorldRenderAdapter {
     fn is_own_row(row: &Availability) -> bool {
         match row.kind {
             NeedKind::Event => row.id == WorldRendered::ID,
-            NeedKind::Area => row.id == Self::WORLD_CANVAS,
+            NeedKind::Area => {
+                row.id == Self::WORLD_CANVAS || row.id == Self::BLOCK_MESHER || row.id == Self::WATER_TINT
+            }
+        }
+    }
+
+    // The block mesher when its row resolved, the mesh path was made (`canvas`), the actor and block read adapters are
+    // installed and the `BlockTessellator` mirror fits its entry; else its row loses its shape and names what is missing.
+    fn mesher_for(state: &'static LoaderState, rows: &mut [Availability], canvas: bool) -> Option<BlockMesher> {
+        let row = rows.iter_mut().find(|row| row.kind == NeedKind::Area && row.id == Self::BLOCK_MESHER)?;
+        row.shape?;
+        let missing = if !canvas {
+            Some("world canvas mesh path")
+        } else if ActorAdapter::get().is_none() || BlockReadAdapter::get().is_none() {
+            Some("actor adapter, block read adapter")
+        } else {
+            None
+        };
+        let made = match missing {
+            Some(reason) => Err(reason),
+            None => BlockMesher::new(state),
+        };
+        match made {
+            Ok(mesher) => Some(mesher),
+            Err(entry) => {
+                row.shape = None;
+                row.missing = vec![entry];
+                None
+            }
+        }
+    }
+
+    // The water tint row keeps its shape only with the block mesher, and the chunk reads that give a biome and the water
+    // colour call; else it loses it and names what is missing.
+    fn water_for(rows: &mut [Availability], mesher: Option<&BlockMesher>) {
+        let Some(row) = rows.iter_mut().find(|row| row.kind == NeedKind::Area && row.id == Self::WATER_TINT) else {
+            return;
+        };
+        if row.shape.is_none() {
+            return;
+        }
+        let missing = match mesher {
+            None => Some("render.block_mesher"),
+            Some(mesher) if !mesher.offers_water() => Some("chunk adapter, biome reads"),
+            Some(_) => None,
+        };
+        if let Some(reason) = missing {
+            row.shape = None;
+            row.missing = vec![reason];
         }
     }
 
@@ -156,7 +223,7 @@ impl WorldRenderAdapter {
 
     // Tells the render detour what waits for its thread: a game mesh to destroy, a material to restore.
     fn wake(&self) {
-        if self.meshes.has_due() {
+        if self.meshes.has_due() || self.mesher.as_ref().is_some_and(BlockMesher::has_due) {
             RenderLevelDetours::set(RenderLevelDetours::MESH_DUE, true);
         }
         if let Some(parts) = &self.mesh {
@@ -199,6 +266,9 @@ impl WorldRenderAdapter {
         if count > 0 {
             curia::info!("meshes freed", { reason: "world_left", count: count });
         }
+        if let Some(mesher) = &self.mesher {
+            mesher.world_left(self.state.events().gate().on_game_thread());
+        }
         self.request_restore();
         self.wake();
     }
@@ -210,6 +280,9 @@ impl WorldRenderAdapter {
         let count = self.meshes.device_reset();
         if count > 0 {
             curia::info!("meshes freed", { reason: "device_reset", count: count });
+        }
+        if let Some(mesher) = &self.mesher {
+            mesher.device_reset();
         }
         let dropped = self.meshes.take_due().len();
         if dropped > 0 {
@@ -227,6 +300,9 @@ impl WorldRenderAdapter {
         if count > 0 {
             curia::info!("meshes freed", { reason: "disable", count: count });
         }
+        if let Some(mesher) = &self.mesher {
+            mesher.disable_owner(owner);
+        }
         if let Some(parts) = &self.mesh {
             parts.material.disable_owner(owner);
         }
@@ -236,6 +312,9 @@ impl WorldRenderAdapter {
     /// Before the game's `renderLevel`, on its thread: the game meshes that wait are destroyed with the
     /// game destructor; the book gives each handle once.
     pub(crate) fn destroy_due(&self) {
+        if let Some(mesher) = &self.mesher {
+            mesher.destroy_due();
+        }
         let due = self.meshes.take_due();
         if due.is_empty() {
             return;
@@ -317,6 +396,199 @@ impl WorldRenderAdapter {
         unsafe { reader.read(CALL.with(Cell::get)) }.ok_or(AmmlStatus::FAILED)
     }
 
+    /// The clip matrix of the camera of `frame`: projection times view, by columns. `NOT_AVAILABLE` without the area
+    /// version 3, `REFUSED` outside the dispatch of `frame` on this thread, `FAILED` when the frame has no camera or a
+    /// matrix stack is empty.
+    pub fn canvas_clip_matrix(&self, frame: u64) -> Result<[[f32; 4]; 4], AmmlStatus> {
+        self.check_area(Self::GHOST_VERSION)?;
+        if !RenderScope::allows(frame) {
+            return Err(AmmlStatus::REFUSED);
+        }
+        let parts = self.mesh.as_ref().ok_or(AmmlStatus::NOT_AVAILABLE)?;
+        // SAFETY: the dispatch runs inside the `renderLevel` call whose screen context this is, on this thread.
+        unsafe { parts.drawer.clip_matrix(CALL.with(Cell::get).screen) }.ok_or(AmmlStatus::FAILED)
+    }
+
+    /// Adds the game mesh at `handle` (a mesh the block mesher ended, made by `MeshBuilder`) to the mesh book as a
+    /// block mesh of the mod at `owner`, and gives its id. It follows the rules of every mesh of the book: a free, a
+    /// world leave, a device reset, a graphics mode switch and the disable of the mod end it, and its game object is
+    /// destroyed on the `renderLevel` thread. It is drawn with the blend-block material and the terrain atlas.
+    pub fn adopt_block_mesh(&self, owner: usize, handle: usize) -> AmmlMeshId {
+        let key = self.meshes.create_block(owner, handle);
+        AmmlMeshId { id: key.id, generation: key.generation, _reserved: 0 }
+    }
+
+    /// The checks of a mesher build of a grid of `dims` with `cell_count` cells in the frame `frame`, made before a cell is
+    /// read: `NOT_AVAILABLE` without the area, `REFUSED` outside the dispatch of `frame`, off the game thread or for a
+    /// side above the cache window, `INVALID_ARGUMENT` for a cell count other than the product of `dims`. Logs the thread
+    /// of the calls once and on a change.
+    pub fn check_mesher(&self, frame: u64, dims: [u32; 3], cell_count: usize) -> Result<(), AmmlStatus> {
+        self.check_frame(frame)?;
+        if dims.iter().any(|side| *side > CacheWindow::SIDE) {
+            return Err(AmmlStatus::REFUSED);
+        }
+        if !CacheWindow::fits(dims, cell_count) {
+            return Err(AmmlStatus::INVALID_ARGUMENT);
+        }
+        Ok(())
+    }
+
+    /// Builds the grid `cells` of `dims` at `origin` with the palette `palette` (block handles of the mod at `owner`) into a
+    /// block mesh of that mod in the frame `frame`, and gives what was built and the grid indices of the skipped cells. See
+    /// `RenderMesherBuildFn`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn mesher_build(
+        &self,
+        owner: usize,
+        frame: u64,
+        dims: [u32; 3],
+        origin: [i32; 3],
+        cells: &[u16],
+        palette: &[AmmlBlockHandle],
+        options: &AmmlMesherOptions,
+    ) -> Result<(AmmlMeshBuilt, Vec<u32>), AmmlStatus> {
+        self.check_mesher(frame, dims, cells.len())?;
+        if cells.iter().any(|cell| *cell != CacheWindow::EMPTY && usize::from(*cell) >= palette.len()) {
+            return Err(AmmlStatus::INVALID_ARGUMENT);
+        }
+        let blocks =
+            palette.iter().map(|handle| BlockHandles::address(self.state, *handle)).collect::<Result<Vec<_>, _>>()?;
+        let parts = self.mesh.as_ref().ok_or(AmmlStatus::NOT_AVAILABLE)?;
+        let mesher = self.mesher.as_ref().ok_or(AmmlStatus::NOT_AVAILABLE)?;
+        let reads = BlockReadAdapter::get().ok_or(AmmlStatus::NOT_AVAILABLE)?;
+        let source = ActorAdapter::get().ok_or(AmmlStatus::NOT_AVAILABLE)?.primary_block_source()?;
+        let epoch = self.state.events().gate().epoch().0;
+        // SAFETY: `source` is the live block source of the local player, read on the game thread inside the dispatch.
+        let world = move |pos: [i32; 3]| unsafe { reads.block_address(source, pos) };
+        let world_block: Option<&dyn Fn([i32; 3]) -> usize> = (options.skip_matching_world != 0).then_some(&world);
+        let heap = MsvcHeap::new(ClientAdapter::heap_new, ClientAdapter::heap_delete);
+        let call = CALL.with(Cell::get);
+        // SAFETY: the dispatch runs inside the `renderLevel` call whose screen context this is, on the game thread
+        // (checked); `source` is the live block source of the local player of this world; each palette block is a live
+        // game block of this world (its handle is not stale); the heap is the game's allocator.
+        let (handle, quads, skipped) = unsafe {
+            mesher.build(
+                &parts.builder,
+                call.screen,
+                source,
+                epoch,
+                (dims, origin, cells),
+                &blocks,
+                self.look(options),
+                world_block,
+                &heap,
+            )
+        }?;
+        let mesh = handle.map(|handle| self.adopt_block_mesh(owner, handle)).unwrap_or_default();
+        let skipped_count = u32::try_from(skipped.len()).map_err(|_| AmmlStatus::FAILED)?;
+        Ok((AmmlMeshBuilt { mesh, quads, skipped_count }, skipped))
+    }
+
+    // The alpha of every vertex and whether water takes the biome colour: the option is on and the area is offered.
+    fn look(&self, options: &AmmlMesherOptions) -> (u8, bool) {
+        let water = options.water_tint != 0 && self.state.areas().is_available(Self::WATER_TINT, Self::WATER_VERSION);
+        (options.alpha, water)
+    }
+
+    /// The checks of a block mesher call in the frame `frame`: `NOT_AVAILABLE` without the area, `REFUSED` outside the dispatch of
+    /// `frame` or off the game thread. Logs the thread of the calls once and on a change.
+    pub fn check_frame(&self, frame: u64) -> Result<(), AmmlStatus> {
+        if !self.state.areas().is_available(Self::BLOCK_MESHER, Self::MESHER_VERSION) {
+            return Err(AmmlStatus::NOT_AVAILABLE);
+        }
+        if !RenderScope::allows(frame) {
+            return Err(AmmlStatus::REFUSED);
+        }
+        let game = self.state.events().gate().on_game_thread();
+        if self.mesher_thread.changed(if game { AmmlThread::GAME } else { AmmlThread::RENDER }) {
+            curia::info!("world thread", { hook: "BlockTessellator.tessellateInWorld", game: game });
+        }
+        if game { Ok(()) } else { Err(AmmlStatus::REFUSED) }
+    }
+
+    /// Opens a mesh group of the mod at `owner` whose slots are `slot_size` blocks. `INVALID_ARGUMENT` for a slot with a
+    /// side of 0, `REFUSED` for the 65th open group of the mod (the slot size is checked and not otherwise used by the loader). See `RenderMesherGroupBeginFn`.
+    pub fn group_begin(&self, owner: usize, frame: u64, slot_size: [u32; 3]) -> Result<AmmlMeshGroup, AmmlStatus> {
+        self.check_frame(frame)?;
+        if slot_size.contains(&0) {
+            return Err(AmmlStatus::INVALID_ARGUMENT);
+        }
+        self.mesher.as_ref().ok_or(AmmlStatus::NOT_AVAILABLE)?.group_begin(owner)
+    }
+
+    /// Appends the grid `cells` of `dims` at `origin`, moved by `offset`, with the palette `palette` (block handles of the
+    /// mod at `owner`), to the group `group` of that mod in the frame `frame`. With `skip_matching_world` the matching
+    /// cells are left out as in a build; their indices are not reported. See `RenderMesherGroupAppendFn`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn group_append(
+        &self,
+        owner: usize,
+        frame: u64,
+        group: AmmlMeshGroup,
+        grid: ([u32; 3], [i32; 3], &[u16]),
+        palette: &[AmmlBlockHandle],
+        offset: [i32; 3],
+        options: &AmmlMesherOptions,
+    ) -> Result<(), AmmlStatus> {
+        let (dims, _, cells) = grid;
+        self.check_mesher(frame, dims, cells.len())?;
+        let mesher = self.mesher.as_ref().ok_or(AmmlStatus::NOT_AVAILABLE)?;
+        mesher.group_check(owner, group)?;
+        if cells.iter().any(|cell| *cell != CacheWindow::EMPTY && usize::from(*cell) >= palette.len()) {
+            return Err(AmmlStatus::INVALID_ARGUMENT);
+        }
+        let blocks =
+            palette.iter().map(|handle| BlockHandles::address(self.state, *handle)).collect::<Result<Vec<_>, _>>()?;
+        let parts = self.mesh.as_ref().ok_or(AmmlStatus::NOT_AVAILABLE)?;
+        let reads = BlockReadAdapter::get().ok_or(AmmlStatus::NOT_AVAILABLE)?;
+        let source = ActorAdapter::get().ok_or(AmmlStatus::NOT_AVAILABLE)?.primary_block_source()?;
+        let epoch = self.state.events().gate().epoch().0;
+        // SAFETY: `source` is the live block source of the local player, read on the game thread inside the dispatch.
+        let world = move |pos: [i32; 3]| unsafe { reads.block_address(source, pos) };
+        let world_block: Option<&dyn Fn([i32; 3]) -> usize> = (options.skip_matching_world != 0).then_some(&world);
+        let heap = MsvcHeap::new(ClientAdapter::heap_new, ClientAdapter::heap_delete);
+        let call = CALL.with(Cell::get);
+        // SAFETY: as `mesher_build`; the group is open and of this mod and world (checked).
+        unsafe {
+            mesher.group_append(
+                owner,
+                group,
+                &parts.builder,
+                call.screen,
+                source,
+                epoch,
+                grid,
+                offset,
+                &blocks,
+                self.look(options),
+                world_block,
+                &heap,
+            )
+        }
+    }
+
+    /// Ends the group `group` of the mod at `owner` into one block mesh of that mod in the frame `frame`; the group is
+    /// gone after the call. A group that holds nothing gives mesh id 0 and no quads. See `RenderMesherGroupFinishFn`.
+    pub fn group_finish(&self, owner: usize, frame: u64, group: AmmlMeshGroup) -> Result<AmmlMeshBuilt, AmmlStatus> {
+        self.check_frame(frame)?;
+        let parts = self.mesh.as_ref().ok_or(AmmlStatus::NOT_AVAILABLE)?;
+        let mesher = self.mesher.as_ref().ok_or(AmmlStatus::NOT_AVAILABLE)?;
+        let heap = MsvcHeap::new(ClientAdapter::heap_new, ClientAdapter::heap_delete);
+        let call = CALL.with(Cell::get);
+        // SAFETY: the dispatch runs inside the `renderLevel` call whose screen context this is, on the game thread
+        // (checked); the heap is the game's allocator.
+        let (handle, quads) = unsafe { mesher.group_finish(owner, group, &parts.builder, call.screen, &heap) }?;
+        let mesh = handle.map(|handle| self.adopt_block_mesh(owner, handle)).unwrap_or_default();
+        Ok(AmmlMeshBuilt { mesh, quads, skipped_count: 0 })
+    }
+    /// Ends the group `group` of the mod at `owner` without a mesh, from any thread: the slot is free at once and the
+    /// buffer is destroyed on the `renderLevel` thread at its next call. See `RenderMesherGroupDiscardFn`.
+    pub fn group_discard(&self, owner: usize, group: AmmlMeshGroup) -> Result<(), AmmlStatus> {
+        let discarded = self.mesher.as_ref().ok_or(AmmlStatus::NOT_AVAILABLE)?.group_discard(owner, group);
+        self.wake();
+        discarded
+    }
+
     /// Frees the mesh `mesh` of the mod at `owner`. The id is stale at once; the game object is destroyed on the
     /// `renderLevel` thread at its next call.
     pub fn mesh_free(&self, owner: usize, mesh: AmmlMeshId) -> Result<(), AmmlStatus> {
@@ -390,8 +662,30 @@ impl WorldRenderAdapter {
             return Err(AmmlStatus::INVALID_ARGUMENT);
         }
         let parts = self.mesh.as_ref().ok_or(AmmlStatus::NOT_AVAILABLE)?;
-        let handle = self.meshes.handle(owner, Self::key(mesh)).map_err(Self::refusal)?;
+        let (handle, kind) = self.meshes.entry(owner, Self::key(mesh)).map_err(Self::refusal)?;
         let camera = self.frame_camera()?;
+        let origin = transform.origin;
+        let placement = WorldPlacement {
+            origin: [origin.x, origin.y, origin.z],
+            offset: [offset.x, offset.y, offset.z],
+            scale: transform.scale,
+            yaw_degrees: transform.yaw_degrees,
+        };
+        let matrix = WorldTransform::matrix(&placement, camera);
+        match kind {
+            MeshKind::Colour => self.draw_colour(parts, owner, handle, &matrix),
+            MeshKind::Block => self.draw_block(parts, handle, &matrix),
+        }
+    }
+
+    // A colour mesh: the world material of the graphics mode and the loader's white texture.
+    fn draw_colour(
+        &self,
+        parts: &MeshParts,
+        owner: usize,
+        handle: usize,
+        matrix: &[[f32; 4]; 4],
+    ) -> Result<(), AmmlStatus> {
         let texture = TextureAdapter::with(None, |textures| Some(textures.white_texture()))
             .ok_or(AmmlStatus::NOT_AVAILABLE)?
             .ok_or(AmmlStatus::NOT_READY)?;
@@ -411,21 +705,34 @@ impl WorldRenderAdapter {
             unsafe { texture.release() };
             return Err(AmmlStatus::FAILED);
         };
-        let origin = transform.origin;
-        let placement = WorldPlacement {
-            origin: [origin.x, origin.y, origin.z],
-            offset: [offset.x, offset.y, offset.z],
-            scale: transform.scale,
-            yaw_degrees: transform.yaw_degrees,
-        };
-        let matrix = WorldTransform::matrix(&placement, camera);
         // SAFETY: the screen context of the running call, a live mesh of this book, a live material and a copy of the
         // white texture that holds its own uses.
-        unsafe { parts.drawer.draw(call.screen, handle, material, texture, &matrix) }
+        unsafe { parts.drawer.draw(call.screen, handle, material, texture, matrix) }
     }
 
-    // This version draws every mesh with the one overlay material: alpha blend, depth test, no depth write, full
-    // light, the white texture.
+    // A block mesh: the client's blend-block material and a copy of the renderer's terrain atlas, in every graphics
+    // mode. The material is read before the atlas is copied, so a refusal holds no use of the atlas.
+    fn draw_block(&self, parts: &MeshParts, handle: usize, matrix: &[[f32; 4]; 4]) -> Result<(), AmmlStatus> {
+        self.check_area(Self::GHOST_VERSION)?;
+        let game = self.state.events().gate().on_game_thread();
+        if self.ghost_thread.changed(if game { AmmlThread::GAME } else { AmmlThread::RENDER }) {
+            curia::info!("world thread", { hook: "ClientInstance.getItemInHandRenderer", game: game });
+        }
+        let client = SessionAdapter::primary_client().ok_or(AmmlStatus::FAILED)?;
+        // SAFETY: the primary client is live while a world is joined; the dispatch runs on the game thread on both gate
+        // builds (`world thread` above says so at run time).
+        let material = unsafe { parts.ghost.blend_material(client) }.ok_or(AmmlStatus::FAILED)?;
+        let call = CALL.with(Cell::get);
+        // SAFETY: the dispatch runs inside the `renderLevel` call of this renderer, on this thread.
+        let texture = unsafe { parts.ghost.atlas_copy(call.renderer) }.ok_or(AmmlStatus::NOT_READY)?;
+        // SAFETY: the screen context of the running call, a live mesh of this book, a live material and a copy of the
+        // atlas that holds its own uses.
+        unsafe { parts.drawer.draw(call.screen, handle, material, texture, matrix) }
+    }
+
+    // A build from colour quads gives the one overlay style: alpha blend, depth test, no depth write, full light, the
+    // white texture. A block mesh (blend-block material, terrain atlas) comes only from the block mesher: colour quads
+    // carry no UV, so the ghost style is `NOT_AVAILABLE` here.
     fn check_style(style: AmmlMeshStyle) -> Result<(), AmmlStatus> {
         let flags = [style.blend, style.depth_test, style.depth_write, style.two_sided, style.light, style.texture];
         if flags.iter().any(|value| *value > 1) || style._reserved != [0; 2] {

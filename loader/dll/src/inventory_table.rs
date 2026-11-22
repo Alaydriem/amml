@@ -7,10 +7,10 @@ use amml_abi::{
 
 use crate::{BlockHandles, Boundary, InventoryAdapter, InventoryLayout, ItemDrawAdapter, LoaderState, RequestAdapter};
 
-const TABLE_VERSION: u32 = 6;
+const TABLE_VERSION: u32 = 7;
 
 pub(crate) static INVENTORY: AmmlInventoryTable = AmmlInventoryTable {
-    size: AmmlInventoryTable::SIZE_V6,
+    size: AmmlInventoryTable::SIZE_V7,
     version: TABLE_VERSION,
     held_item: InventoryTable::held_item,
     selected_slot: InventoryTable::selected_slot,
@@ -25,6 +25,7 @@ pub(crate) static INVENTORY: AmmlInventoryTable = AmmlInventoryTable {
     item_draw_release: Some(InventoryTable::item_draw_release),
     request_moves: Some(InventoryTable::request_moves),
     item_change_stamp: Some(InventoryTable::item_change_stamp),
+    request_pick: Some(InventoryTable::request_pick),
 };
 
 /// The inventory table behind `AmmlServices::inventory`, and its `extern "C"` functions. Each function checks its
@@ -350,6 +351,35 @@ impl InventoryTable {
             };
             match RequestAdapter::with(Err(AmmlStatus::NOT_AVAILABLE), |adapter| {
                 adapter.request_moves(owner, player, moves, options)
+            }) {
+                Ok(id) => {
+                    // SAFETY: `out_id` is non-null and the caller promises it is writable.
+                    unsafe { out_id.write(id) };
+                    AmmlStatus::OK
+                }
+                Err(status) => status,
+            }
+        })
+    }
+
+    unsafe extern "C" fn request_pick(
+        module: AmmlStr,
+        player: *const c_void,
+        block: AmmlBlockHandle,
+        slot: u8,
+        out_id: *mut u64,
+    ) -> AmmlStatus {
+        Boundary::guard(|| {
+            if out_id.is_null() {
+                return AmmlStatus::INVALID_ARGUMENT;
+            }
+            // SAFETY: the caller promises `module` is valid for the call.
+            let owner = match unsafe { ItemDrawAdapter::live_owner(module) } {
+                Ok(owner) => owner,
+                Err(status) => return status,
+            };
+            match RequestAdapter::with(Err(AmmlStatus::NOT_AVAILABLE), |adapter| {
+                adapter.request_pick(owner, player, block, slot)
             }) {
                 Ok(id) => {
                     // SAFETY: `out_id` is non-null and the caller promises it is writable.

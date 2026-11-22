@@ -1,13 +1,15 @@
 use std::ffi::c_void;
 
-use amml_abi::{AmmlCameraKind, AmmlCameraTable, AmmlPose, AmmlProjection, AmmlStatus, AmmlStr, AmmlVec3};
+use amml_abi::{
+    AmmlActorTarget, AmmlCameraKind, AmmlCameraTable, AmmlPose, AmmlProjection, AmmlStatus, AmmlStr, AmmlVec3,
+};
 
-use crate::{ActiveCameraAdapter, Boundary, CameraAdapter, FreeCameraAdapter, LoaderState};
+use crate::{ActiveCameraAdapter, BodyHideAdapter, Boundary, CameraAdapter, FreeCameraAdapter, LoaderState};
 
-const TABLE_VERSION: u32 = 3;
+const TABLE_VERSION: u32 = 4;
 
 pub(crate) static CAMERA: AmmlCameraTable = AmmlCameraTable {
-    size: AmmlCameraTable::SIZE_V3,
+    size: AmmlCameraTable::SIZE_V4,
     version: TABLE_VERSION,
     set_pose: CameraTable::set_pose,
     rendered_position: CameraTable::rendered_position,
@@ -16,6 +18,7 @@ pub(crate) static CAMERA: AmmlCameraTable = AmmlCameraTable {
     release_free: Some(CameraTable::release_free),
     free_available: Some(CameraTable::free_available),
     active_camera: Some(CameraTable::active_camera),
+    hide_actor: Some(CameraTable::hide_actor),
 };
 
 /// The camera table behind `AmmlServices::camera`, and its `extern "C"` functions. Each function checks its pointers
@@ -145,6 +148,22 @@ impl CameraTable {
                     unsafe { out.write(kind) };
                     AmmlStatus::OK
                 }
+                Err(status) => status,
+            }
+        })
+    }
+
+    unsafe extern "C" fn hide_actor(module: AmmlStr, target: AmmlActorTarget, on: u8) -> AmmlStatus {
+        Boundary::guard(|| {
+            let owner = match Self::owner(module) {
+                Ok(owner) => owner,
+                Err(status) => return status,
+            };
+            match BodyHideAdapter::get()
+                .ok_or(AmmlStatus::NOT_AVAILABLE)
+                .and_then(|a| a.hide_actor(owner, target, on != 0))
+            {
+                Ok(()) => AmmlStatus::OK,
                 Err(status) => status,
             }
         })

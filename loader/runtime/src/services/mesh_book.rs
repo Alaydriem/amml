@@ -4,7 +4,7 @@ use std::sync::{Mutex, MutexGuard};
 
 use crate::structs::mesh_book_state::MeshBookState;
 use crate::structs::mesh_entry::MeshEntry;
-use crate::{MeshFree, MeshKey, MeshRefusal};
+use crate::{MeshFree, MeshKey, MeshKind, MeshRefusal};
 
 /// The meshes of the loader: an id with a generation and an owner mod for each, and the game objects that the render
 /// thread must destroy.
@@ -49,26 +49,42 @@ impl MeshBook {
         self.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    /// Adds the mesh at `handle` for the mod `owner` and gives its name.
+    /// Adds the colour mesh at `handle` for the mod `owner` and gives its name.
     pub fn create(&self, owner: usize, handle: usize) -> MeshKey {
+        self.add(owner, handle, MeshKind::Colour)
+    }
+
+    /// Adds the block mesh at `handle` for the mod `owner` and gives its name.
+    pub fn create_block(&self, owner: usize, handle: usize) -> MeshKey {
+        self.add(owner, handle, MeshKind::Block)
+    }
+
+    fn add(&self, owner: usize, handle: usize, kind: MeshKind) -> MeshKey {
         let mut state = self.lock();
         let id = state.next_id;
         state.next_id += 1;
-        state.entries.insert(id, MeshEntry { owner, handle });
+        state.entries.insert(id, MeshEntry { owner, handle, kind });
         MeshKey { id, generation: state.generation }
     }
 
     /// The address of the game mesh `key` of `owner`.
     pub fn handle(&self, owner: usize, key: MeshKey) -> Result<usize, MeshRefusal> {
         let state = self.lock();
-        let entry = Self::entry(&state, key)?;
+        let entry = Self::entry_of(&state, key)?;
         if entry.owner == owner { Ok(entry.handle) } else { Err(MeshRefusal::NotOwner) }
+    }
+
+    /// The address and the kind of the game mesh `key` of `owner`.
+    pub fn entry(&self, owner: usize, key: MeshKey) -> Result<(usize, MeshKind), MeshRefusal> {
+        let state = self.lock();
+        let entry = Self::entry_of(&state, key)?;
+        if entry.owner == owner { Ok((entry.handle, entry.kind)) } else { Err(MeshRefusal::NotOwner) }
     }
 
     /// Frees `key` of `owner`: the id is stale at once and the game mesh is queued for the render thread.
     pub fn free(&self, owner: usize, key: MeshKey) -> Result<(), MeshRefusal> {
         let mut state = self.lock();
-        let entry = Self::entry(&state, key)?;
+        let entry = Self::entry_of(&state, key)?;
         if entry.owner != owner {
             return Err(MeshRefusal::NotOwner);
         }
@@ -81,7 +97,7 @@ impl MeshBook {
 
     /// Whether `key` is a mesh of the current generation that was not freed.
     pub fn is_current(&self, key: MeshKey) -> bool {
-        Self::entry(&self.lock(), key).is_ok()
+        Self::entry_of(&self.lock(), key).is_ok()
     }
 
     /// Frees every mesh of `owner`. Gives the number of meshes freed.
@@ -175,7 +191,7 @@ impl MeshBook {
         }
     }
 
-    fn entry(state: &MeshBookState, key: MeshKey) -> Result<&MeshEntry, MeshRefusal> {
+    fn entry_of(state: &MeshBookState, key: MeshKey) -> Result<&MeshEntry, MeshRefusal> {
         if key.generation != state.generation {
             return Err(MeshRefusal::Stale);
         }

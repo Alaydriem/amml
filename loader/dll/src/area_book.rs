@@ -25,6 +25,7 @@ impl AreaBook {
         for need in AdapterCatalog::needs() {
             if need.kind == NeedKind::Area && need.shapes.iter().any(|shape| shape.name == Self::LOADER_SHAPE) {
                 book.offer(need.id, need.version);
+                curia::info!("area adapter", { area: need.id, shape: Self::LOADER_SHAPE });
             }
         }
         book

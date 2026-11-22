@@ -12,9 +12,20 @@ use crate::{Pose, Projection, Vec3};
 pub(crate) struct FakeCameraState {
     frame: Cell<u64>,
     running: RefCell<Option<FakeCameraRun>>,
+    body_hidden: Cell<bool>,
 }
 
 impl FakeCameraState {
+    /// A `hide_actor` of the fake mod: the local player's body is hidden (`on`) or shown.
+    pub(crate) fn set_body_hidden(&self, on: bool) {
+        self.body_hidden.set(on);
+    }
+
+    /// Whether the fake mod hides the local player's body.
+    pub(crate) fn body_hidden(&self) -> bool {
+        self.body_hidden.get()
+    }
+
     /// A dispatch starts: a Before dispatch starts a new frame, an After dispatch keeps the frame of the last Before (the
     /// first frame when none ran). Gives the frame id.
     pub(crate) fn enter(&self, after: bool, camera: &FakeCamera) -> u64 {

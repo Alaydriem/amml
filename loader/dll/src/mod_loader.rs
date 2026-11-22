@@ -10,9 +10,10 @@ use amml_data::{AdapterCatalog, EntryId, NeedKind};
 use amml_runtime::{AmmlVersion, ModRegistry, ModSpec};
 
 use crate::{
-    Boundary, Callback, CameraAdapter, ClientAdapter, CurrentMod, EventHub, FreeCameraAdapter, InlineIconAdapter,
-    ItemDrawAdapter, Library, LightingAdapter, LoaderLog, LoaderState, ModExports, ModLoadError, ModPhase, ModRecord,
-    ModReport, RequestAdapter, SessionAdapter, ShapesAdapter, TextureAdapter, UseRow, WorldRenderAdapter,
+    BlockEntityAdapter, BodyHideAdapter, Boundary, Callback, CameraAdapter, ClientAdapter, CurrentMod, EventHub,
+    FreeCameraAdapter, InlineIconAdapter, ItemDrawAdapter, Library, LightingAdapter, LoaderLog, LoaderState,
+    ModExports, ModLoadError, ModPhase, ModRecord, ModReport, NetworkAdapter, OptionsAdapter, RequestAdapter,
+    SessionAdapter, ShapesAdapter, TextureAdapter, TimeAdapter, UseRow, WorldRenderAdapter,
 };
 
 // A workspace version that does not parse panics on first use; the package-version test catches this in CI.
@@ -471,9 +472,14 @@ impl ModLoader {
         InlineIconAdapter::with((), |adapter| adapter.disable_owner(index));
         RequestAdapter::with((), |adapter| adapter.disable_owner(index));
         WorldRenderAdapter::with((), |adapter| adapter.disable_owner(index));
+        BlockEntityAdapter::with((), |adapter| adapter.disable_owner(index));
         CameraAdapter::with((), |adapter| adapter.disable_owner(index));
         ShapesAdapter::with((), |adapter| adapter.disable_owner(index));
         FreeCameraAdapter::with((), |adapter| adapter.disable_owner(index));
+        OptionsAdapter::with((), |adapter| adapter.disable_owner(index));
+        NetworkAdapter::with((), |adapter| adapter.disable_owner(index));
+        TimeAdapter::with((), |adapter| adapter.disable_owner(index));
+        BodyHideAdapter::with((), |adapter| adapter.disable_owner(index));
         let _ = self.state.resources().take_owner(index);
         self.state.remove_hooks_of(index);
     }

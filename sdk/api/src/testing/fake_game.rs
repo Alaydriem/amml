@@ -5,16 +5,17 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use amml_abi::{
-    AmmlApi, AmmlDirKind, AmmlEventContext, AmmlEventHeader, AmmlMouseAction, AmmlMouseButton, AmmlMoveIntent,
-    AmmlOrigin, AmmlPhase, AmmlServices, AmmlStatus, AmmlThread, AmmlUseRow, InjectedInputReleased, InputLeaseLost,
-    InputLeaseResumed, InputLeaseSuspended, InventoryRequestDone, KeyInput, LookDelta, MouseInput,
+    AmmlApi, AmmlDirKind, AmmlEventContext, AmmlEventHeader, AmmlInputBlocks, AmmlLeaseMode, AmmlMouseAction,
+    AmmlMouseButton, AmmlMoveIntent, AmmlOrigin, AmmlPhase, AmmlServices, AmmlStatus, AmmlThread, AmmlUseRow,
+    InjectedInputReleased, InputLeaseLost, InputLeaseResumed, InputLeaseSuspended, InventoryRequestDone, KeyInput,
+    LookDelta, MouseInput,
 };
-use amml_runtime::{CallOutcome, HeaderStamp, InjectedOp, NoticeKind};
+use amml_runtime::{CallOutcome, HeaderStamp, InjectedOp, LeaseTerms, NoticeKind};
 
 use crate::testing::{
     FakeClient, FakeDispatch, FakeListener, FakePhase, FakeScreen, FakeState, FakeTables, FakeWindow,
 };
-use crate::{AmmlMod, ApiError, Area, Ctx, Event, ShotLayers, Uses};
+use crate::{AmmlMod, ApiError, Area, Ctx, Event, InputBlocks, ShotLayers, Uses};
 
 /// A loader for mod tests. `ctx` gives a `Ctx` over a real v3 table whose functions call into this
 /// fake, so the code under test runs the same `Ctx` paths as in the game.
@@ -48,12 +49,31 @@ impl FakeGame {
     /// The most wheel notches one queued wheel sends, as in the loader.
     const MAX_WHEEL_NOTCHES: u32 = 100;
 
-    /// A fake with no events offered, the gate closed, epoch 0 and v11 services (client, input, window,
-    /// overlay, actor, inventory, lighting, ui, network, world, render and camera tables).
+    /// A fake with no events offered, the gate closed, epoch 0 and v13 services (client, input, window,
+    /// overlay, actor, inventory, lighting, ui, network, world, render, camera, options and time tables).
     ///
     /// # Panics
     /// When this thread already holds a live `FakeGame`.
     pub fn new() -> Self {
+        Self::with_services(AmmlServices::SIZE_V13)
+    }
+
+    /// A fake whose services table is v12: every area table but the time table, as a loader before it. Its `Ctx::time`
+    /// reads give `None`, its `hold` gives `NotAvailable`, and `Ctx::supports` is false for every `time.*` area.
+    ///
+    /// # Panics
+    /// When this thread already holds a live `FakeGame`.
+    pub fn with_v12_services() -> Self {
+        Self::with_services(AmmlServices::SIZE_V12)
+    }
+
+    /// A fake whose services table is v11: every area table but the options table, as a loader before it. Its
+    /// `Ctx::options` reads give `None`, its writes `NotAvailable`, and `Ctx::supports` is false for every `options.*`
+    /// area.
+    ///
+    /// # Panics
+    /// When this thread already holds a live `FakeGame`.
+    pub fn with_v11_services() -> Self {
         Self::with_services(AmmlServices::SIZE_V11)
     }
 
@@ -269,12 +289,37 @@ impl FakeGame {
         client: *const c_void,
         blocked: bool,
     ) -> FakeDispatch {
+        Self::dispatch_on_thread(state, value, cancellable, client, blocked, AmmlThread::GAME)
+    }
+
+    // `dispatch_on` with the context's thread `thread`.
+    fn dispatch_on_thread<E: Event + Clone>(
+        state: &FakeState,
+        value: &mut E,
+        cancellable: bool,
+        client: *const c_void,
+        blocked: bool,
+        thread: AmmlThread,
+    ) -> FakeDispatch {
+        Self::dispatch_versioned(state, value, E::VERSION, cancellable, client, blocked, thread)
+    }
+
+    // `dispatch_on_thread` with the header version `version`, for an event a loader of an older version raised.
+    fn dispatch_versioned<E: Event + Clone>(
+        state: &FakeState,
+        value: &mut E,
+        version: u32,
+        cancellable: bool,
+        client: *const c_void,
+        blocked: bool,
+        thread: AmmlThread,
+    ) -> FakeDispatch {
         let header = Self::header_of(value);
         header.size = std::mem::size_of::<E>() as u32;
-        header.version = E::VERSION;
+        header.version = version;
         header.cancelled = u8::from(blocked);
         let mut stamp = HeaderStamp::new(*header, cancellable);
-        let context = Self::context_on(state, client);
+        let context = AmmlEventContext { thread, ..Self::context_on(state, client) };
         let report =
             state.bus().dispatch(E::ID, value, |listener, value| Self::call(listener, value, &context, &mut stamp));
         stamp.stamp(Self::header_of(value));
@@ -283,6 +328,23 @@ impl FakeGame {
             state.disable_owner();
         }
         FakeDispatch { cancelled: report.cancelled, panicked }
+    }
+
+    /// The loader raises the `BuildBlock` of the fake mod's own `build_at` from the game's build: origin `THIS_MOD` (the
+    /// fake has one mod), the main hand, the local player, on the game thread with the fake client. True when no listener
+    /// cancelled it, so the game built.
+    pub(crate) fn raise_own_build(state: &FakeState, pos: crate::BlockPos, face: crate::Face) -> bool {
+        let header = AmmlEventHeader { origin: AmmlOrigin::THIS_MOD, ..Self::header::<amml_abi::BuildBlock>() };
+        let mut event = amml_abi::BuildBlock {
+            header,
+            pos: pos.into(),
+            face: face.into(),
+            hand: amml_abi::AmmlHand::MAIN,
+            sim_tick: 0,
+            is_local_player: 1,
+        };
+        let client = std::ptr::with_exposed_provenance(state.current_client());
+        !Self::dispatch_on(state, &mut event, true, client, false).cancelled
     }
 
     /// The loader raises the instruction of the fake mod's own `set_free` or `release_free` from the game's handler:
@@ -365,6 +427,9 @@ impl FakeGame {
         self.state.phase().set(FakePhase::Running);
         let ctx = self.ctx_for::<M>();
         M::disable(&ctx, &ctx.disable_ctx(self.state.gate().get()));
+        self.state.options().disable_owner();
+        self.state.network().disable_owner();
+        self.state.time().disable_owner();
         self.state.input().end_owner();
     }
 
@@ -454,6 +519,11 @@ impl FakeGame {
     /// handle is accepted only while the fake still holds a stack.
     pub fn set_inventory(&self, inventory: crate::testing::FakeInventory) {
         self.state.set_inventory(inventory);
+    }
+
+    /// Each `Blocks::rotated` call, in order: the handle and the quarter count after the modulo 4.
+    pub fn rotations(&self) -> Vec<(crate::BlockHandle, u8)> {
+        self.state.block_rotations()
     }
 
     /// Sets the off-hand stack of the local player (`None` is an empty off hand), served by `held_item(Hand::Off)`.
@@ -549,6 +619,97 @@ impl FakeGame {
         dispatch
     }
 
+    /// Raises `PacketWire` with `bytes` lent for the listener calls, as the loader does: `PacketWireExt::bytes` gives them
+    /// inside a call and `None` for a copy and after the raise. An `Out` packet is raised on the game thread, an `In`
+    /// packet on the network thread.
+    pub fn raise_packet_wire(
+        &self,
+        dir: crate::WireDir,
+        connection: crate::WireConnection,
+        bytes: &[u8],
+    ) -> FakeDispatch {
+        let mut event = amml_abi::PacketWire {
+            header: Self::header::<amml_abi::PacketWire>(),
+            dir: dir.into(),
+            _reserved: [0; 7],
+            connection: connection.into(),
+            bytes: bytes.as_ptr(),
+            len: bytes.len(),
+        };
+        let thread = if dir == crate::WireDir::In { AmmlThread::NETWORK } else { AmmlThread::GAME };
+        Self::dispatch_on_thread(&self.state, &mut event, false, std::ptr::null(), false, thread)
+    }
+
+    /// Raises `ConnectionStarted` on the game thread, with `host` lent for the listener calls as the loader does.
+    pub fn raise_connection_started(
+        &self,
+        connection: crate::WireConnection,
+        protocol: u32,
+        host: &str,
+        port: u16,
+    ) -> FakeDispatch {
+        let mut event = amml_abi::ConnectionStarted {
+            header: Self::header::<amml_abi::ConnectionStarted>(),
+            connection: connection.into(),
+            protocol,
+            port,
+            _reserved: 0,
+            host: amml_abi::AmmlStr::from_str(host),
+        };
+        self.raise(&mut event)
+    }
+
+    /// Raises `JoinStarted` (version 2) on the game thread with the `local` flag and the two names lent for the listener
+    /// calls, as the loader does: `JoinStartedExt::server_name` and `world_name` give them inside a call and `None`
+    /// for a copy and after the raise; an empty name reads as `None`.
+    pub fn raise_join_started(&self, local: bool, server_name: &str, world_name: &str) -> FakeDispatch {
+        let mut event = amml_abi::JoinStarted {
+            header: Self::header::<amml_abi::JoinStarted>(),
+            local: u8::from(local),
+            _reserved: [0; 7],
+            server_name: amml_abi::AmmlStr::from_str(server_name),
+            world_name: amml_abi::AmmlStr::from_str(world_name),
+        };
+        self.raise(&mut event)
+    }
+
+    /// Raises `ServerJoinStarting` Before the game's call on the game thread, with the three texts lent for the listener
+    /// calls as the loader does; an empty text reads as `None`.
+    pub fn raise_server_join_starting(
+        &self,
+        host: &str,
+        url: &str,
+        name: &str,
+        port: u16,
+        transfer: bool,
+    ) -> FakeDispatch {
+        let mut event = amml_abi::ServerJoinStarting {
+            header: Self::header::<amml_abi::ServerJoinStarting>(),
+            port,
+            transfer: u8::from(transfer),
+            _reserved: [0; 5],
+            host: amml_abi::AmmlStr::from_str(host),
+            url: amml_abi::AmmlStr::from_str(url),
+            name: amml_abi::AmmlStr::from_str(name),
+        };
+        self.raise(&mut event)
+    }
+
+    /// Raises `WorldStorageOpened` on the game thread with `path` lent for the listener calls.
+    pub fn raise_world_storage_opened(&self, path: &str) -> FakeDispatch {
+        let mut event = amml_abi::WorldStorageOpened {
+            header: Self::header::<amml_abi::WorldStorageOpened>(),
+            path: amml_abi::AmmlStr::from_str(path),
+        };
+        self.raise(&mut event)
+    }
+
+    /// Raises `WorldStorageClosed` on the game thread.
+    pub fn raise_world_storage_closed(&self) -> FakeDispatch {
+        let mut event = amml_abi::WorldStorageClosed { header: Self::header::<amml_abi::WorldStorageClosed>() };
+        self.raise(&mut event)
+    }
+
     /// Raises `WorldRendered` for `canvas`, as the loader does after the game's level pass: the canvas calls answer for
     /// the camera position of `canvas` while the listeners run, and refuse after. The meshes freed through the canvas
     /// are added to `canvas.frees`, the `build` and `draw` lines to `canvas.calls`.
@@ -565,6 +726,37 @@ impl FakeGame {
         canvas.frees.borrow_mut().extend(frees);
         canvas.calls.borrow_mut().extend(calls);
         dispatch
+    }
+
+    /// Raises `BlockEntityPass` for `camera`, as the loader does after the game's opaque block entity pass: the ghost
+    /// draws answer while the listeners run, and refuse after.
+    pub fn raise_block_entity_pass(&self, camera: crate::BlockEntityCamera) -> FakeDispatch {
+        let frame = self.state.block_entities().enter();
+        let mut event = amml_abi::BlockEntityPass {
+            header: Self::header::<amml_abi::BlockEntityPass>(),
+            frame_id: frame,
+            camera: camera.into(),
+            _reserved: [0; 7],
+        };
+        let dispatch = self.raise(&mut event);
+        self.state.block_entities().leave();
+        dispatch
+    }
+
+    /// The block entity ghosts of the fake mod: the accepted `create` and `draw` calls and the live count.
+    pub fn block_entities(&self) -> &crate::testing::FakeBlockEntities {
+        self.state.block_entities()
+    }
+
+    /// Names the kind of the block `block` for the ghost calls (`create kind=<kind>`); a ghost chest pair needs `chest`.
+    /// A block that is not named is `block`.
+    pub fn set_block_entity_kind(&self, block: crate::BlockHandle, kind: &'static str) {
+        self.state.block_entities().set_kind(block.raw(), kind);
+    }
+
+    /// A world leave for the ghosts: every ghost is freed, and a later use of one gives `Stale`.
+    pub fn leave_block_entity_world(&self) {
+        self.state.block_entities().world_left();
     }
 
     /// Raises `CameraSetup` in `phase` for `camera`, as the loader does around the game's camera setup: a Before raise
@@ -649,6 +841,11 @@ impl FakeGame {
         self.state.render().live_meshes()
     }
 
+    /// The number of open mesh groups of the fake mod (begun, not finished, discarded or dropped by a world leave).
+    pub fn open_groups(&self) -> usize {
+        self.state.render().open_groups()
+    }
+
     /// Raises `TexturesReloaded` with `reason`, as the loader does after it handled the mod textures: for
     /// `TextureReload::DeviceReset` every texture is freed first (a later use of its id gives `Stale`, as after a world
     /// leave); for `TextureReload::ResourcePack` the ids stay valid.
@@ -706,6 +903,22 @@ impl FakeGame {
         new: crate::BlockTypeId,
         old: crate::BlockTypeId,
     ) -> FakeDispatch {
+        self.raise_block_changed_v2(dimension, pos, layer, new, old, None)
+    }
+
+    /// As `raise_block_changed`, with the block after the change: `BlockChangedExt::new_state` gives `new_state` inside
+    /// the listener calls of this raise, and `None` after them, as the loader does. A `None` is a change the game gave
+    /// no block for.
+    pub fn raise_block_changed_v2(
+        &self,
+        dimension: i32,
+        pos: crate::BlockPos,
+        layer: u32,
+        new: crate::BlockTypeId,
+        old: crate::BlockTypeId,
+        new_state: Option<crate::BlockHandle>,
+    ) -> FakeDispatch {
+        let token = self.state.next_changed_token();
         let mut event = amml_abi::BlockChanged {
             header: Self::header::<amml_abi::BlockChanged>(),
             dimension,
@@ -713,8 +926,12 @@ impl FakeGame {
             layer,
             new: new.0,
             old: old.0,
+            new_state: if new_state.is_some() { token } else { 0 },
         };
-        self.raise(&mut event)
+        let outer = self.state.replace_changed_state(new_state.map(|handle| (token, handle)));
+        let dispatch = self.raise(&mut event);
+        self.state.replace_changed_state(outer);
+        dispatch
     }
 
     /// Raises `ContainerSlotUnhover` for `slot` of `screen`.
@@ -817,6 +1034,13 @@ impl FakeGame {
     /// runs one at a time, as the loader does: a request runs until `answer` and the next `frame` end it.
     pub fn requests(&self) -> Vec<(crate::RequestId, Vec<crate::InventoryMove>, crate::RequestOptions)> {
         self.state.requests().all()
+    }
+
+    /// The creative picks `Inventory::request_pick` took so far, in order: the id, the block and the hotbar slot. The
+    /// fake does not model the game mode, the creative list or the stack: a pick of any live handle into a slot of the
+    /// hotbar is taken, and `requests` lists it with no moves.
+    pub fn picks(&self) -> Vec<(crate::RequestId, crate::BlockHandle, u8)> {
+        self.state.requests().picks()
     }
 
     /// The server answers request `id`: `accepted` of its moves were accepted (all of them gives `Done`, fewer
@@ -928,11 +1152,170 @@ impl FakeGame {
         self.raise(&mut event)
     }
 
+    /// The game loses the app focus: raises `AppFocusLost` with the fake client. Gives whether a listener cancelled it,
+    /// so the game's handler did not run; the loss is then held for `Client::replay_app_focus_lost`.
+    pub fn raise_app_focus_lost(&self) -> bool {
+        let mut event = amml_abi::AppFocusLost { header: Self::header::<amml_abi::AppFocusLost>() };
+        let cancelled = self.raise_with_client(&mut event).cancelled;
+        if cancelled {
+            self.state.hold_focus_loss();
+        }
+        cancelled
+    }
+
+    /// The player presses the use action: raises `UsePressed` with the fake client. Gives whether a listener cancelled
+    /// it, so the game's handler did not run.
+    pub fn raise_use_pressed(&self) -> bool {
+        let mut event = amml_abi::UsePressed { header: Self::header::<amml_abi::UsePressed>() };
+        self.raise_with_client(&mut event).cancelled
+    }
+
+    /// A player builds: raises `BuildBlock` on `thread` with `origin`, the fake client in the context only for
+    /// `AmmlThread::GAME` (the server thread has none), and the given fields. Gives whether a listener cancelled it, so
+    /// the game did not build.
+    #[allow(clippy::too_many_arguments)]
+    pub fn raise_build_block(
+        &self,
+        thread: AmmlThread,
+        origin: AmmlOrigin,
+        pos: crate::BlockPos,
+        face: crate::Face,
+        hand: crate::Hand,
+        sim_tick: bool,
+        is_local_player: bool,
+    ) -> bool {
+        let header = AmmlEventHeader { origin, ..Self::header::<amml_abi::BuildBlock>() };
+        let mut event = amml_abi::BuildBlock {
+            header,
+            pos: pos.into(),
+            face: face.into(),
+            hand: hand.into(),
+            sim_tick: u8::from(sim_tick),
+            is_local_player: u8::from(is_local_player),
+        };
+        let client = if thread == AmmlThread::GAME {
+            std::ptr::with_exposed_provenance(self.state.current_client())
+        } else {
+            std::ptr::null()
+        };
+        Self::dispatch_on_thread(&self.state, &mut event, true, client, false, thread).cancelled
+    }
+
+    /// Every `GameMode::build_at` the game took, in order: `build_at 4,70,-2 face=up`. A build a listener cancelled is not
+    /// listed.
+    pub fn builds(&self) -> Vec<String> {
+        self.state.builds()
+    }
+
+    /// The game gains the app focus: forgets the held loss, then raises `AppFocusGained` (After the game's handler).
+    pub fn raise_app_focus_gained(&self) {
+        self.state.forget_focus_loss();
+        let mut header = Self::header::<amml_abi::AppFocusGained>();
+        header.phase = AmmlPhase::AFTER;
+        let mut event = amml_abi::AppFocusGained { header };
+        self.raise_with_client(&mut event);
+    }
+
+    /// How many times `Client::replay_app_focus_lost` ran the game's handler: a replay with a held loss counts, one
+    /// with none does not.
+    pub fn focus_replays(&self) -> u32 {
+        self.state.focus_replays()
+    }
+
     /// Every client write in order: `hide_hud=true`, `mouse_captured=false`, `open_pause_screen`,
     /// `leave_world`, `start_local_world <id>`, `join_server <host>:<port>`, `open_menu servers`, `send_command <text>`,
     /// `select_hotbar_slot <slot>`.
     pub fn client_writes(&self) -> Vec<String> {
         self.state.client_writes()
+    }
+
+    /// Replaces the options the fake serves (`Ctx::options`). Each call also needs its area offered
+    /// (`Area::OPTIONS_VIEW_DISTANCE`, `Area::OPTIONS_INT`) and the gate open; the view distance needs the fake client.
+    pub fn set_options(&self, options: crate::testing::FakeOptions) {
+        self.state.options().set(options);
+    }
+
+    /// The protocol number `Network::protocol_version` gives (it also needs `Area::NETWORK_PROTOCOL` offered). 0 until set.
+    pub fn set_protocol_version(&self, protocol: u32) {
+        self.state.network().set_protocol(protocol);
+    }
+
+    /// The chunk cache wish of the fake mod from `Network::set_client_chunk_cache`: `Some(false)` is the wish that makes
+    /// the loader write 0 into the status packet; `None` when the mod made none or was disabled.
+    pub fn client_chunk_cache(&self) -> Option<bool> {
+        self.state.network().chunk_cache_wish()
+    }
+
+    /// The option writes of the fake mod that went out, in order: `set_int vsync=0 transient` and `release vsync
+    /// restored=1` (`kept=<value>` when the user changed the option meanwhile). The disable of the fake mod releases
+    /// its transient values like `release_transient`. A release with no transient value held writes nothing.
+    pub fn option_writes(&self) -> Vec<String> {
+        self.state.options().writes()
+    }
+
+    /// The game clock writes of the fake mod that went out, in order: `hold offset=<ms>`, `step <micros>` and `release
+    /// reason=<reason>` (`release` for the drop of the `TimeHold`, `disabled` for the disable of the fake mod). A step
+    /// reaches the fake's timers at once; `Time::stepped_us` gives the sum of the steps of the hold.
+    pub fn time_writes(&self) -> Vec<String> {
+        self.state.time().writes()
+    }
+
+    /// Raises `TimeStepApplied` on the game thread, as the loader does After the frame in which a step reached the
+    /// timers.
+    pub fn raise_time_step_applied(&self, stepped_us: i64, sim_ticks: i32, sim_alpha: f32) -> FakeDispatch {
+        let mut event = amml_abi::TimeStepApplied {
+            header: Self::header::<amml_abi::TimeStepApplied>(),
+            stepped_us,
+            sim_ticks,
+            sim_alpha,
+        };
+        self.raise(&mut event)
+    }
+
+    /// Raises `FrameEnd` on the game thread, as the loader does Before `MinecraftGame::endFrame`.
+    pub fn raise_frame_end(&self, count: u64) -> FakeDispatch {
+        let mut event = amml_abi::FrameEnd { header: Self::header::<amml_abi::FrameEnd>(), count };
+        self.raise(&mut event)
+    }
+
+    /// Whether the fake mod hides the local player's body now (`CameraControl::hide_actor`).
+    pub fn body_hidden(&self) -> bool {
+        self.state.camera().body_hidden()
+    }
+
+    /// A world leave for the camera area: the body is shown again, as the loader does before `WorldLeft`.
+    pub fn leave_camera_world(&self) {
+        self.state.camera().set_body_hidden(false);
+    }
+
+    /// Raises `PlayerMoved`, as the loader does After the game handled a `MovePlayerPacket` of the local player.
+    pub fn raise_player_moved(
+        &self,
+        pos: crate::Vec3,
+        rotation: crate::Rotation,
+        head_yaw: f32,
+        mode: u8,
+    ) -> FakeDispatch {
+        let mut event = amml_abi::PlayerMoved {
+            header: Self::header::<amml_abi::PlayerMoved>(),
+            pos: pos.into(),
+            rotation: rotation.into(),
+            head_yaw,
+            mode,
+            _reserved: [0; 7],
+        };
+        self.raise(&mut event)
+    }
+
+    /// Raises `LatencyBarrier`, as the loader does After the game handled a `NetworkStackLatencyPacket`.
+    pub fn raise_latency_barrier(&self, create_time: u64) -> FakeDispatch {
+        let mut event = amml_abi::LatencyBarrier { header: Self::header::<amml_abi::LatencyBarrier>(), create_time };
+        self.raise(&mut event)
+    }
+
+    /// Every `LocalPlayer::set_rotation` that the fake accepted, in order, with its head yaw.
+    pub fn rotation_writes(&self) -> Vec<(crate::Rotation, Option<f32>)> {
+        self.state.rotation_writes()
     }
 
     /// Attaches the game window: the `Window` reads give `window` (each also needs `window.read`
@@ -970,6 +1353,18 @@ impl FakeGame {
     /// The presents the capture streams skipped because no slot was free, summed over the streams.
     pub fn capture_skipped(&self) -> u64 {
         self.state.overlay().skipped()
+    }
+
+    /// Takes a shared lease for another mod `module` that blocks `blocks`, as that mod would; the fake's mod then sees
+    /// it in `Input::held_by_others`. False when the lease book refuses it.
+    pub fn lease_as_other_mod(&self, module: &str, blocks: InputBlocks) -> bool {
+        let terms = LeaseTerms {
+            mode: AmmlLeaseMode::SHARED,
+            blocks: AmmlInputBlocks::from(blocks),
+            passthrough: Vec::new(),
+            preempt: false,
+        };
+        self.state.input().acquire_other(module, terms)
     }
 
     /// Binds every input feed, as the loader does at the first real feed of each kind. Until then an

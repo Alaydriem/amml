@@ -8,8 +8,8 @@ use amml_abi::{
 use amml_data::{AdapterCatalog, Availability, EntryId, NeedKind};
 
 use crate::{
-    ActorAdapter, ActorsInAdapter, BlockTypeReader, ChunkAdapter, ClientAdapter, ColumnExtras, HandleStamp,
-    InventoryAdapter, LoaderState, RaycastAdapter, ThreadNote,
+    ActorAdapter, ActorsInAdapter, BlockReadAdapter, BlockStateAdapter, BlockTypeReader, ChunkAdapter, ClientAdapter,
+    ColumnExtras, HandleStamp, InventoryAdapter, KindsAdapter, LoaderState, RaycastAdapter, ShapesAdapter, ThreadNote,
 };
 
 static ADAPTER: OnceLock<WorldAdapter> = OnceLock::new();
@@ -95,7 +95,14 @@ impl WorldAdapter {
         let resolved = |name: &str| state.table().get(&EntryId(name.to_string())).is_some();
         let rows: Vec<Availability> = AdapterCatalog::availability(&resolved)
             .into_iter()
-            .filter(|row| row.kind == NeedKind::Area && row.id.starts_with("world."))
+            .filter(|row| {
+                row.kind == NeedKind::Area
+                    && row.id.starts_with("world.")
+                    && row.id != BlockStateAdapter::AREA
+                    && row.id != BlockReadAdapter::AREA
+                    && row.id != KindsAdapter::AREA
+                    && row.id != ShapesAdapter::AREA
+            })
             .collect();
         let slot = |name: &str| state.resolve(name).ok().and_then(|value| usize::try_from(value).ok());
         let chunk_resolved = rows.iter().any(|row| row.id == Self::CHUNK_READ && row.shape.is_some());
@@ -294,6 +301,11 @@ impl WorldAdapter {
         // SAFETY: `source` is the live block source of the local player of the primary client (checked above), and the
         // call runs on the game thread.
         unsafe { actors.actors_in(source, aabb, local_player, out) }
+    }
+
+    /// The chunk reads, for the areas that build on them; `None` when the build has no chunk layout the loader knows.
+    pub(crate) fn chunks(&self) -> Option<&ChunkAdapter> {
+        self.chunk.as_ref()
     }
 
     /// The reader of block types the chunk reads use; `None` when the build has no chunk layout the loader knows.

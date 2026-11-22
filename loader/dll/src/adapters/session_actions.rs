@@ -21,6 +21,9 @@ type StartLocalWorldFn = unsafe extern "C" fn(*mut c_void, *const MsvcString) ->
 /// name, the by-value std::function passed as a pointer on the stack.
 type JoinExternalFn =
     unsafe extern "C" fn(*mut c_void, *const MsvcString, u16, *const MsvcString, *mut [*mut c_void; 8]);
+/// `void ClientInstance.connectByAddress(const std::string& ip, int port)`: rcx the client subobject whose vtable holds
+/// it, rdx the ip, r8d the port (26.63 0x65a0552, 70.26 0x8b29880: `mov ebx,r8d; mov rdi,rdx; mov rsi,rcx`).
+type ConnectByAddressFn = unsafe extern "C" fn(*mut c_void, *const MsvcString, i32);
 /// `bool OreUI::Router::_pushRoute(const std::string& route, RouterPushMode mode)`: rcx the router, rdx the route,
 /// r8d the mode, the bool in al.
 type PushRouteFn = unsafe extern "C" fn(*mut c_void, *const MsvcString, i32) -> u8;
@@ -31,8 +34,8 @@ type CreatePacketFn = unsafe extern "C" fn(*mut SharedPtr<c_void>, u32) -> *mut 
 type SendFn = unsafe extern "C" fn(*mut c_void, *mut c_void);
 
 /// The session actions of the client (`client.leave_world`, `client.can_join`, `client.start_local_world`,
-/// `client.join_server` with the `client.join_server_result` event, `client.open_menu`, `client.send_command`), over
-/// the primary client.
+/// `client.join_server` and `client.join_server_direct` with the `client.join_server_result` event, `client.open_menu`,
+/// `client.send_command`), over the primary client.
 ///
 /// Every call runs under the client call rules (`ClientAdapter::check`: gate open, game thread, the primary client)
 /// and the offer of its area. A call that needs a world (`leave_world`, `send_command`) gives `REFUSED` without one;
@@ -53,6 +56,7 @@ pub struct SessionActions {
     server_joiner_at: Option<usize>,
     command_at: Option<usize>,
     packet_size: Option<usize>,
+    connect_this: Option<usize>,
     // The slot of `send` in the PacketSender vtable.
     send_slot: Option<usize>,
     // Function addresses.
@@ -60,6 +64,7 @@ pub struct SessionActions {
     join_external: Option<usize>,
     push_route: Option<usize>,
     create_packet: Option<usize>,
+    connect_by_address: Option<usize>,
     joins: JoinBook,
 }
 
@@ -68,7 +73,9 @@ impl SessionActions {
     pub const CAN_JOIN: &'static str = "client.can_join";
     pub const START_LOCAL_WORLD: &'static str = "client.start_local_world";
     pub const JOIN_SERVER: &'static str = "client.join_server";
+    pub const JOIN_SERVER_DIRECT: &'static str = "client.join_server_direct";
     pub const OPEN_MENU: &'static str = "client.open_menu";
+    pub const GO_TO_TITLE: &'static str = "client.go_to_title";
     pub const SEND_COMMAND: &'static str = "client.send_command";
     /// The longest command text `send_command` takes, in bytes.
     pub const MAX_COMMAND: usize = 4096;
@@ -77,6 +84,10 @@ impl SessionActions {
     const COMMAND_REQUEST_PACKET: u32 = 0x4D;
     // The Ore UI route of the Play screen's Servers tab, pushed with mode 0.
     const SERVERS_ROUTE: &'static str = "/play/servers";
+    // The game's route back to the title with the menu stack emptied: 26.63 builds it in 0x17212a0 (`/main-menu` +
+    // `/?` + `shouldFlushStack` + `=` + `true`) and pushes it with `_pushRoute(router, route, 0)` in 0xd8f00
+    // (`xor r8d,r8d; call 0xf3c360`); on 70.26 the router took the same text (route seen, via push).
+    const TITLE_ROUTE: &'static str = "/main-menu/?shouldFlushStack=true";
     const PUSH_MODE: i32 = 0;
 
     /// Offers each session action area and the `client.join_server_result` event whose catalog shape resolved, and
@@ -99,11 +110,13 @@ impl SessionActions {
             server_joiner_at: value("NetworkWorldJoiner.mServerWorldJoiner"),
             command_at: value("CommandRequestPacket.mCommand"),
             packet_size: value("CommandRequestPacket.size"),
+            connect_this: value("ClientInstance.connectByAddressThis"),
             send_slot: value("PacketSender.send"),
             start_local_world: function("LocalWorldStarter.startLocalWorld"),
             join_external: function("ServerWorldJoiner.joinExternalServer"),
             push_route: function("OreUIRouter.pushRoute"),
             create_packet: function("MinecraftPackets.createPacket"),
+            connect_by_address: function("ClientInstance.connectByAddress"),
             joins: JoinBook::new(),
         };
         if ACTIONS.set(actions).is_err() {
@@ -123,7 +136,9 @@ impl SessionActions {
                 Self::CAN_JOIN,
                 Self::START_LOCAL_WORLD,
                 Self::JOIN_SERVER,
+                Self::JOIN_SERVER_DIRECT,
                 Self::OPEN_MENU,
+                Self::GO_TO_TITLE,
                 Self::SEND_COMMAND,
             ]
             .contains(&row.id),
@@ -293,6 +308,71 @@ impl SessionActions {
         Ok(id)
     }
 
+    /// Joins the server at the address literal `host` (IPv4 or IPv6), port `port`, for the mod at `owner`, through the
+    /// game's own `ClientInstance.connectByAddress`: the game builds the connection info (type `UnknownIP`, transport
+    /// 4, the address, the port and its third-party info) and a default `PlayerJoinWorldContext` itself and passes them
+    /// to `startExternalNetworkWorld`, the path of the pre-port dejavu replay join. The game's task builds the info again
+    /// only for an address literal, so a host name is `INVALID_ARGUMENT`; the host is passed in its canonical text.
+    /// `name` is not used (the game passes its own server name). The function is called through the client subobject
+    /// at the derived `ClientInstance.connectByAddressThis` (the vptr store of the table that holds it), as the game's
+    /// virtual call does: the object itself on 26.63, the base at +0A0h on 70.26.
+    /// The game's call has no result, so the join is answered `OTHER` (raised as `JoinServerResult` to `owner` at the
+    /// next frame) once the game took it. A `join_server` join that still waits for the game's answer is answered
+    /// `OTHER` and replaced. `REFUSED` in a world.
+    pub fn join_server_direct(
+        &self,
+        owner: usize,
+        client: *const c_void,
+        host: &str,
+        port: u16,
+        name: &str,
+    ) -> Result<u64, AmmlStatus> {
+        let client = self.enter(client, Self::JOIN_SERVER_DIRECT)?;
+        let address = host.parse::<std::net::IpAddr>().map_err(|_| AmmlStatus::INVALID_ARGUMENT)?;
+        if port == 0 {
+            return Err(AmmlStatus::INVALID_ARGUMENT);
+        }
+        if self.in_world() {
+            return Err(AmmlStatus::REFUSED);
+        }
+        let function = self.connect_by_address.ok_or(AmmlStatus::NOT_AVAILABLE)?;
+        let offset = self.connect_this.ok_or(AmmlStatus::NOT_AVAILABLE)?;
+        let this = client.checked_add(offset).ok_or(AmmlStatus::FAILED)?;
+        let heap = self.heap()?;
+        let canonical = address.to_string();
+        // SAFETY: `heap` is the game's operator new and delete pair.
+        let mut host_text = unsafe { MsvcString::new_in(&heap, &canonical) }.map_err(|_| AmmlStatus::FAILED)?;
+        if let Some((waiting_owner, waiting)) = self.joins.answer() {
+            curia::info!("a waiting server join was replaced by a direct join", { join: waiting });
+            let event = OwnerEvent::JoinServerResult { join: waiting, outcome: AmmlJoinOutcome::OTHER };
+            self.state.owner_events().push(waiting_owner, event);
+        }
+        let Some(id) = self.joins.begin(owner) else {
+            // SAFETY: the string came from `new_in` with this heap and is not used again.
+            unsafe { host_text.release(&heap) };
+            return Err(AmmlStatus::REFUSED);
+        };
+        let module = self.state.module_base() as usize;
+        curia::info!("direct server join asked", {
+            join: id,
+            function: format!("{:#x}", function.wrapping_sub(module)),
+            this_offset: format!("{offset:#x}"),
+            rdx_host: canonical.as_str(),
+            rdx_host_len: canonical.len() as u64,
+            r8d_port: port,
+            unused_name: name
+        });
+        // SAFETY: the entry is `ClientInstance.connectByAddress`, with the signature of `ConnectByAddressFn`.
+        let connect = unsafe { std::mem::transmute::<usize, ConnectByAddressFn>(function) };
+        // SAFETY: `this` is the subobject of the live primary client whose vtable holds the function, on the game
+        // thread; the host string is live and the game copies it; the port is the int the function takes.
+        unsafe { connect(std::ptr::with_exposed_provenance_mut(this), &raw const host_text, i32::from(port)) };
+        // SAFETY: the string came from `new_in` with this heap and is not used again; the call copied it.
+        unsafe { host_text.release(&heap) };
+        self.answered(0);
+        Ok(id)
+    }
+
     /// Opens `menu`: `SERVERS` pushes the Servers route through the client's current Ore UI router. `REFUSED` in a
     /// world or when the router refuses the route; `INVALID_ARGUMENT` for an unknown menu.
     pub fn open_menu(&self, client: *const c_void, menu: AmmlMenu) -> Result<(), AmmlStatus> {
@@ -303,6 +383,25 @@ impl SessionActions {
         if self.in_world() {
             return Err(AmmlStatus::REFUSED);
         }
+        let accepted = self.push(client, Self::SERVERS_ROUTE)?;
+        curia::info!("menu asked", { menu: menu.0, accepted: accepted });
+        if accepted { Ok(()) } else { Err(AmmlStatus::REFUSED) }
+    }
+
+    /// Goes back to the title screen: pushes `TITLE_ROUTE` (mode 0) through the client's current Ore UI router, as the
+    /// game does. `REFUSED` in a world or when the router refuses the route.
+    pub fn go_to_title(&self, client: *const c_void) -> Result<(), AmmlStatus> {
+        let client = self.enter(client, Self::GO_TO_TITLE)?;
+        if self.in_world() {
+            return Err(AmmlStatus::REFUSED);
+        }
+        let accepted = self.push(client, Self::TITLE_ROUTE)?;
+        curia::info!("title asked", { accepted: accepted });
+        if accepted { Ok(()) } else { Err(AmmlStatus::REFUSED) }
+    }
+
+    // Pushes `text` (mode `PUSH_MODE`) through the current Ore UI router of `client`; the router's answer.
+    fn push(&self, client: usize, text: &str) -> Result<bool, AmmlStatus> {
         let function = self.push_route.ok_or(AmmlStatus::NOT_AVAILABLE)?;
         let router = ClientAdapter::call_pointer(client, self.ui_router)?;
         if router == 0 {
@@ -310,7 +409,7 @@ impl SessionActions {
         }
         let heap = self.heap()?;
         // SAFETY: `heap` is the game's operator new and delete pair.
-        let mut route = unsafe { MsvcString::new_in(&heap, Self::SERVERS_ROUTE) }.map_err(|_| AmmlStatus::FAILED)?;
+        let mut route = unsafe { MsvcString::new_in(&heap, text) }.map_err(|_| AmmlStatus::FAILED)?;
         // SAFETY: the entry is `OreUI::Router::_pushRoute`, with the signature of `PushRouteFn`.
         let push = unsafe { std::mem::transmute::<usize, PushRouteFn>(function) };
         let router = std::ptr::with_exposed_provenance_mut::<c_void>(router);
@@ -318,8 +417,7 @@ impl SessionActions {
         let accepted = unsafe { push(router, &raw const route, Self::PUSH_MODE) };
         // SAFETY: the string came from `new_in` with this heap and the call copied it.
         unsafe { route.release(&heap) };
-        curia::info!("menu asked", { menu: menu.0, accepted: accepted != 0 });
-        if accepted == 0 { Err(AmmlStatus::REFUSED) } else { Ok(()) }
+        Ok(accepted != 0)
     }
 
     /// Sends `text` as a chat command: a `CommandRequestPacket` from the game's packet factory, the text written over

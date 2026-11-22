@@ -9,6 +9,9 @@ use super::Harness;
 static LOG: Mutex<Vec<String>> = Mutex::new(Vec::new());
 // The translation of the last matrix the stand-in pop saw, as f32 bits.
 static POPPED: Mutex<[u32; 3]> = Mutex::new([0; 3]);
+// The positions and the colours the tessellator held at the last `end`, and the box of its mesh data.
+type EndData = (Vec<[f32; 3]>, Vec<u32>, [[f32; 3]; 2]);
+static LAST_END: Mutex<Option<EndData>> = Mutex::new(None);
 // The leaked objects of the stand-in game, made once.
 static OBJECTS: OnceLock<MeshObjects> = OnceLock::new();
 
@@ -21,6 +24,10 @@ struct MeshObjects {
     shader_color: usize,
     info: usize,
     material: usize,
+    blend_info: usize,
+    blend_material: usize,
+    item_renderer: usize,
+    camera_matrices: usize,
 }
 
 /// Stand-ins with the game signatures for every call of the world mesh path, and the objects they work on: a screen
@@ -37,6 +44,9 @@ impl MeshGame {
     const COUNT: usize = 0x298;
     // `mMeshData.mPositions` in the tessellator: first, last, end.
     const POSITIONS: usize = 0x8 + 0x8;
+    // `mMeshData.mColors` and `mMeshData.mAABB` in the tessellator.
+    const COLORS: usize = 0x8 + 0x68;
+    const AABB: usize = 0x8 + 0x128;
     /// The `RenderMaterial` byte offsets the entries name: blend, source, destination, depth write.
     pub const MATERIAL_BYTES: [usize; 4] = [0x185, 0x180, 0x181, 0x193];
     /// The bytes the stand-in wireframe material has before any patch.
@@ -44,6 +54,10 @@ impl MeshGame {
     /// The shader colour the frame has before a draw.
     pub const FRAME_COLOR: [f32; 4] = [0.25, 0.5, 0.75, 1.0];
     const CAMERA_DIRTY: usize = 0x40 + 0x38;
+    /// `ItemInHandRenderer.mMatBlendBlock` in the stand-in item renderer.
+    pub const BLEND_AT: usize = 0x98;
+    /// The `BaseTextureData` and `ResourceLocation` words of the stand-in atlas `TexturePtr` of the level renderer.
+    pub const ATLAS_WORDS: [usize; 2] = [0xA71A_5000, 0xA71A_6000];
 
     fn objects() -> MeshObjects {
         *OBJECTS.get_or_init(|| {
@@ -55,6 +69,10 @@ impl MeshGame {
                 shader_color: leak(4),
                 info: leak(0x10),
                 material: leak(0x40),
+                blend_info: leak(0x10),
+                blend_material: leak(0x40),
+                item_renderer: leak(0x40),
+                camera_matrices: leak(0x40),
             };
             let render_context = leak(4);
             let constant_buffers = leak(0x40);
@@ -66,6 +84,7 @@ impl MeshGame {
                 Self::put(objects.screen + 0x20, constant_buffers);
                 Self::put(objects.screen + 0x30, objects.shader_color);
                 Self::put(objects.info + 0x48, objects.material);
+                Self::put(objects.blend_info + 0x48, objects.blend_material);
             }
             objects
         })
@@ -91,6 +110,47 @@ impl MeshGame {
     /// The wireframe `MaterialPtr` a player keeps at `LevelRendererCamera.mWireframeMaterial`: its first word.
     pub fn wireframe_info() -> usize {
         Self::objects().info
+    }
+
+    /// The `MaterialPtr` the stand-in item renderer holds, filled (`ready`) or empty (16 zero bytes).
+    pub fn set_blend_ready(ready: bool) {
+        let objects = Self::objects();
+        let words = if ready { [objects.blend_info, 0xC0DE_0000] } else { [0, 0] };
+        for (index, word) in words.into_iter().enumerate() {
+            // SAFETY: the item renderer block is 200h bytes.
+            unsafe { Self::put(objects.item_renderer + Self::BLEND_AT + index * 8, word) };
+        }
+    }
+
+    /// `ClientInstance::getItemInHandRenderer`.
+    pub extern "C" fn item_in_hand_renderer(_client: *mut std::ffi::c_void) -> usize {
+        Self::record("item in hand renderer".to_string());
+        Self::objects().item_renderer
+    }
+
+    /// Gives the stand-in camera one matrix on its view stack and one on its projection stack (`[view, projection]`), as
+    /// two one-element deques; with `None` both stacks are empty.
+    pub fn set_stacks(matrices: Option<[[[f32; 4]; 4]; 2]>) {
+        let objects = Self::objects();
+        let camera = objects.camera;
+        for (slot, stack) in [0usize, 0x80].into_iter().enumerate() {
+            let matrix = matrices.map(|[view, projection]| if slot == 0 { view } else { projection });
+            let at = objects.camera_matrices + slot * 0x40;
+            let size = usize::from(matrix.is_some());
+            if let Some(matrix) = matrix {
+                // SAFETY: the matrices block holds two 40h-byte slots.
+                unsafe { (at as *mut [[f32; 4]; 4]).write(matrix) };
+            }
+            // The deque: proxy, map, map size, offset, size. The map is one pointer to the matrix.
+            let map: &'static mut [usize; 1] = Box::leak(Box::new([at]));
+            // SAFETY: the camera block is 200h bytes; each stack is five words.
+            unsafe {
+                Self::put(camera + stack + 8, std::ptr::from_mut(map) as usize);
+                Self::put(camera + stack + 16, 1);
+                Self::put(camera + stack + 24, 0);
+                Self::put(camera + stack + 32, size);
+            }
+        }
     }
 
     /// Writes `bytes` into the stand-in `RenderMaterial`.
@@ -131,6 +191,11 @@ impl MeshGame {
     /// The translation of the last matrix popped.
     pub fn popped_translation() -> [f32; 3] {
         POPPED.lock().unwrap().map(f32::from_bits)
+    }
+
+    /// The positions, the colours and the mesh data box the tessellator held at the last `end`.
+    pub fn last_end() -> Option<EndData> {
+        LAST_END.lock().unwrap().clone()
     }
 
     /// The game calls so far.
@@ -177,6 +242,30 @@ impl MeshGame {
         (last - first) / 12
     }
 
+    // The positions, the colours and the box of the mesh data.
+    //
+    // Safety: `tessellator` is the stand-in tessellator.
+    unsafe fn snapshot(tessellator: usize) -> EndData {
+        // SAFETY: the vector words sit inside the block; each vector holds `last - first` initialised elements.
+        unsafe {
+            let read = |at: usize| ((tessellator + at) as *const usize).read();
+            let (first, last) = (read(Self::POSITIONS), read(Self::POSITIONS + 8));
+            let positions = if first == 0 {
+                Vec::new()
+            } else {
+                std::slice::from_raw_parts(first as *const [f32; 3], (last - first) / 12).to_vec()
+            };
+            let (first, last) = (read(Self::COLORS), read(Self::COLORS + 8));
+            let colors = if first == 0 {
+                Vec::new()
+            } else {
+                std::slice::from_raw_parts(first as *const u32, (last - first) / 4).to_vec()
+            };
+            let aabb = ((tessellator + Self::AABB) as *const [[f32; 3]; 2]).read_unaligned();
+            (positions, colors, aabb)
+        }
+    }
+
     // Empties every vector of the mesh data, keeping their blocks (the stand-in heap leaks them).
     //
     // Safety: `tessellator` is the stand-in tessellator.
@@ -213,6 +302,7 @@ impl MeshGame {
             let vertices = Self::vertices(this);
             let count = ((this + Self::COUNT) as *const u32).read();
             let name = (*name)[1];
+            *LAST_END.lock().unwrap() = Some(Self::snapshot(this));
             Self::record(format!("end upload={upload} vertices={vertices} count={count} name={name} mode={mode}"));
             out.write(vertices as u64);
             Self::empty(this);
@@ -254,12 +344,21 @@ impl MeshGame {
         unsafe {
             let index = (*list)[4];
             let count = (*list)[40];
-            let kind = if *material == objects.info { "wireframe" } else { "name_tag" };
+            let kind = if *material == objects.info {
+                "wireframe"
+            } else if *material == objects.blend_info {
+                "blend"
+            } else {
+                "name_tag"
+            };
+            let atlas = (*list)[0] == Self::ATLAS_WORDS[0] as u64 && (*list)[2] == Self::ATLAS_WORDS[1] as u64;
+            let held =
+                if (*list)[1] == 0 { -1 } else { (*(((*list)[1] + 8) as *const AtomicI32)).load(Ordering::SeqCst) };
             let capture_bits = (*capture).iter().fold(0, |all, word| all | word);
             let optional_bits = (*optional)[0x30] | (*optional)[0x38];
             let color = (objects.shader_color as *const [f32; 4]).read();
             Self::record(format!(
-                "render vertices={} context={:#x} material={kind} count={count} index={index} capture={capture_bits} optional={optional_bits} color={color:?} unused={unused_a},{unused_b},{unused_c}",
+                "render vertices={} context={:#x} material={kind} count={count} index={index} capture={capture_bits} optional={optional_bits} color={color:?} unused={unused_a},{unused_b},{unused_c} atlas={atlas} held={held}",
                 mesh.read(),
                 context - objects.screen,
             ));

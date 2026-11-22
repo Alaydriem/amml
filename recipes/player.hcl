@@ -154,3 +154,39 @@ entry "Player.isCreative" {
 
   check "function_start" {}
 }
+
+entry "Player.mGameMode" {
+  kind  = "field"
+  notes = "Offset of std::unique_ptr<GameMode> Player::mGameMode: AC8h on 26.63 (6aed1906-b127418e74d2f2f9), AE0h on 70.26 (6afa4e47-dadc375797a3d31a); AA0h on 26.51 and AC8h on 26.60 (the GameMode.getMaxPickRange notes). Recipe 0 is the item-use-on-actor transaction handler (the one function that loads the text `, maxPickRange = ` on both builds): after the distance call it keeps the distance and loads the player's game mode. It is a pattern_any, one alternative per shape: alternative 0 (26.63) `movaps xmm6,xmm0; mov rcx,[rdi+0AC8h]; call` (GameMode.getMaxPickRange); alternative 1 (70.26, getMaxPickRange inlined) `movaps xmm6,xmm0; mov rax,[rdi+0AE0h]; mov rcx,[rax+8]; call` (GameMode.mPlayer, then Player.isCreative, then the constants 12.0 and 6.7). It reads the displacement of the game mode load. Recipe 1 is a Player member function (0x1034b10 on 26.63, 0x2b6ac80 on 70.26) that, when a byte state of the player is 1, calls slot 8 of the game mode (stopBuildBlock in the header order): `movzx eax,byte ptr [rsi+..]; test eax,eax; je; cmp eax,1; jne; mov rcx,[rsi+..]; mov rax,[rcx]; mov rax,[rax+40h]; call [guard]`, ended at the call; it reads the displacement of the game mode load. The two recipes are in two functions and share no pattern bytes. Every displacement, immediate and branch byte is a wildcard; the ModRM bytes of the loads in recipe 0 are wildcards. Range window 900h..C00h. Not derived on builds before 26.63. No build gate: the member moves by 18h between the two builds and each build derives its own value."
+
+  recipe {
+    step "string_xref" { text = ", maxPickRange = " }
+    step "pattern_any" {
+      patterns = [
+        "0F 28 F0 48 8B ?? ?? ?? ?? ?? E8",
+        "0F 28 F0 48 8B ?? ?? ?? ?? ?? 48 8B 48 ?? E8",
+      ]
+      offset = 3
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "0F B6 86 ?? ?? ?? ?? 85 C0 74 ?? 83 F8 ?? 75 ?? 48 8B 8E ?? ?? ?? ?? 48 8B 01 48 8B 40 ?? FF 15"
+      offset = 16
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 2304
+    max = 3072
+  }
+}

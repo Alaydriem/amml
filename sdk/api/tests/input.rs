@@ -218,3 +218,21 @@ fn a_real_up_that_ends_a_held_key_names_the_key_and_a_new_down_presses_again() {
     assert_eq!(*released.lock().unwrap(), [(AmmlReleaseReason::RESET, Some(KeyCode::W), None)]);
     assert_eq!(fake.injected(), ["key 0x57 down", "key 0x57 down"]);
 }
+
+#[test]
+fn held_by_others_sees_the_lease_of_another_mod_and_not_the_own() {
+    let fake = running();
+    let ctx = fake.ctx();
+    let input = ctx.input();
+    let none = input.held_by_others();
+    let _own = input.acquire(SHARED).unwrap();
+    let own = input.held_by_others();
+    assert!(fake.lease_as_other_mod("@other/mod", InputBlocks::LOOK));
+    let other = input.held_by_others();
+
+    assert_eq!(none.map(|held| (held.leases, held.any())), Some((0, false)));
+    assert_eq!(own.map(|held| held.leases), Some(0));
+    let other = other.unwrap();
+    assert_eq!((other.leases, other.any()), (1, true));
+    assert!(other.blocks.contains(InputBlocks::LOOK) && !other.blocks.contains(InputBlocks::KEYS));
+}

@@ -5,16 +5,24 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use amml_data::{EntryKind, Resolved};
 
-use super::{ClientVtable, Harness};
+use super::{ClientVtable, FakeVtable, Harness, MeshGame};
 
 /// A stand-in `ClientInstance`: only its vtable pointer.
 pub type FakeClient = &'static ClientVtable;
 
-static CLIENT_VTABLE: ClientVtable =
-    ClientVtable { local_player: SessionGame::local_player, start_join: SessionGame::join_stand_in };
-// A stand-in `MinecraftGame` vtable: `update` is slot 2.
-static GAME_VTABLE: [extern "C" fn(*mut c_void); 3] =
-    [SessionGame::unused, SessionGame::unused, SessionGame::game_update];
+static CLIENT_VTABLE: ClientVtable = ClientVtable {
+    local_player: SessionGame::local_player,
+    start_join: SessionGame::join_stand_in,
+    item_in_hand_renderer: MeshGame::item_in_hand_renderer,
+    start_external: SessionGame::external_stand_in,
+};
+// A stand-in `MinecraftGame` vtable: `update` is slot 2, `joinMultiplayerWithAddress` slot 3.
+static GAME_VTABLE: FakeVtable<4> = FakeVtable([
+    SessionGame::unused as *const (),
+    SessionGame::unused as *const (),
+    SessionGame::game_update as *const (),
+    SessionGame::multiplayer_stand_in as *const (),
+]);
 
 /// The first client.
 pub static CLIENT_A: FakeClient = &CLIENT_VTABLE;
@@ -29,6 +37,10 @@ static UPDATES: AtomicUsize = AtomicUsize::new(0);
 static TICKS: AtomicUsize = AtomicUsize::new(0);
 static JOINS: AtomicUsize = AtomicUsize::new(0);
 static EXITS: AtomicUsize = AtomicUsize::new(0);
+static EXTERNALS: AtomicUsize = AtomicUsize::new(0);
+static EXTERNAL_ARGS: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+static MULTIPLAYERS: AtomicUsize = AtomicUsize::new(0);
+static MULTIPLAYER_ARGS: Mutex<Vec<u64>> = Mutex::new(Vec::new());
 static JOIN_ARGS: Mutex<Vec<u64>> = Mutex::new(Vec::new());
 static UPDATE_ARGS: Mutex<(u64, u64)> = Mutex::new((0, 0));
 
@@ -75,8 +87,31 @@ impl SessionGame {
 
     /// Calls (through its address) `MinecraftGame::update`.
     pub fn frame() {
-        let update = black_box(GAME_VTABLE[2]);
-        update(black_box(0x6A_0000 as *mut c_void));
+        Self::frame_on(0x6A_0000);
+    }
+
+    /// Calls (through its address) `MinecraftGame::update` on the stand-in game at `game`.
+    pub fn frame_on(game: usize) {
+        let update = black_box(Self::game_update as extern "C" fn(*mut c_void));
+        update(black_box(game as *mut c_void));
+    }
+
+    /// `MinecraftGame::joinMultiplayerWithAddress` (through its address) with the seven arguments after `this`: the
+    /// connection info, the local flag, two strings, the network type, the shared flag and the join context.
+    pub fn join_multiplayer(args: [u64; 7]) {
+        let join =
+            black_box(Self::multiplayer_stand_in as extern "C" fn(*mut c_void, u64, u64, u64, u64, u64, u64, u64));
+        join(black_box(0x6A_0000 as *mut c_void), args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
+    }
+
+    /// How many times the `joinMultiplayerWithAddress` stand-in ran.
+    pub fn multiplayer_calls() -> usize {
+        MULTIPLAYERS.load(Ordering::SeqCst)
+    }
+
+    /// The arguments the last `joinMultiplayerWithAddress` stand-in call received, after `this`.
+    pub fn multiplayer_args() -> Vec<u64> {
+        MULTIPLAYER_ARGS.lock().unwrap().clone()
     }
 
     pub fn update(client: &'static FakeClient) -> u8 {
@@ -113,6 +148,22 @@ impl SessionGame {
     pub fn start_join(client: &'static FakeClient, args: [u64; 7]) {
         let start = black_box(CLIENT_VTABLE.start_join);
         start(Self::client(client), args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
+    }
+
+    /// `ClientInstance::startExternalNetworkWorld` on `client`, through its vtable slot 3.
+    pub fn start_external(client: &'static FakeClient, info: usize, name: usize, context: usize) {
+        let start = black_box(CLIENT_VTABLE.start_external);
+        start(Self::client(client), info, name, context);
+    }
+
+    /// How many times the `startExternalNetworkWorld` stand-in ran.
+    pub fn external_calls() -> usize {
+        EXTERNALS.load(Ordering::SeqCst)
+    }
+
+    /// The pointer arguments (info, name, context) the last `startExternalNetworkWorld` stand-in call received.
+    pub fn external_args() -> Vec<usize> {
+        EXTERNAL_ARGS.lock().unwrap().clone()
     }
 
     pub fn exit() {
@@ -161,6 +212,21 @@ impl SessionGame {
         black_box(this);
         *JOIN_ARGS.lock().unwrap() = vec![a, b, c, d, e, f, g];
         JOINS.fetch_add(black_box(1), Ordering::SeqCst);
+    }
+
+    #[inline(never)]
+    #[allow(clippy::too_many_arguments)]
+    extern "C" fn multiplayer_stand_in(this: *mut c_void, a: u64, b: u64, c: u64, d: u64, e: u64, f: u64, g: u64) {
+        black_box(this);
+        *MULTIPLAYER_ARGS.lock().unwrap() = vec![a, b, c, d, e, f, g];
+        MULTIPLAYERS.fetch_add(black_box(1), Ordering::SeqCst);
+    }
+
+    #[inline(never)]
+    extern "C" fn external_stand_in(this: *mut c_void, info: usize, name: usize, context: usize) {
+        black_box(this);
+        *EXTERNAL_ARGS.lock().unwrap() = vec![info, name, context];
+        EXTERNALS.fetch_add(black_box(1), Ordering::SeqCst);
     }
 
     #[inline(never)]

@@ -34,11 +34,13 @@ pub struct MeshBuilder {
 
 impl MeshBuilder {
     // `mce::PrimitiveMode::QuadList`.
-    const QUAD_LIST: u8 = 1;
+    pub const QUAD_LIST: u8 = 1;
     // `Tessellator::UploadMode::Buffered`: the mesh is uploaded on its first draw.
     const UPLOAD_BUFFERED: i32 = 0;
     // `Tessellator::UploadMode::Never`: for a mesh that is dropped at once.
     const UPLOAD_NEVER: i32 = 2;
+    /// `mce::PrimitiveMode::TriangleList`: a mesh with its own index buffer.
+    pub const TRIANGLE_LIST: u8 = 2;
     // `SupplementaryFieldAutoGenerationMode::None`.
     const NO_SUPPLEMENTARY_FIELDS: u16 = 0;
     const DEBUG_NAME: &'static str = "amml world mesh";
@@ -76,6 +78,43 @@ impl MeshBuilder {
         two_sided: bool,
         heap: &MsvcHeap,
     ) -> Result<usize, AmmlStatus> {
+        let per = if two_sided { 2 * Self::CORNERS } else { Self::CORNERS };
+        let vertices = quads.len().checked_mul(per).ok_or(AmmlStatus::REFUSED)?;
+        let reserve = i32::try_from(vertices).map_err(|_| AmmlStatus::REFUSED)?;
+        // SAFETY: the caller guarantees a live screen context of the running call, on its thread.
+        let tessellator = unsafe { self.open(screen, reserve) }?;
+        // SAFETY: the list is open; the vectors are the game's, on `heap`.
+        let written = unsafe { Self::write(tessellator, quads, per, heap) };
+        if !written {
+            // SAFETY: the list is open.
+            unsafe { self.abandon(tessellator) };
+            return Err(AmmlStatus::FAILED);
+        }
+        // SAFETY: the list is open and holds the written vertices.
+        unsafe { self.close(tessellator) }
+    }
+
+    /// Opens a quad list of `reserve` vertices in the tessellator of the screen context at `screen` and gives the
+    /// tessellator, for a caller that fills its mesh data itself and then calls `close` or `abandon`. `FAILED` when the
+    /// context has no tessellator, a list is already open or the game opened none.
+    ///
+    /// # Safety
+    /// `screen` is the screen context the game passed to the running `renderLevel` call, on its thread.
+    pub unsafe fn open(&self, screen: usize, reserve: i32) -> Result<*mut TessellatorLayout, AmmlStatus> {
+        // SAFETY: the caller's contract.
+        unsafe { self.open_mode(screen, Self::QUAD_LIST, reserve) }
+    }
+
+    /// As `open`, for the primitive mode `mode` (`QUAD_LIST` or `TRIANGLE_LIST`).
+    ///
+    /// # Safety
+    /// As for `open`.
+    pub unsafe fn open_mode(
+        &self,
+        screen: usize,
+        mode: u8,
+        reserve: i32,
+    ) -> Result<*mut TessellatorLayout, AmmlStatus> {
         // SAFETY: the caller guarantees a live screen context; its `Tessellator&` is stored as a pointer.
         let tessellator = unsafe { ObjectRead::pointer(screen, self.calls.screen_tessellator) }
             .map(std::ptr::with_exposed_provenance_mut::<TessellatorLayout>)
@@ -84,27 +123,26 @@ impl MeshBuilder {
         if unsafe { (*tessellator).tessellating } {
             return Err(AmmlStatus::FAILED);
         }
-        let per = if two_sided { 2 * Self::CORNERS } else { Self::CORNERS };
-        let vertices = quads.len().checked_mul(per).ok_or(AmmlStatus::REFUSED)?;
-        let reserve = i32::try_from(vertices).map_err(|_| AmmlStatus::REFUSED)?;
         // SAFETY: the entry is `Tessellator::begin` with the signature of `BeginFn`.
         let begin = unsafe { std::mem::transmute::<usize, BeginFn>(self.calls.tessellator_begin) };
         // An empty `std::function`: a null impl pointer at 38h, which the callee neither calls nor destroys.
         let mut callback = [0u64; 8];
         // SAFETY: a live tessellator with no open list; the callback lives for the call.
-        unsafe { begin(tessellator, &raw mut callback, Self::QUAD_LIST, reserve, 0) };
+        unsafe { begin(tessellator, &raw mut callback, mode, reserve.max(0), 0) };
         // SAFETY: as above.
         if !unsafe { (*tessellator).tessellating } {
             return Err(AmmlStatus::FAILED);
         }
-        // SAFETY: the list is open; the vectors are the game's, on `heap`.
-        let written = unsafe { Self::write(tessellator, quads, per, heap) };
-        if !written {
-            // SAFETY: the list is open; `clear` drops what it holds, then the list ends into a mesh that is dropped.
-            unsafe { self.discard(tessellator) };
-            return Err(AmmlStatus::FAILED);
-        }
-        // SAFETY: the list is open and holds the written vertices.
+        Ok(tessellator)
+    }
+
+    /// Ends the open list of `tessellator` into a mesh the game uploads on its first draw and gives its handle. `FAILED`,
+    /// with the mesh destroyed, when the game made no valid mesh.
+    ///
+    /// # Safety
+    /// A list `open` gave is open on the live `tessellator`, on the thread of the running `renderLevel` call.
+    pub unsafe fn close(&self, tessellator: *mut TessellatorLayout) -> Result<usize, AmmlStatus> {
+        // SAFETY: the caller guarantees the open list.
         let mesh = unsafe { self.end(tessellator, Self::UPLOAD_BUFFERED) };
         // SAFETY: the entry is `Mesh::isValid` with the signature of `IsValidFn`.
         let is_valid = unsafe { std::mem::transmute::<usize, IsValidFn>(self.calls.mesh_is_valid) };
@@ -115,6 +153,16 @@ impl MeshBuilder {
             return Err(AmmlStatus::FAILED);
         }
         Ok(mesh.expose_provenance())
+    }
+
+    /// Drops what the open list of `tessellator` holds and ends it into a mesh that is never uploaded and destroyed at
+    /// once, so nothing is left open.
+    ///
+    /// # Safety
+    /// As for `close`.
+    pub unsafe fn abandon(&self, tessellator: *mut TessellatorLayout) {
+        // SAFETY: the caller guarantees the open list.
+        unsafe { self.discard(tessellator) };
     }
 
     /// Destroys the mesh at `handle` with the game's destructor and frees its box.

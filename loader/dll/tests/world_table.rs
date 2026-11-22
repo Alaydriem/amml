@@ -163,13 +163,13 @@ fn chunk_handle(harness: &Harness) -> usize {
 }
 
 #[test]
-fn the_services_table_has_a_v6_world_table() {
+fn the_services_table_has_a_v9_world_table() {
     let harness = Harness::start();
     // SAFETY: the loader's tables live for the process.
     let services = unsafe { &*services(&harness) };
     assert!(services.size >= AmmlServices::SIZE_V9);
-    assert_eq!(table(&harness).size, AmmlWorldTable::SIZE_V6);
-    assert_eq!(table(&harness).version, 6);
+    assert_eq!(table(&harness).size, AmmlWorldTable::SIZE_V9);
+    assert_eq!(table(&harness).version, 9);
 }
 
 #[test]

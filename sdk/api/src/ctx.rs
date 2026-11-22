@@ -7,8 +7,8 @@ use crate::area_tables::AreaTables;
 use crate::client_tables::ClientTables;
 use crate::lent_tables::LentTables;
 use crate::{
-    ApiError, Area, Biomes, Blocks, CameraControl, Chat, Dirs, DisableCtx, Event, Events, Input, Lighting, Logger,
-    Overlay, Registry, Textures, Uses, Window, WorldShapes,
+    ApiError, Area, Biomes, BlockEntities, Blocks, CameraControl, Chat, Dirs, DisableCtx, Event, Events, Input,
+    Lighting, Logger, Network, Options, Overlay, Registry, Textures, Time, Uses, Window, WorldShapes,
 };
 
 /// The checked v3 loader tables of one mod: a cheap `Copy` view that holds function pointers, the
@@ -176,15 +176,41 @@ impl Ctx {
         CameraControl::new(self.areas.camera, self.module)
     }
 
+    /// The protocol number of the build and the client's chunk cache (`Area::NETWORK_PROTOCOL`,
+    /// `Area::NETWORK_CHUNK_CACHE`). Without a network table of version 2 every call gives `None` or `NotAvailable`.
+    pub fn network(&self) -> Network {
+        Network::new(self.areas.network, self.module)
+    }
+
+    /// The game options: the view distance and integer options (`Area::OPTIONS_VIEW_DISTANCE`, `Area::OPTIONS_INT`).
+    /// Without an options table (a loader before services v12) every read gives `None` and every write
+    /// `NotAvailable`.
+    pub fn options(&self) -> Options {
+        Options::new(self.areas.options, self.module)
+    }
+
+    /// The game clock: one mod holds it and steps it by exact microseconds (`Area::TIME_CONTROL`). Without a time table
+    /// (a loader before services v13) every read gives `None` and `hold` gives `NotAvailable`.
+    pub fn time(&self) -> Time {
+        Time::new(self.areas.time, self.module)
+    }
+
     /// Lines, boxes and arrows in the world (`Area::WORLD_SHAPES`). Without a world table, or with one older than v5,
     /// every call gives `NotAvailable`, `0` or `None`.
     pub fn world_shapes(&self) -> WorldShapes {
         WorldShapes::new(self.areas.world, self.module)
     }
 
-    /// The block types of the game: names for the ids of `ColumnSample`. Without a world table every call gives `None`.
+    /// The block types and block states of the game: names for the ids of `ColumnSample` and block states as handles
+    /// (`Area::WORLD_BLOCK_STATES`). Without a world table every call gives `None` or `NotAvailable`.
     pub fn blocks(&self) -> Blocks {
-        Blocks::new(self.areas.world)
+        Blocks::new(self.areas.world, self.module)
+    }
+
+    /// Block entity ghosts (`Area::RENDER_BLOCK_ENTITIES`). Without a render table of version 5 every call gives
+    /// `NotAvailable`.
+    pub fn block_entities(&self) -> BlockEntities {
+        BlockEntities::new(self.areas.render, self.module)
     }
 
     /// The biomes of the game: names for the ids of `ColumnSample`. Without a world table every call gives `None`.

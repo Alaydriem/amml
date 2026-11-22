@@ -78,3 +78,38 @@ fn loader_dirs_name_the_instance_and_the_redirected_data_folder() {
 
     assert_eq!(paths.loader_dirs().game_data, Some(root.path().join("profile")));
 }
+
+#[test]
+fn loader_dirs_share_mod_data_inside_the_redirected_data_folder() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = HostPaths::standalone(&root.path().join("Minecraft.Windows.exe"));
+    std::fs::create_dir_all(&paths.loader).unwrap();
+    std::fs::write(&paths.instance, "data_dir = \"profile\"\n").unwrap();
+
+    assert_eq!(paths.loader_dirs().mod_data, Some(root.path().join("profile").join("mod-data")));
+}
+
+#[test]
+fn loader_dirs_keep_the_local_app_data_mod_data_without_a_data_dir() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = HostPaths::standalone(&root.path().join("Minecraft.Windows.exe"));
+
+    assert_eq!(paths.loader_dirs().mod_data, paths.mod_data);
+}
+
+#[test]
+fn loader_dirs_keep_the_shared_mod_data_when_data_dir_is_the_play_data_folder() {
+    let root = tempfile::tempdir().unwrap();
+    let mut paths = HostPaths::standalone(&root.path().join("game").join("Minecraft.Windows.exe"));
+    let local = root.path().join("Local");
+    paths.mod_data = HostPaths::mod_data_root(Some(local.clone().into_os_string()));
+    std::fs::create_dir_all(&paths.loader).unwrap();
+    // The play data folder `%LOCALAPPDATA%\amml\data`, written with other separators and another case.
+    let play = local.join("AMML").join("Data").to_string_lossy().replace('\\', "/");
+    std::fs::write(&paths.instance, format!("data_dir = \"{play}\"\n")).unwrap();
+
+    let dirs = paths.loader_dirs();
+
+    assert_eq!(dirs.mod_data, Some(local.join("amml").join("mod-data")));
+    assert!(dirs.game_data.is_some());
+}

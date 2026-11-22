@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 
 use amml_abi::{AmmlInventoryMove, AmmlInventoryTable, AmmlRequestOptions, AmmlStr};
 
-use crate::{ApiError, InventoryMove, ItemSnapshot, ItemView, RequestId, RequestOptions};
+use crate::{ApiError, BlockHandle, InventoryMove, ItemSnapshot, ItemView, RequestId, RequestOptions};
 
 /// The inventory of the local player, as a frame handle from `LocalPlayer::inventory`. It lives no longer than the
 /// event that gave its client.
@@ -79,6 +79,26 @@ impl<'f> Inventory<'f> {
                 &mut id,
             )
         };
+        ApiError::check(status).map(|()| RequestId(id))
+    }
+
+    /// Asks for the creative pick of `block` into the hotbar slot `hotbar_slot` (0 to 8): one item stack request
+    /// that makes a full stack of the creative item of the block and takes it into the slot. The loader shows the stack
+    /// on the client at once and takes it back when the server refuses or does not answer. No inventory is opened. Like
+    /// `request_moves`, the call sends nothing itself, `InventoryRequestDone` with the returned id ends the request, and
+    /// one request runs at a time for the whole loader.
+    ///
+    /// `Refused` outside the creative game mode, for a block with no creative entry, for a slot above 8, while another
+    /// request runs, and off the game thread. `Stale` for a block handle that was taken back. A stack in the slot is
+    /// destroyed first and comes back when the server refuses. `NotAvailable` without `Area::INVENTORY_REQUEST.at(2)` or on a loader before inventory
+    /// table v7.
+    pub fn request_pick(&self, block: BlockHandle, hotbar_slot: u8) -> Result<RequestId, ApiError> {
+        let request = self.table.request_pick.ok_or(ApiError::NotAvailable)?;
+        let mut id = 0u64;
+        // SAFETY: the loader checks the module, the player handle and the block handle before it acts; the module string
+        // lives for the call, and `id` is a live local.
+        #[allow(unsafe_code)]
+        let status = unsafe { request(AmmlStr::from_str(self.module), self.player, block.raw(), hotbar_slot, &mut id) };
         ApiError::check(status).map(|()| RequestId(id))
     }
 

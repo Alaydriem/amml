@@ -1,4 +1,4 @@
-use crate::LoaderState;
+use crate::{LoaderState, PickCalls};
 
 /// The derived values `RequestAdapter` makes and sends packets with: the packet factory, the slot of the packet sender
 /// in the client vtable, the slots of `PacketSender.send` and `Packet.read`, the read-only stream the game reads a
@@ -14,6 +14,8 @@ pub struct RequestCalls {
     pub get_runtime_id: usize,
     pub swap_slots: usize,
     pub net_id_at: usize,
+    /// The calls of the creative pick; `None` when one is missing, which only leaves the pick out.
+    pub pick: Option<PickCalls>,
 }
 
 impl RequestCalls {
@@ -31,6 +33,7 @@ impl RequestCalls {
             swap_slots: value("FillingContainer.swapSlots")?,
             // An offset of 0 would read the stack's item pointer as the net id.
             net_id_at: value("ItemStack.mNetIdVariant").filter(|value| *value != 0)?,
+            pick: PickCalls::new(state),
         })
     }
 }

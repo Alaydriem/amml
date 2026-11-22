@@ -1,13 +1,15 @@
 use amml_abi::{
-    AmmlEvent, AmmlEventHeader, BlockBreakContinue, BlockBreakStart, BlockChanged, CameraFov,
-    CameraInstructionReceived, CameraSetup, ChatMessageAdded, ClientTick, ContainerSlotHover, ContainerSlotUnhover,
-    DimensionChanging, FramePresent, FramePresented, FrameUpdate, GameTick, GamepadPoll, IdleScreenOpen,
-    InjectedInputReleased, InputLeaseLost, InputLeaseResumed, InputLeaseSuspended, InventoryRequestDone, ItemHovertext,
-    ItemUse, ItemUseOnBlock, JoinServerResult, JoinStarted, KeyInput, LocatorBarIconDraw, LookDelta, ModsLoaded,
-    MouseGrab, MouseInput, PlayerAttack, PlayerListUpdate, PlayerMoveInput, PlayerSkinChanged, ProviderGone,
-    ProviderReady, RenderDeviceReset, ScreenChanged, ScreenClosing, ScreenRender, ScreenshotTaken, ScreenshotWritten,
-    Shutdown, SurfaceLost, SwapChainResize, SwapChainResized, TexturesReloaded, UiPointer, UiScroll, WindowChanged,
-    WindowChar, WindowCursor, WindowFocus, WindowPointer, WindowSize, WorldJoined, WorldLeft, WorldRendered,
+    AmmlEvent, AmmlEventHeader, AppFocusGained, AppFocusLost, BlockBreakContinue, BlockBreakStart, BlockChanged,
+    BlockEntityPass, BuildBlock, CameraFov, CameraInstructionReceived, CameraSetup, ChatMessageAdded, ClientTick,
+    ConnectionStarted, ContainerSlotHover, ContainerSlotUnhover, DimensionChanging, FrameEnd, FramePresent,
+    FramePresented, FrameUpdate, GameTick, GamepadPoll, IdleScreenOpen, InjectedInputReleased, InputLeaseLost,
+    InputLeaseResumed, InputLeaseSuspended, InventoryRequestDone, ItemHovertext, ItemUse, ItemUseOnBlock,
+    JoinServerResult, JoinStarted, KeyInput, LatencyBarrier, LocatorBarIconDraw, LookDelta, ModsLoaded, MouseGrab,
+    MouseInput, PacketWire, PlayerAttack, PlayerListUpdate, PlayerMoveInput, PlayerMoved, PlayerSkinChanged,
+    ProviderGone, ProviderReady, RenderDeviceReset, ScreenChanged, ScreenClosing, ScreenRender, ScreenshotTaken,
+    ScreenshotWritten, ServerJoinStarting, Shutdown, SurfaceLost, SwapChainResize, SwapChainResized, TexturesReloaded,
+    TimeStepApplied, UiPointer, UiScroll, UsePressed, WindowChanged, WindowChar, WindowCursor, WindowFocus,
+    WindowPointer, WindowSize, WorldJoined, WorldLeft, WorldRendered, WorldStorageClosed, WorldStorageOpened,
 };
 
 /// An event a mod can listen to.
@@ -62,6 +64,8 @@ macro_rules! abi_events {
 }
 
 abi_events!(
+    AppFocusGained,
+    AppFocusLost,
     ClientTick,
     FrameUpdate,
     GameTick,
@@ -106,6 +110,8 @@ abi_events!(
     ItemUse,
     PlayerAttack,
     ItemUseOnBlock,
+    UsePressed,
+    BuildBlock,
     ScreenRender,
     ScreenClosing,
     ScreenChanged,
@@ -121,6 +127,16 @@ abi_events!(
     ChatMessageAdded,
     TexturesReloaded,
     WorldRendered,
+    BlockEntityPass,
     CameraSetup,
     CameraInstructionReceived,
+    PacketWire,
+    ConnectionStarted,
+    TimeStepApplied,
+    FrameEnd,
+    LatencyBarrier,
+    PlayerMoved,
+    ServerJoinStarting,
+    WorldStorageOpened,
+    WorldStorageClosed,
 );

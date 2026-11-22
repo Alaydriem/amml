@@ -12,6 +12,8 @@ static GEOMETRY: Mutex<Vec<u8>> = Mutex::new(Vec::new());
 static STYLED_CALLS: AtomicUsize = AtomicUsize::new(0);
 // The handlers the original game ran so far.
 static HANDLED: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
+// The byte at `NetworkGame::ENABLED_AT` of each packet the original `NetworkSystem::send` got, in order.
+static SENT_BYTES: Mutex<Vec<u8>> = Mutex::new(Vec::new());
 
 #[inline(never)]
 extern "C" fn list_stand_in(this: *mut c_void, source: *mut c_void, packet: *mut c_void) {
@@ -23,6 +25,14 @@ extern "C" fn list_stand_in(this: *mut c_void, source: *mut c_void, packet: *mut
 extern "C" fn skin_stand_in(this: *mut c_void, source: *mut c_void, packet: *mut c_void) {
     std::hint::black_box((this, source, packet));
     HANDLED.lock().unwrap().push(std::hint::black_box("skin"));
+}
+
+#[inline(never)]
+extern "C" fn send_stand_in(system: *mut c_void, id: *const c_void, packet: *const c_void, sub: u32) {
+    std::hint::black_box((system, id, sub));
+    // SAFETY: `packet` is a stand-in packet of `NetworkGame::packet`, at least `PACKET_SIZE` bytes.
+    let byte = unsafe { packet.cast::<u8>().add(NetworkGame::ENABLED_AT).read() };
+    SENT_BYTES.lock().unwrap().push(std::hint::black_box(byte));
 }
 
 #[inline(never)]
@@ -42,6 +52,9 @@ unsafe extern "C" fn probe_alloc(size: usize) -> *mut u8 {
     // SAFETY: the same contract as `HeapProbe::alloc`.
     unsafe { HeapProbe::alloc(size) }
 }
+
+static CACHE_PACKET: FakeVtable<2> = FakeVtable([std::ptr::null(), std::ptr::null()]);
+static OTHER_PACKET: FakeVtable<2> = FakeVtable([std::ptr::null(), std::ptr::dangling()]);
 
 static HANDLERS: FakeVtable<2> = FakeVtable([list_stand_in as *const (), skin_stand_in as *const ()]);
 
@@ -74,6 +87,9 @@ impl NetworkGame {
     pub const PREMIUM_AT: usize = 0x1e9;
     pub const PERSONA_AT: usize = 0x1ea;
     pub const PATCH_AT: usize = 0x40;
+    pub const ENABLED_AT: usize = 0x30;
+    pub const PACKET_SIZE: usize = 0x38;
+    pub const PROTOCOL: u64 = 2225;
 
     /// The heap the stand-in `toStyledString` builds on; the loader frees on the same one.
     pub fn heap() -> MsvcHeap {
@@ -119,6 +135,10 @@ impl NetworkGame {
             ("SerializedSkinImpl.mIsPersona", field(Self::PERSONA_AT)),
             ("SerializedSkinImpl.mIsPremium", field(Self::PREMIUM_AT)),
             ("SerializedSkinImpl.mResourcePatch", field(Self::PATCH_AT)),
+            ("NetworkSystem.send", function(send_stand_in as *const () as usize)),
+            ("ClientCacheStatusPacket.vtable", global(std::ptr::from_ref(&CACHE_PACKET) as usize)),
+            ("ClientCacheStatusPacket.mEnabled", field(Self::ENABLED_AT)),
+            ("SharedConstants.NetworkProtocolVersion", field(Self::PROTOCOL as usize)),
         ]
     }
 
@@ -145,6 +165,31 @@ impl NetworkGame {
         };
         let function = std::hint::black_box(function);
         function(std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::with_exposed_provenance_mut(packet));
+    }
+
+    /// A packet of 38h bytes whose byte at `ENABLED_AT` is `byte`: a `ClientCacheStatusPacket` when `cache_status`, any
+    /// other packet otherwise. Gives its address.
+    pub fn packet(cache_status: bool, byte: u8) -> usize {
+        let mut packet = vec![0u8; Self::PACKET_SIZE];
+        let vtable = if cache_status { std::ptr::from_ref(&CACHE_PACKET) } else { std::ptr::from_ref(&OTHER_PACKET) };
+        packet[..8].copy_from_slice(&vtable.expose_provenance().to_le_bytes());
+        packet[Self::ENABLED_AT] = byte;
+        let packet: &'static mut [u8] = Box::leak(packet.into_boxed_slice());
+        packet.as_ptr().expose_provenance()
+    }
+
+    /// The game sends `packet` through the hooked `NetworkSystem::send`; gives the byte at `ENABLED_AT` the original
+    /// function saw.
+    pub fn send(packet: usize) -> u8 {
+        let function =
+            std::hint::black_box(send_stand_in as extern "C" fn(*mut c_void, *const c_void, *const c_void, u32));
+        function(std::ptr::null_mut(), std::ptr::null(), std::ptr::with_exposed_provenance(packet), 0);
+        SENT_BYTES.lock().unwrap().last().copied().unwrap()
+    }
+
+    /// How many packets the original `NetworkSystem::send` got.
+    pub fn sent() -> usize {
+        SENT_BYTES.lock().unwrap().len()
     }
 
     /// A `std::string`: inline up to 15 bytes, on the heap above.
