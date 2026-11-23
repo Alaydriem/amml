@@ -2,13 +2,13 @@ use core::ffi::c_void;
 
 use amml_abi::{
     AmmlActorTable, AmmlBlockEntityGhost, AmmlBlockGrid, AmmlBlockHandle, AmmlCameraTable, AmmlCaptureFrame,
-    AmmlCaptureRequest, AmmlClientFlag, AmmlClientTable, AmmlColorQuad, AmmlHand, AmmlInputMode, AmmlInputTable,
-    AmmlInventoryTable, AmmlItemSnapshot, AmmlLeaseRequest, AmmlLeaseState, AmmlLightSource, AmmlLightingTable,
-    AmmlMeshBuilt, AmmlMeshGroup, AmmlMeshId, AmmlMeshStyle, AmmlMesherOptions, AmmlModifiers, AmmlMouseButton,
-    AmmlMoveIntent, AmmlNetworkTable, AmmlOptionKey, AmmlOptionsTable, AmmlOverlayTable, AmmlPersistence, AmmlPoint,
-    AmmlPose, AmmlProjection, AmmlRect, AmmlRenderTable, AmmlScreen, AmmlScreenKind, AmmlServices, AmmlShotLayers,
-    AmmlSize, AmmlStatus, AmmlStr, AmmlTimeTable, AmmlUiProfile, AmmlUiTable, AmmlVec3, AmmlWindowTable, AmmlWorldInfo,
-    AmmlWorldTable,
+    AmmlCaptureRequest, AmmlClientFlag, AmmlClientTable, AmmlColorQuad, AmmlDrawSurface, AmmlHand, AmmlInputMode,
+    AmmlInputTable, AmmlInventoryTable, AmmlItemSnapshot, AmmlLeaseRequest, AmmlLeaseState, AmmlLightSource,
+    AmmlLightingTable, AmmlMeshBuilt, AmmlMeshGroup, AmmlMeshId, AmmlMeshStyle, AmmlMesherOptions, AmmlModifiers,
+    AmmlMouseButton, AmmlMoveIntent, AmmlNetworkTable, AmmlOptionKey, AmmlOptionsTable, AmmlOverlayTable,
+    AmmlPersistence, AmmlPoint, AmmlPose, AmmlProjection, AmmlRect, AmmlRenderTable, AmmlScreen, AmmlScreenKind,
+    AmmlServices, AmmlShotLayers, AmmlSize, AmmlStatus, AmmlStr, AmmlTimeTable, AmmlUiProfile, AmmlUiTable, AmmlVec3,
+    AmmlWindowTable, AmmlWorldInfo, AmmlWorldTable,
 };
 
 unsafe extern "C" fn view_distance_chunks(_: *const c_void, _: *mut u32) -> AmmlStatus {
@@ -122,6 +122,9 @@ unsafe extern "C" fn present_count() -> u64 {
     0
 }
 unsafe extern "C" fn copy_back_buffer(_: *mut c_void) -> AmmlStatus {
+    AmmlStatus::OK
+}
+unsafe extern "C" fn prepare_surface(_: *mut AmmlDrawSurface) -> AmmlStatus {
     AmmlStatus::OK
 }
 
@@ -319,7 +322,7 @@ fn window_table() -> AmmlWindowTable {
 
 fn overlay_table() -> AmmlOverlayTable {
     AmmlOverlayTable {
-        size: AmmlOverlayTable::SIZE_V1,
+        size: AmmlOverlayTable::SIZE_V2,
         version: 1,
         screenshot,
         open_capture,
@@ -329,6 +332,7 @@ fn overlay_table() -> AmmlOverlayTable {
         close_capture,
         present_count,
         copy_back_buffer,
+        prepare_surface: Some(prepare_surface),
     }
 }
 
@@ -1171,4 +1175,26 @@ fn a_v1_network_table_reads_with_no_v2_function() {
     let read = unsafe { AmmlNetworkTable::read(bytes.as_ptr().cast()) }.unwrap();
     assert!(read.protocol_version.is_none());
     assert!(read.set_client_chunk_cache.is_none());
+}
+
+#[test]
+fn a_v1_overlay_table_reads_with_no_prepare_surface() {
+    let areas = AreaTables::new();
+    let mut bytes = vec![0xFFu8; core::mem::size_of::<AmmlOverlayTable>()];
+    // SAFETY: `bytes` is as long as the table; the copy writes its first `SIZE_V1` bytes.
+    unsafe {
+        core::ptr::copy_nonoverlapping(
+            (&raw const areas.overlay).cast::<u8>(),
+            bytes.as_mut_ptr(),
+            AmmlOverlayTable::SIZE_V1 as usize,
+        );
+    }
+    bytes[..4].copy_from_slice(&AmmlOverlayTable::SIZE_V1.to_le_bytes());
+
+    // SAFETY: the buffer holds a whole table; bytes past the claimed size are never read.
+    let read = unsafe { AmmlOverlayTable::read(bytes.as_ptr().cast()) }.unwrap();
+    assert!(read.prepare_surface.is_none());
+    // SAFETY: the table of `areas` is a whole v2 table.
+    let full = unsafe { AmmlOverlayTable::read(&raw const areas.overlay) }.unwrap();
+    assert!(full.prepare_surface.is_some());
 }

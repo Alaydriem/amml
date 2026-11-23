@@ -5,10 +5,10 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use amml_abi::{
-    AmmlApi, AmmlDirKind, AmmlEventContext, AmmlEventHeader, AmmlInputBlocks, AmmlLeaseMode, AmmlMouseAction,
-    AmmlMouseButton, AmmlMoveIntent, AmmlOrigin, AmmlPhase, AmmlServices, AmmlStatus, AmmlThread, AmmlUseRow,
-    InjectedInputReleased, InputLeaseLost, InputLeaseResumed, InputLeaseSuspended, InventoryRequestDone, KeyInput,
-    LookDelta, MouseInput,
+    AmmlApi, AmmlDirKind, AmmlDrawSurface, AmmlEvent, AmmlEventContext, AmmlEventHeader, AmmlInputBlocks,
+    AmmlLeaseMode, AmmlMouseAction, AmmlMouseButton, AmmlMoveIntent, AmmlOrigin, AmmlPhase, AmmlServices, AmmlStatus,
+    AmmlThread, AmmlUseRow, FramePresent, InjectedInputReleased, InputLeaseLost, InputLeaseResumed,
+    InputLeaseSuspended, InventoryRequestDone, KeyInput, LookDelta, MouseInput,
 };
 use amml_runtime::{CallOutcome, HeaderStamp, InjectedOp, LeaseTerms, NoticeKind};
 
@@ -1343,6 +1343,24 @@ impl FakeGame {
     /// present count.
     pub fn push_capture_frame(&self, width: u32, height: u32, bgra: Vec<u8>) {
         self.state.overlay().present(width, height, &bgra);
+    }
+
+    /// Offers `FramePresent` at `FramePresent::ON_DEMAND_VERSION`, as a loader that makes the surface on
+    /// demand: a `Ctx` taken after this listens at that version, and its `DrawSurface` asks the fake's
+    /// `prepare_surface` on first use (call `offer_area(Area::OVERLAY_SURFACE)` too).
+    pub fn offer_surface_on_demand(&self) {
+        self.state.bus().offer(<FramePresent as AmmlEvent>::ID, FramePresent::ON_DEMAND_VERSION);
+    }
+
+    /// The surface the fake's `prepare_surface` gives from now on; before a call to this it gives
+    /// `NOT_READY`.
+    pub fn set_prepared_surface(&self, surface: AmmlDrawSurface) {
+        self.state.overlay().set_prepared(surface);
+    }
+
+    /// How many times a mod called `prepare_surface`.
+    pub fn prepare_surface_calls(&self) -> u32 {
+        self.state.overlay().prepare_calls()
     }
 
     /// The capture streams open now; a dropped `CaptureStream` is closed.

@@ -46,6 +46,7 @@ pub(crate) struct BlockEntityCalls {
     pub(crate) camera_target_at: usize,
     pub(crate) level_at: usize,
     pub(crate) block_type_at: usize,
+    pub(crate) position_at: usize,
 }
 
 impl BlockEntityCalls {
@@ -96,6 +97,7 @@ impl BlockEntityCalls {
                 .ok_or("BaseActorRenderContext.Impl.mCameraTargetPosition")?,
             level_at: address("Actor.mLevel")?,
             block_type_at: value("Block.mBlockType").ok_or("Block.mBlockType")?,
+            position_at: value("BlockActor.mPosition").ok_or("BlockActor.mPosition")?,
         })
     }
 }

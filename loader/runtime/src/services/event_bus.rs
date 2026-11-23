@@ -61,6 +61,11 @@ impl<L: Clone + Send + Sync> EventBus<L> {
         self.read().listeners.get(event).is_some_and(|listeners| !listeners.is_empty())
     }
 
+    /// The lowest event version the listeners of `event` asked for; `None` when it has no listener.
+    pub fn lowest_version(&self, event: &str) -> Option<u32> {
+        self.read().listeners.get(event).and_then(|listeners| listeners.iter().map(|entry| entry.version).min())
+    }
+
     /// Marks an event available up to `version`.
     pub fn offer(&self, event: &str, version: u32) {
         let mut state = self.write();
@@ -91,7 +96,7 @@ impl<L: Clone + Send + Sync> EventBus<L> {
         }
         let id = ListenerId(state.next_id);
         state.next_id += 1;
-        let entry = Arc::new(ListenerEntry::new(id, owner, band, listener));
+        let entry = Arc::new(ListenerEntry::new(id, owner, band, version, listener));
         let list = state.listeners.entry(event.to_owned()).or_default();
         let at = list.partition_point(|existing| existing.band <= band);
         list.insert(at, entry);

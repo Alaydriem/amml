@@ -11,6 +11,14 @@ use crate::{AmmlDrawSurface, AmmlEvent, AmmlEventHeader};
 /// stream-out, predication) restores it itself before it returns. Each listener sets every state it uses. The
 /// surface fields are written back after each listener.
 ///
+/// A listener at `ON_DEMAND_VERSION` gets the surface on demand: `device`, `width`, `height`, `format`, `wrapped` and
+/// `device_epoch` are set, and `context`, `target` and `back_buffer` are null until it calls
+/// `AmmlOverlayTable::prepare_surface`, which makes the surface (and saves the state) and gives the full surface; the
+/// later listeners of the frame then get it in the event. A frame where no listener asks makes no surface. While any
+/// listener of the event is older, or a capture is due, every listener gets the full surface before the first one
+/// runs, and `prepare_surface` gives that surface (`OK`). On the D3D12 path, work a listener puts on `device` in a
+/// frame where no surface is made is sent to the GPU at a later flush, not at the end of that frame.
+///
 /// Raised on thread `RENDER`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -20,6 +28,11 @@ pub struct FramePresent {
     pub sync_interval: u32,
     pub flags: u32,
     pub surface: AmmlDrawSurface,
+}
+
+impl FramePresent {
+    /// The listen version that takes the surface on demand (`AmmlOverlayTable::prepare_surface`).
+    pub const ON_DEMAND_VERSION: u32 = 2;
 }
 
 impl AmmlEvent for FramePresent {

@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicI64, AtomicU8, AtomicU32, AtomicUsize, Ordering, fence};
+use std::sync::atomic::{AtomicI32, AtomicI64, AtomicU8, AtomicU32, AtomicUsize, Ordering, fence};
 
 use amml_abi::AmmlLightFalloff;
 
@@ -9,10 +9,16 @@ use crate::structs::{LightPoint, VvPlan};
 /// `LightBook::set` under its lock) and many readers. A sequence counter keeps a reader from mixing an old
 /// and a new light: the writer makes it odd while it writes, and a reader retries when it saw an odd or a
 /// changed value.
+///
+/// Beside the lights it keeps the box (inclusive block min, max) that holds the reach of all of them: a getter
+/// outside it gets no light, so it skips the read. The box is read without the counter and may be stale by one
+/// publish.
 pub struct LightCell {
     seq: AtomicU32,
     count: AtomicU8,
     slots: [CellSlot; LightBook::SLOTS],
+    reach_low: [AtomicI32; 3],
+    reach_high: [AtomicI32; 3],
 }
 
 struct CellSlot {
@@ -49,6 +55,8 @@ impl LightCell {
             seq: AtomicU32::new(0),
             count: AtomicU8::new(0),
             slots: [CellSlot::new(), CellSlot::new(), CellSlot::new(), CellSlot::new()],
+            reach_low: [AtomicI32::new(i32::MAX), AtomicI32::new(i32::MAX), AtomicI32::new(i32::MAX)],
+            reach_high: [AtomicI32::new(i32::MIN), AtomicI32::new(i32::MIN), AtomicI32::new(i32::MIN)],
         }
     }
 
@@ -65,6 +73,18 @@ impl LightCell {
             slot.falloff.store(point.falloff.0, Ordering::Relaxed);
             slot.block.store(point.block, Ordering::Relaxed);
         }
+        let mut low = [i32::MAX; 3];
+        let mut high = [i32::MIN; 3];
+        for (min, max) in points.iter().map(LightPoint::reach_box) {
+            for axis in 0..3 {
+                low[axis] = low[axis].min(min[axis]);
+                high[axis] = high[axis].max(max[axis]);
+            }
+        }
+        for axis in 0..3 {
+            self.reach_low[axis].store(low[axis], Ordering::Relaxed);
+            self.reach_high[axis].store(high[axis], Ordering::Relaxed);
+        }
         let count = u8::try_from(points.len()).unwrap_or(0);
         self.count.store(count, Ordering::Relaxed);
         self.seq.fetch_add(1, Ordering::Release);
@@ -73,6 +93,15 @@ impl LightCell {
     /// Whether any light is set: one relaxed load, the fast exit of the hot path.
     pub fn is_lit(&self) -> bool {
         self.count.load(Ordering::Relaxed) != 0
+    }
+
+    /// Whether `pos` is inside the reach of the lights, so it may get light: six relaxed loads, no counter and
+    /// no copy. `false` with no light.
+    pub fn might_reach(&self, pos: [i32; 3]) -> bool {
+        (0..3).all(|axis| {
+            (self.reach_low[axis].load(Ordering::Relaxed)..=self.reach_high[axis].load(Ordering::Relaxed))
+                .contains(&pos[axis])
+        })
     }
 
     /// A consistent copy of the lights and their count; no light when a writer kept the counter moving.
@@ -102,9 +131,9 @@ impl LightCell {
     }
 
     /// The block light byte of a getter result at `pos`: `current`, or the brightest light's value there
-    /// when that is higher.
+    /// when that is higher. A position outside the reach of the lights returns before the read.
     pub fn boost_at(&self, pos: [i32; 3], current: u8) -> u8 {
-        if !self.is_lit() {
+        if !self.is_lit() || !self.might_reach(pos) {
             return current;
         }
         let (points, count) = self.read();
@@ -126,17 +155,6 @@ impl LightCell {
             return VvPlan::Normal;
         }
         let (points, count) = self.read();
-        let points = &points[..count];
-        let emits = emitter_ready && variant == 0;
-        let near = |point: &LightPoint| {
-            let own = point.subchunk();
-            point.block != 0 && (0..3).all(|axis| (subchunk[axis] - own[axis]).abs() <= 1)
-        };
-        if emits && let Some(point) = points.iter().filter(|point| near(point)).max_by_key(|point| point.level) {
-            return VvPlan::Emit { block: point.block, position: point.block_pos(), emission: point.level };
-        }
-        // A light with a block is drawn by its emitter where the emitter runs; elsewhere its boost must stay.
-        let skipped = points.iter().any(|point| !(emits && point.block != 0) && point.reaches_subchunk(subchunk));
-        if skipped { VvPlan::Skip } else { VvPlan::Normal }
+        VvPlan::of(&points[..count], subchunk, variant, emitter_ready)
     }
 }

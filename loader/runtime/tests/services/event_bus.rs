@@ -338,3 +338,19 @@ fn has_listeners_follows_adds_and_removes() {
 
     assert!(!bus.has_listeners("tick"));
 }
+
+#[test]
+fn lowest_version_is_the_oldest_listener_asked_for() {
+    let bus = bus();
+    bus.offer("tick", 2);
+    assert_eq!(bus.lowest_version("tick"), None);
+    let new = bus.add("tick", 2, 2, 1, 0).unwrap();
+    assert_eq!(bus.lowest_version("tick"), Some(2));
+    let old = bus.add("tick", 1, 4, 1, 0).unwrap();
+    assert_eq!(bus.lowest_version("tick"), Some(1));
+
+    assert!(bus.remove(old));
+    assert_eq!(bus.lowest_version("tick"), Some(2));
+    assert!(bus.remove(new));
+    assert_eq!(bus.lowest_version("tick"), None);
+}

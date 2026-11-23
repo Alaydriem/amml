@@ -19,7 +19,7 @@ impl FramePresentExt for FramePresent {
         // `self` ends inside that call; the loader keeps the surface pointers live for the call.
         #[allow(unsafe_code)]
         unsafe {
-            DrawSurface::new(lent.surface, lent.copy_back_buffer)
+            DrawSurface::new(lent.surface, lent.copy_back_buffer, lent.prepare_surface)
         }
     }
 }

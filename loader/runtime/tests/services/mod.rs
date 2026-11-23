@@ -32,6 +32,7 @@ mod kinds_scan;
 mod lease_book;
 mod light_book;
 mod light_cell;
+mod light_diff;
 mod material_patch;
 mod mesh_book;
 mod mesh_post;

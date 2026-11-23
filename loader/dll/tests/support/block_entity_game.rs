@@ -466,6 +466,23 @@ impl BlockEntityGame {
             material[0],
             material[1],
         ));
+        // The game's bed, banner and sign text renderers read the light at the actor's own `mPosition`, so the line
+        // records where the actor stands while the dispatcher draws it.
+        // SAFETY: the component is inside a live stand-in actor the loader holds.
+        let (position, paired) = unsafe {
+            let object = &*std::ptr::with_exposed_provenance::<ActorObject>(actor);
+            (object.position, object.paired_position)
+        };
+        Self::push(format!(
+            "actor at render actor={} position={},{},{} paired={},{},{}",
+            Self::actor_index(actor),
+            position[0],
+            position[1],
+            position[2],
+            paired[0],
+            paired[1],
+            paired[2],
+        ));
     }
 
     // The type whose full name is at `name`.

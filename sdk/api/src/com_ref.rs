@@ -10,7 +10,8 @@ use std::marker::PhantomData;
 /// `target` of a surface, and do not keep a view made from the back buffer: a reference kept past the
 /// frame makes the game's next `ResizeBuffers` fail.
 pub struct ComRef<'f, T> {
-    // Never null for a pointer from the loader; `with` and the loader refuse a null one.
+    // Null only for the context or target of an on-demand surface the loader could not make; `with` and the loader
+    // refuse a null one.
     raw: *mut c_void,
     _borrow: PhantomData<(&'f (), *const T)>,
 }
@@ -25,7 +26,13 @@ impl<'f, T> ComRef<'f, T> {
         (!raw.is_null()).then_some(Self { raw, _borrow: PhantomData })
     }
 
-    /// The COM pointer, valid for `'f`.
+    /// A `ComRef` that holds no object: `as_raw` gives null and `with` gives `None`.
+    pub(crate) fn absent() -> Self {
+        Self { raw: std::ptr::null_mut(), _borrow: PhantomData }
+    }
+
+    /// The COM pointer, valid for `'f`. Null for the `context()` or `target()` of a `DrawSurface` the
+    /// loader could not make (`DrawSurface::ready()` is false): check it before passing it on.
     pub fn as_raw(&self) -> *mut c_void {
         self.raw
     }
@@ -41,8 +48,8 @@ impl<'f, T: windows::core::Interface> ComRef<'f, T> {
 
     /// Calls `f` with the pointer as the `windows` type. `f` cannot keep the reference past the call
     /// (a `clone()` made inside it is an owned reference of the mod: never keep one of a frame's
-    /// target or back buffer, or the game's resize fails). Gives `None` only for a null pointer,
-    /// which a `ComRef` never holds.
+    /// target or back buffer, or the game's resize fails). Gives `None` only for a null pointer: the
+    /// context or target of a surface the loader could not make for this frame.
     pub fn with<R>(&self, f: impl FnOnce(&T) -> R) -> Option<R> {
         // SAFETY: `raw` is null or a live `T` for `'f` (the constructors' contract), and the borrow
         // lent to `f` ends before `with` returns, inside `'f`.

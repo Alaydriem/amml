@@ -44,6 +44,27 @@ impl DrawSurface {
         }
     }
 
+    /// The surface of a present whose listeners take it on demand, before one asks: `device` (wrapped when `wrapped`),
+    /// the buffer's size and format and the device epoch, with a null context, target and back buffer.
+    pub fn waiting(
+        device: &ID3D11Device,
+        wrapped: bool,
+        width: u32,
+        height: u32,
+        format: u32,
+        epoch: u64,
+    ) -> AmmlDrawSurface {
+        AmmlDrawSurface {
+            width,
+            height,
+            format,
+            wrapped: u8::from(wrapped),
+            device_epoch: epoch,
+            device: device.as_raw(),
+            ..Self::empty()
+        }
+    }
+
     /// The surface as `FramePresent` carries it. The pointers are borrowed from this value, which outlives the
     /// listeners.
     pub fn abi(&self) -> AmmlDrawSurface {

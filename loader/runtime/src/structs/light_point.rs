@@ -52,16 +52,37 @@ impl LightPoint {
     /// rounded to whole blocks: straight-line distance for `ROUND` (and any unknown value), block steps for
     /// `TAXICAB`.
     pub fn boost(&self, pos: [i32; 3]) -> u8 {
-        let steps = Self::STEPS;
-        let reach = i64::from(self.level);
         let mut d = [0i64; 3];
         for axis in 0..3 {
-            let centre = i64::from(pos[axis]) * steps + steps / 2;
-            d[axis] = centre.saturating_sub(self.steps[axis]);
-            // Fast reject: `level` blocks or more on one axis gives nothing with either falloff.
-            if d[axis].unsigned_abs() >= (reach * steps).unsigned_abs() {
-                return 0;
-            }
+            d[axis] = Self::centre(pos[axis]).saturating_sub(self.steps[axis]);
+        }
+        self.level_at(d)
+    }
+
+    /// Whether some block in the box (inclusive min, max) can get light from this light: the boost at the point
+    /// of the box nearest the light, which no block centre in the box is nearer than. `false` proves that every
+    /// block in the box gets 0.
+    pub fn could_light(&self, min: [i32; 3], max: [i32; 3]) -> bool {
+        let mut d = [0i64; 3];
+        for axis in 0..3 {
+            let (low, high) = (Self::centre(min[axis]), Self::centre(max[axis]));
+            d[axis] = self.steps[axis].clamp(low, high.max(low)) - self.steps[axis];
+        }
+        self.level_at(d) > 0
+    }
+
+    // The block centre on one axis, in quarter blocks.
+    fn centre(coordinate: i32) -> i64 {
+        i64::from(coordinate) * Self::STEPS + Self::STEPS / 2
+    }
+
+    // The light at the offset `d` (quarter blocks) from the light, rounded to whole blocks.
+    fn level_at(&self, d: [i64; 3]) -> u8 {
+        let steps = Self::STEPS;
+        let reach = i64::from(self.level);
+        // Fast reject: `level` blocks or more on one axis gives nothing with either falloff.
+        if d.iter().any(|value| value.unsigned_abs() >= (reach * steps).unsigned_abs()) {
+            return 0;
         }
         #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
         let distance = if self.falloff == AmmlLightFalloff::TAXICAB {

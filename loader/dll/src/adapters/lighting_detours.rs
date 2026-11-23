@@ -102,7 +102,7 @@ impl LightingDetours {
             // SAFETY: the game passes a live position and a 2-byte result buffer, both valid for the call.
             unsafe {
                 let current = (*out)[1];
-                let raised = adapter.cell().boost_at(*pos, current);
+                let raised = adapter.raise(*pos, current);
                 if raised != current {
                     (*out)[1] = raised;
                 }
@@ -125,10 +125,10 @@ impl LightingDetours {
             }
             // SAFETY: the game passes a live position and a 2-byte result buffer, both valid for the call.
             unsafe {
-                let current = *out;
-                let raised = adapter.cell().raise_pair(current, *pos);
-                if raised[1] != current[1] {
-                    (*out)[1] = raised[1];
+                let current = (*out)[1];
+                let raised = adapter.raise(*pos, current);
+                if raised != current {
+                    (*out)[1] = raised;
                 }
             }
         });

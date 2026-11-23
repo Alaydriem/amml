@@ -312,9 +312,10 @@ static RENDER_BLOCK_ENTITY_PASS: [AdapterShape; 1] =
 // Block entity ghosts: the pass, the block actor of a block (the factory, or `loadStatic` with NBT read through
 // `NbtIo::read` over a `StringByteInput` and a `DefaultDataLoadHelper`, on the level of the local player), and its draw
 // through the dispatcher of the pass context (`_getRenderComponent`, `BlockActorRenderDispatcher::render` with a
-// disengaged `optional<RenderMetadata>` and the block source of the local player); the actors are released before the
-// game's `renderLevel`. 26.63 has the factory without a flag;
-// 70.x gives it the byte of the level's flag slot, as `loadStatic` does.
+// disengaged `optional<RenderMetadata>` and the block source of the local player), with the actor moved to the draw
+// position first (`BlockActor.mPosition`: the bed, banner and sign text renderers read the light there); the actors are
+// released before the game's `renderLevel`. 26.63 has the factory without a flag; 70.x gives it the byte of the level's
+// flag slot, as `loadStatic` does.
 static RENDER_BLOCK_ENTITIES: [AdapterShape; 2] = [
     AdapterShape {
         name: AdapterCatalog::BLOCK_ENTITIES_FACTORY_SHAPE,
@@ -323,6 +324,7 @@ static RENDER_BLOCK_ENTITIES: [AdapterShape; 2] = [
             "LevelRendererPlayer.vtable",
             "BlockActor.loadStatic",
             "BlockActor._getRenderComponent",
+            "BlockActor.mPosition",
             "DefaultDataLoadHelper.vtable",
             "BlockActorRenderDispatcher.render",
             "RenderMetadata.engaged",
@@ -349,6 +351,7 @@ static RENDER_BLOCK_ENTITIES: [AdapterShape; 2] = [
             "LevelRendererPlayer.vtable",
             "BlockActor.loadStatic",
             "BlockActor._getRenderComponent",
+            "BlockActor.mPosition",
             "DefaultDataLoadHelper.vtable",
             "BlockActorRenderDispatcher.render",
             "RenderMetadata.engaged",

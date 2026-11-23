@@ -259,7 +259,7 @@ pub use amml_origin::AmmlOrigin;
 pub use amml_other_leases::AmmlOtherLeases;
 pub use amml_overlay_table::{
     AmmlOverlayTable, OverlayCaptureFreeSlotsFn, OverlayCaptureGiveBackFn, OverlayCaptureTakeFn, OverlayCloseCaptureFn,
-    OverlayCopyBackBufferFn, OverlayOpenCaptureFn, OverlayPresentCountFn, OverlayScreenshotFn,
+    OverlayCopyBackBufferFn, OverlayOpenCaptureFn, OverlayPrepareSurfaceFn, OverlayPresentCountFn, OverlayScreenshotFn,
 };
 pub use amml_permission_level::AmmlPermissionLevel;
 pub use amml_persistence::AmmlPersistence;

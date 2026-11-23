@@ -77,7 +77,7 @@ impl AreaTables {
                 client: client.and_then(|table| AmmlClientTable::read(table)),
                 input: input.and_then(|table| AmmlInputTable::read(table)),
                 window: window.and_then(|table| AmmlWindowTable::read(table)),
-                overlay: overlay.map(|table| table.read()),
+                overlay: overlay.and_then(|table| AmmlOverlayTable::read(table)),
                 actor: actor.and_then(|table| AmmlActorTable::read(table)),
                 inventory: inventory.and_then(|table| AmmlInventoryTable::read(table)),
                 lighting: lighting.map(|table| table.read()),

@@ -1,4 +1,4 @@
-use amml_abi::{AmmlSize, AmmlSurfaceLoss};
+use amml_abi::{AmmlDrawSurface, AmmlSize, AmmlSurfaceLoss};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Direct3D11::ID3D11Device;
 use windows::Win32::Graphics::Direct3D12::ID3D12Device;
@@ -238,6 +238,34 @@ impl FrameFlow {
             samples: self.targets.samples(),
             epoch: self.epoch,
         })
+    }
+
+    /// The surface listeners that take it on demand get before one asks: the device, the kept size and format, and no
+    /// context, target or back buffer. `None` without a device and while a side of the buffer is 0. On a D3D11 frame
+    /// the buffer's description is read (no view is made), and a size or format other than the kept one is given to
+    /// the window service, as `surface` does.
+    pub fn waiting_surface(&mut self, state: &LoaderState, chain: &IDXGISwapChain) -> Option<AmmlDrawSurface> {
+        if !self.device.as_ref()?.is_on12() {
+            match ChainTargets::native_desc(chain) {
+                Ok(desc) => {
+                    let format = desc.Format.0 as u32;
+                    if self.targets.note_buffer(desc.Width, desc.Height, format, desc.SampleDesc.Count) {
+                        state.window().set_buffer(AmmlSize { width: desc.Width, height: desc.Height });
+                    }
+                }
+                Err(error) => {
+                    Self::warn_target(&mut self.target_warned, &error);
+                    return None;
+                }
+            }
+        }
+        let device = self.device.as_ref()?;
+        let (width, height) = self.targets.size();
+        if width == 0 || height == 0 {
+            return None;
+        }
+        let format = self.targets.format();
+        Some(DrawSurface::waiting(&device.device, device.is_on12(), width, height, format, self.epoch))
     }
 
     /// The epoch of a device made after the first, once, for `RenderDeviceReset`.

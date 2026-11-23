@@ -1,6 +1,7 @@
 use amml_abi::{
-    AMML_API_VERSION, AmmlApi, AmmlCoreTable, AmmlEventsTable, AmmlRegistryTable, AmmlServices, AmmlStatus, AmmlStr,
-    AvailableFn, DirFn, GameAliveFn, ListenFn, LogFieldsFn, ProvideFn, RequireFn, UnlistenFn,
+    AMML_API_VERSION, AmmlApi, AmmlCoreTable, AmmlEvent, AmmlEventsTable, AmmlRegistryTable, AmmlServices, AmmlStatus,
+    AmmlStr, AvailableFn, DirFn, FramePresent, GameAliveFn, ListenFn, LogFieldsFn, OverlayPrepareSurfaceFn, ProvideFn,
+    RequireFn, UnlistenFn,
 };
 
 use crate::area_tables::AreaTables;
@@ -118,6 +119,7 @@ impl Ctx {
     pub fn events(&self) -> Events {
         let lent = LentTables {
             copy_back_buffer: self.areas.overlay.map(|table| table.copy_back_buffer),
+            prepare_surface: self.prepare_surface(),
             ui: self.areas.ui,
             inventory: self.areas.inventory,
             network: self.areas.network,
@@ -244,6 +246,17 @@ impl Ctx {
             inventory: self.areas.inventory,
             world: self.areas.world,
         })
+    }
+
+    // The loader's `prepare_surface` when it serves `FramePresent` at the version that takes the surface on demand.
+    fn prepare_surface(&self) -> Option<OverlayPrepareSurfaceFn> {
+        let prepare = self.areas.overlay.and_then(|table| table.prepare_surface)?;
+        // SAFETY: the id lives for the call.
+        #[allow(unsafe_code)]
+        let status = unsafe {
+            (self.available)(AmmlStr::from_str(<FramePresent as AmmlEvent>::ID), FramePresent::ON_DEMAND_VERSION)
+        };
+        status.is_ok().then_some(prepare)
     }
 
     /// Whether the loader can deliver `E` on this game build.

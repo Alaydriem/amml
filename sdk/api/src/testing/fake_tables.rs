@@ -5,8 +5,8 @@ use std::ffi::c_void;
 use amml_abi::{
     AMML_API_VERSION, AmmlActorTable, AmmlAmount, AmmlApi, AmmlApplyStats, AmmlBand, AmmlBlockHandle, AmmlCameraTable,
     AmmlCaptureFrame, AmmlCaptureRequest, AmmlClientFlag, AmmlClientTable, AmmlColor, AmmlContainerAction,
-    AmmlContainerEntry, AmmlCoreTable, AmmlCursorClip, AmmlDirKind, AmmlEventsTable, AmmlHand, AmmlHitResult,
-    AmmlInputBlocks, AmmlInputMode, AmmlInputTable, AmmlInventoryMove, AmmlInventoryTable, AmmlItemDraw,
+    AmmlContainerEntry, AmmlCoreTable, AmmlCursorClip, AmmlDirKind, AmmlDrawSurface, AmmlEventsTable, AmmlHand,
+    AmmlHitResult, AmmlInputBlocks, AmmlInputMode, AmmlInputTable, AmmlInventoryMove, AmmlInventoryTable, AmmlItemDraw,
     AmmlItemDrawFlags, AmmlItemSnapshot, AmmlLeaseMode, AmmlLeaseRequest, AmmlLeaseState, AmmlLightSource,
     AmmlLightingTable, AmmlLogLevel, AmmlMenu, AmmlMeshId, AmmlModifiers, AmmlMouseButton, AmmlMoveIntent,
     AmmlNetworkTable, AmmlOptionKey, AmmlOptionsTable, AmmlOtherLeases, AmmlOverlayTable, AmmlPoint, AmmlPose,
@@ -153,7 +153,7 @@ impl FakeTables {
             clip_cursor: Some(Self::window_clip_cursor),
         });
         let overlay = Box::new(AmmlOverlayTable {
-            size: AmmlOverlayTable::SIZE_V1,
+            size: AmmlOverlayTable::SIZE_V2,
             version: Self::TABLE_VERSION,
             screenshot: Self::overlay_screenshot,
             open_capture: Self::overlay_open_capture,
@@ -163,6 +163,7 @@ impl FakeTables {
             close_capture: Self::overlay_close_capture,
             present_count: Self::overlay_present_count,
             copy_back_buffer: Self::overlay_copy_back_buffer,
+            prepare_surface: Some(Self::overlay_prepare_surface),
         });
         let actor = Box::new(AmmlActorTable {
             size: AmmlActorTable::SIZE_V6,
@@ -3919,6 +3920,26 @@ impl FakeTables {
         FakeState::current()
             .filter(|state| state.area_offered(Area::OVERLAY_SURFACE.id, Area::OVERLAY_SURFACE.version))
             .map_or(0, |state| state.overlay().present_count())
+    }
+
+    unsafe extern "C" fn overlay_prepare_surface(out: *mut AmmlDrawSurface) -> AmmlStatus {
+        let Some(state) = FakeState::current() else {
+            return AmmlStatus::FAILED;
+        };
+        if !state.area_offered(Area::OVERLAY_SURFACE.id, Area::OVERLAY_SURFACE.version) {
+            return AmmlStatus::NOT_AVAILABLE;
+        }
+        if out.is_null() {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        match state.overlay().prepare() {
+            Ok(surface) => {
+                // SAFETY: `out` is non-null and the caller promises it is writable.
+                unsafe { out.write(surface) };
+                AmmlStatus::OK
+            }
+            Err(status) => status,
+        }
     }
 
     unsafe extern "C" fn overlay_copy_back_buffer(dest: *mut c_void) -> AmmlStatus {

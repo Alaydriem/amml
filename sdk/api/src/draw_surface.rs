@@ -1,6 +1,7 @@
+use std::cell::Cell;
 use std::marker::PhantomData;
 
-use amml_abi::{AmmlDrawSurface, OverlayCopyBackBufferFn};
+use amml_abi::{AmmlDrawSurface, OverlayCopyBackBufferFn, OverlayPrepareSurfaceFn};
 #[cfg(feature = "d3d")]
 use windows::Win32::Graphics::Direct3D11::{
     ID3D11Device, ID3D11DeviceContext, ID3D11RenderTargetView, ID3D11Texture2D,
@@ -30,62 +31,80 @@ type Target = std::ffi::c_void;
 /// on `device` live until `SurfaceLost`; `device_epoch` changes with each new device. On a surface with
 /// `wrapped() == false` the context is the game's own immediate context.
 ///
+/// On a loader that serves `FramePresent::ON_DEMAND_VERSION` the loader makes the frame's surface only
+/// when a listener needs it: the first `context()`, `target()` or `copy_back_buffer` of the frame asks
+/// for it, and a frame where no listener calls them costs no surface. A listener that has nothing to
+/// draw calls none of them. When the loader cannot make the surface, `context()` and `target()` give a
+/// `ComRef` whose `with` gives `None`.
+///
 /// Without the `d3d` feature the handles are `ComRef<'f, c_void>` and give only `as_raw`; with it they
 /// are `ComRef`s of the `windows` D3D11 types (`ID3D11Device`, `ID3D11DeviceContext`,
 /// `ID3D11RenderTargetView`).
 pub struct DrawSurface<'f> {
-    surface: AmmlDrawSurface,
+    // The surface as the loader lent it, and the full one once `prepare_surface` made it.
+    surface: Cell<AmmlDrawSurface>,
     device: ComRef<'f, Device>,
-    context: ComRef<'f, Context>,
-    target: ComRef<'f, Target>,
     #[cfg_attr(not(feature = "d3d"), allow(dead_code))]
     copy_back_buffer: Option<OverlayCopyBackBufferFn>,
+    prepare_surface: Option<OverlayPrepareSurfaceFn>,
+    // The loader could not make the surface of this frame; it is not asked again.
+    refused: Cell<bool>,
     _frame: PhantomData<&'f ()>,
 }
 
 impl<'f> DrawSurface<'f> {
-    /// The surface of `surface`; `None` when it is shorter than v1 or any of its pointers is null.
+    /// The surface of `surface`; `None` when it is shorter than v1 or has no device, and when any of
+    /// its pointers is null without `prepare_surface` (a loader that lends only full surfaces). With
+    /// `prepare_surface`, a surface with a device and a null back buffer is made on first use.
     ///
     /// # Safety
     /// The pointers of `surface` are null or live D3D11 objects of the documented types for `'f`, on
-    /// this thread.
+    /// this thread; `prepare_surface`, when given, is the loader's function for the running
+    /// `FramePresent` call, which keeps the surface it makes live for `'f`.
     #[allow(unsafe_code)]
     pub(crate) unsafe fn new(
         surface: AmmlDrawSurface,
         copy_back_buffer: Option<OverlayCopyBackBufferFn>,
+        prepare_surface: Option<OverlayPrepareSurfaceFn>,
     ) -> Option<Self> {
-        if surface.size < AmmlDrawSurface::SIZE_V1 || surface.back_buffer.is_null() {
+        if surface.size < AmmlDrawSurface::SIZE_V1 {
             return None;
         }
-        // SAFETY: the caller's contract, for each pointer and its type.
-        let (device, context, target) = unsafe {
-            (
-                ComRef::from_loader(surface.device)?,
-                ComRef::from_loader(surface.context)?,
-                ComRef::from_loader(surface.target)?,
-            )
-        };
-        Some(Self { surface, device, context, target, copy_back_buffer, _frame: PhantomData })
+        // SAFETY: the caller's contract, for the device pointer and its type.
+        let device = unsafe { ComRef::from_loader(surface.device) }?;
+        let on_demand = surface.back_buffer.is_null() && prepare_surface.is_some();
+        if !on_demand && !Self::is_full(&surface) {
+            return None;
+        }
+        Some(Self {
+            surface: Cell::new(surface),
+            device,
+            copy_back_buffer,
+            prepare_surface,
+            refused: Cell::new(false),
+            _frame: PhantomData,
+        })
     }
 
     /// The back buffer size.
     pub fn size(&self) -> Size {
-        Size { width: self.surface.width, height: self.surface.height }
+        let surface = self.surface.get();
+        Size { width: surface.width, height: surface.height }
     }
 
     /// The `DXGI_FORMAT` of the back buffer.
     pub fn format(&self) -> u32 {
-        self.surface.format
+        self.surface.get().format
     }
 
     /// Whether the objects wrap a D3D12 back buffer (D3D11On12); the context is then the loader's.
     pub fn wrapped(&self) -> bool {
-        self.surface.wrapped != 0
+        self.surface.get().wrapped != 0
     }
 
     /// The epoch of the device; it changes with each new device, after `SurfaceLost`.
     pub fn device_epoch(&self) -> u64 {
-        self.surface.device_epoch
+        self.surface.get().device_epoch
     }
 
     /// The `ID3D11Device`. Objects made on it live until `SurfaceLost`.
@@ -93,14 +112,68 @@ impl<'f> DrawSurface<'f> {
         self.device
     }
 
-    /// The `ID3D11DeviceContext` to draw with, on the render thread inside the call only.
-    pub fn context(&self) -> ComRef<'f, Context> {
-        self.context
+    /// Whether the frame has a full surface to draw on: asks the loader for it when it was not made yet
+    /// (as `context()` and `target()` do). False when the loader could not make it; `context()` and
+    /// `target()` then give null pointers.
+    pub fn ready(&self) -> bool {
+        self.full().is_some()
     }
 
-    /// The `ID3D11RenderTargetView` of the back buffer.
+    /// The `ID3D11DeviceContext` to draw with, on the render thread inside the call only. Asks the
+    /// loader for the frame's surface when it was not made yet.
+    pub fn context(&self) -> ComRef<'f, Context> {
+        match self.full() {
+            // SAFETY: a full surface holds a live context for `'f` (the contract of `new`).
+            #[allow(unsafe_code)]
+            Some(surface) => unsafe { ComRef::from_loader(surface.context) }.unwrap_or_else(ComRef::absent),
+            None => ComRef::absent(),
+        }
+    }
+
+    /// The `ID3D11RenderTargetView` of the back buffer. Asks the loader for the frame's surface when it
+    /// was not made yet.
     pub fn target(&self) -> ComRef<'f, Target> {
-        self.target
+        match self.full() {
+            // SAFETY: a full surface holds a live target for `'f` (the contract of `new`).
+            #[allow(unsafe_code)]
+            Some(surface) => unsafe { ComRef::from_loader(surface.target) }.unwrap_or_else(ComRef::absent),
+            None => ComRef::absent(),
+        }
+    }
+
+    // The full surface: the lent one, or the one the loader makes now on the first ask of the frame.
+    fn full(&self) -> Option<AmmlDrawSurface> {
+        let surface = self.surface.get();
+        if Self::is_full(&surface) {
+            return Some(surface);
+        }
+        if self.refused.get() {
+            return None;
+        }
+        let prepare = self.prepare_surface?;
+        let mut out = std::mem::MaybeUninit::<AmmlDrawSurface>::zeroed();
+        // SAFETY: `out` is writable for the call; the loader checks that this runs inside its
+        // `FramePresent` raise on this thread.
+        #[allow(unsafe_code)]
+        let status = unsafe { prepare(out.as_mut_ptr()) };
+        // SAFETY: all zero bytes are a valid surface (null pointers), and the loader writes a whole
+        // one on `OK`.
+        #[allow(unsafe_code)]
+        let made = unsafe { out.assume_init() };
+        if status.is_ok() && made.size >= AmmlDrawSurface::SIZE_V1 && Self::is_full(&made) {
+            self.surface.set(made);
+            Some(made)
+        } else {
+            self.refused.set(true);
+            None
+        }
+    }
+
+    fn is_full(surface: &AmmlDrawSurface) -> bool {
+        !surface.device.is_null()
+            && !surface.context.is_null()
+            && !surface.target.is_null()
+            && !surface.back_buffer.is_null()
     }
 }
 

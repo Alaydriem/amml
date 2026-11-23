@@ -1,7 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 
-use amml_abi::{AmmlCaptureFrame, AmmlCaptureRequest, AmmlShotLayers, AmmlStatus};
+use amml_abi::{AmmlCaptureFrame, AmmlCaptureRequest, AmmlDrawSurface, AmmlShotLayers, AmmlStatus};
 
 use crate::ShotLayers;
 
@@ -9,7 +9,8 @@ use crate::ShotLayers;
 /// request, a ring that skips a present when no slot is free, a taken frame whose pixels stay until it
 /// is given back (also after a close), and `STALE` for a closed or unknown stream. Frames are kept as
 /// pushed: the fake does not scale them to `max_width x max_height`. The gate and the area book are
-/// checked by the table functions before a call gets here.
+/// checked by the table functions before a call gets here. `prepare_surface` gives the surface a test
+/// set, or `NOT_READY` before one is set, and counts its calls.
 pub(crate) struct FakeOverlay {
     // In the high 32 bits of every screenshot and stream id, so an id of another fake is unknown here.
     tag: u32,
@@ -17,6 +18,8 @@ pub(crate) struct FakeOverlay {
     presents: Cell<u64>,
     shots: RefCell<Vec<(PathBuf, ShotLayers)>>,
     streams: RefCell<Vec<FakeStream>>,
+    prepared: Cell<Option<AmmlDrawSurface>>,
+    prepare_calls: Cell<u32>,
 }
 
 /// One capture stream of the fake.
@@ -49,7 +52,24 @@ impl FakeOverlay {
             presents: Cell::new(0),
             shots: RefCell::new(Vec::new()),
             streams: RefCell::new(Vec::new()),
+            prepared: Cell::new(None),
+            prepare_calls: Cell::new(0),
         }
+    }
+
+    /// The surface `prepare` gives from now on.
+    pub(crate) fn set_prepared(&self, surface: AmmlDrawSurface) {
+        self.prepared.set(Some(surface));
+    }
+
+    /// One `prepare_surface` call: the surface a test set, or `NOT_READY`.
+    pub(crate) fn prepare(&self) -> Result<AmmlDrawSurface, AmmlStatus> {
+        self.prepare_calls.set(self.prepare_calls.get() + 1);
+        self.prepared.get().ok_or(AmmlStatus::NOT_READY)
+    }
+
+    pub(crate) fn prepare_calls(&self) -> u32 {
+        self.prepare_calls.get()
     }
 
     fn next_id(&self) -> u64 {

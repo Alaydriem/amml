@@ -11,11 +11,11 @@ pub use services::{
     CacheSource, CacheWindow, CameraMath, CameraScope, CaptureRing, CellSource, ChunkCacheSwitch, ClipBook,
     ColumnBlocks, ColumnWalk, DeriveSource, EventBus, FocusHold, FocusReplayBook, FreeCameraBook, GhostEntityBook,
     Grade, GroupBook, HandlerCapture, HideBook, HookChain, HostResolver, InjectionQueue, InlineIconBook, ItemDrawBook,
-    KeyTable, KindsScan, LeaseBook, LeviLaminaSource, LightBook, LightCell, MaterialPatch, MeshBook, MeshPost,
-    ModRegistry, PointerPairs, PointerUpGate, PoseBook, ProviderRegistry, RenderScope, RequestBook, ResolverChain,
-    ResolverSource, ResourceStore, RestoreBook, ScreenBook, ShapeBook, ShotBook, SkullTransform, StackIdentity,
-    StackLedger, StackRequestEncoder, SurfaceColumn, SurfaceRule, SymbolLookup, TextureBook, TimeHoldBook,
-    TopScreenWatch, TransientOptionBook, VirtualClock, WaypointTags, WireConnections, WorldTransform,
+    KeyTable, KindsScan, LeaseBook, LeviLaminaSource, LightBook, LightCell, LightDiff, MaterialPatch, MeshBook,
+    MeshPost, ModRegistry, PointerPairs, PointerUpGate, PoseBook, ProviderRegistry, RenderScope, RequestBook,
+    ResolverChain, ResolverSource, ResourceStore, RestoreBook, ScreenBook, ShapeBook, ShotBook, SkullTransform,
+    StackIdentity, StackLedger, StackRequestEncoder, SurfaceColumn, SurfaceRule, SymbolLookup, TextureBook,
+    TimeHoldBook, TopScreenWatch, TransientOptionBook, VirtualClock, WaypointTags, WireConnections, WorldTransform,
 };
 pub use structs::{
     ActionScope, AmmlVersion, BlockChange, BlockTagError, BlockTagValue, CallOutcome, CameraBasis, CameraFrameGuard,

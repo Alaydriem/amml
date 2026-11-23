@@ -272,6 +272,121 @@ fn a_surface_is_lent_to_its_listener_call_only() {
     assert!(KEPT.with(|kept| kept.borrow().as_ref().is_some_and(|event| event.surface().is_none())));
 }
 
+// A fake that makes the surface on demand: the surface area and `FramePresent` at the on-demand version.
+fn on_demand() -> FakeGame {
+    let fake = FakeGame::new();
+    fake.offer::<FramePresent>();
+    fake.offer_area(Area::OVERLAY_SURFACE);
+    fake.offer_surface_on_demand();
+    fake
+}
+
+// The surface a loader lends before a listener asks: a device, the size and format, no other object.
+fn waiting(device: *mut c_void) -> AmmlDrawSurface {
+    AmmlDrawSurface {
+        context: std::ptr::null_mut(),
+        target: std::ptr::null_mut(),
+        back_buffer: std::ptr::null_mut(),
+        ..surface(device)
+    }
+}
+
+#[test]
+fn an_idle_listener_never_asks_for_the_surface() {
+    let fake = on_demand();
+    fake.set_prepared_surface(surface(fake_pointer(0x1000)));
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let record = seen.clone();
+    let _listener = fake
+        .ctx()
+        .events()
+        .listen::<FramePresent>(HookOrder::NORMAL, move |event, _| {
+            let lent = event.surface().map(|surface| {
+                (surface.size(), surface.format(), surface.device_epoch(), surface.device().as_raw().addr())
+            });
+            record.lock().unwrap().push(lent);
+        })
+        .unwrap();
+
+    fake.raise(&mut present(waiting(fake_pointer(0x1000))));
+
+    assert_eq!(*seen.lock().unwrap(), [Some((Size { width: 1280, height: 720 }, 28, 3, 0x1000))]);
+    assert_eq!(fake.prepare_surface_calls(), 0);
+}
+
+#[test]
+fn a_drawing_listener_asks_once_and_gets_the_made_surface() {
+    let fake = on_demand();
+    fake.set_prepared_surface(surface(fake_pointer(0x1000)));
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let record = seen.clone();
+    let _listener = fake
+        .ctx()
+        .events()
+        .listen::<FramePresent>(HookOrder::NORMAL, move |event, _| {
+            if let Some(surface) = event.surface() {
+                let ready = surface.ready();
+                record.lock().unwrap().push((
+                    ready,
+                    surface.target().as_raw().addr(),
+                    surface.context().as_raw().addr(),
+                ));
+            }
+        })
+        .unwrap();
+
+    fake.raise(&mut present(waiting(fake_pointer(0x1000))));
+
+    assert_eq!(*seen.lock().unwrap(), [(true, 0x3000, 0x2000)]);
+    assert_eq!(fake.prepare_surface_calls(), 1);
+}
+
+#[test]
+fn a_surface_the_loader_cannot_make_gives_absent_handles_and_is_asked_once() {
+    let fake = on_demand();
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let record = seen.clone();
+    let _listener = fake
+        .ctx()
+        .events()
+        .listen::<FramePresent>(HookOrder::NORMAL, move |event, _| {
+            if let Some(surface) = event.surface() {
+                record.lock().unwrap().push((
+                    surface.ready(),
+                    surface.target().as_raw().is_null(),
+                    surface.context().as_raw().is_null(),
+                ));
+            }
+        })
+        .unwrap();
+
+    fake.raise(&mut present(waiting(fake_pointer(0x1000))));
+
+    assert_eq!(*seen.lock().unwrap(), [(false, true, true)]);
+    assert_eq!(fake.prepare_surface_calls(), 1);
+}
+
+#[test]
+fn without_the_on_demand_version_a_surface_with_no_back_buffer_is_none() {
+    let fake = FakeGame::new();
+    fake.offer::<FramePresent>();
+    fake.offer_area(Area::OVERLAY_SURFACE);
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let record = seen.clone();
+    let _listener = fake
+        .ctx()
+        .events()
+        .listen::<FramePresent>(HookOrder::NORMAL, move |event, _| {
+            record.lock().unwrap().push(event.surface().is_none());
+        })
+        .unwrap();
+
+    fake.raise(&mut present(waiting(fake_pointer(0x1000))));
+
+    assert_eq!(*seen.lock().unwrap(), [true]);
+    assert_eq!(fake.prepare_surface_calls(), 0);
+}
+
 #[cfg(feature = "d3d")]
 mod d3d {
     use std::sync::{Arc, Mutex};

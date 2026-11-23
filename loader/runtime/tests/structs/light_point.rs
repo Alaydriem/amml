@@ -91,3 +91,24 @@ fn reaches_the_subchunks_in_range_only() {
     assert!(!light.reaches_subchunk([0, 5, 0]));
     assert!(!light.reaches_subchunk([0, 4, 2]));
 }
+
+#[test]
+fn could_light_is_false_only_for_a_box_with_no_lit_block() {
+    let lights = [
+        LightPoint::at([3.3, 64.8, -7.1], 9, AmmlLightFalloff::ROUND, 0).unwrap(),
+        LightPoint::at([3.3, 64.8, -7.1], 9, AmmlLightFalloff::TAXICAB, 0).unwrap(),
+    ];
+    for light in lights {
+        for x in -9..14 {
+            for z in -18..4 {
+                let (min, max) = ([x, 60, z], [x + 2, 66, z + 1]);
+                let any = (min[0]..=max[0])
+                    .any(|bx| (min[1]..=max[1]).any(|by| (min[2]..=max[2]).any(|bz| light.boost([bx, by, bz]) > 0)));
+                if any {
+                    assert!(light.could_light(min, max), "{min:?}..{max:?}");
+                }
+            }
+        }
+        assert!(!light.could_light([20, 64, -7], [30, 64, -7]));
+    }
+}

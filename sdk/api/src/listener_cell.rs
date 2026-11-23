@@ -93,7 +93,9 @@ impl<F: Send + 'static> ListenerCell<F> {
         // SAFETY: the loader passes the context it owns for the call, or null.
         let context = unsafe { Self::context(context, cell.client, cell.module) };
         // SAFETY: the header says the struct holds at least `size_of::<E>()` bytes, live for the call.
-        let lent = unsafe { LentSurfaces::lend(event.cast::<E>().cast_const(), cell.lent.copy_back_buffer) };
+        let lent = unsafe {
+            LentSurfaces::lend(event.cast::<E>().cast_const(), cell.lent.copy_back_buffer, cell.lent.prepare_surface)
+        };
         let view = LentScope::lend(event.cast::<E>().cast_const(), cell.lent.ui, cell.lent.inventory, cell.module);
         let network = LentNetwork::lend(event.cast::<E>().cast_const(), cell.lent.network);
         let chat = LentChat::lend(event.cast::<E>().cast_const(), cell.lent.ui, cell.module);

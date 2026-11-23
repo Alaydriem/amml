@@ -33,7 +33,8 @@ thread_local! {
 ///
 /// A ghost is the game's own block actor of a block, made by the factory or loaded with `loadStatic` from the mod's NBT,
 /// held through the `shared_ptr` the game gave, in a `GhostEntityBook` bound to the mod and the world. It is drawn only
-/// inside a pass dispatch, with the dispatcher of the pass context, the block source of the local player, an empty
+/// inside a pass dispatch, with its actor moved to the draw position (`BlockActor.mPosition`, the partner of a paired chest
+/// with it), the dispatcher of the pass context, the block source of the local player, an empty
 /// `MaterialPtr` (16 zero bytes, as the game's own callers pass a `.bss` static: survey row G4), no texture, no breaking
 /// and a disengaged `optional<RenderMetadata>` at the derived flag. A ghost with a skull pose is drawn by the dispatcher's
 /// skull renderer instead (`SkullDrawShape`), with the pose given at `create`. Ghosts end at `free`, the world leave, the
@@ -60,7 +61,7 @@ impl BlockEntityAdapter {
     const VERSION: u32 = 1;
     // The size of a `CompoundTag`, the block `NbtIo::read` allocates for the tag it gives.
     const TAG_SIZE: usize = 0x18;
-    // The position a ghost's actor is made at; a draw gives the world position.
+    // The position a ghost's actor is made at; each draw moves the actor to the world position it draws at (`place`).
     const ORIGIN: [i32; 3] = [0, 0, 0];
     // The highest face the game numbers (`AmmlFace::EAST`) and the highest turn of a skull, in sixteenths.
     const MAX_FACE: u8 = 5;
@@ -408,6 +409,8 @@ impl BlockEntityAdapter {
             return Err(AmmlStatus::FAILED);
         }
         let source = ActorAdapter::get().ok_or(AmmlStatus::NOT_AVAILABLE)?.primary_block_source()?;
+        // SAFETY: a live actor the loader holds, drawn on this thread only; a chest it paired is a ChestBlockActor.
+        unsafe { self.place(calls, &entry, pos) };
         let material = [0u64; 2];
         // SAFETY: the dispatcher and the context of the running pass, the local player's live block source, the live
         // actor's component, a live block, and buffers that live for the call: both positions, an empty `MaterialPtr`,
@@ -429,6 +432,29 @@ impl BlockEntityAdapter {
             )
         };
         Ok(())
+    }
+
+    // Moves the actor of `entry` to `pos`, the place it is drawn at: the game's bed, banner and sign text renderers read
+    // the light at the actor's own `mPosition`, not at the draw position (26.63 0x6af9360, 0x6af1be0, 0x6a7ffd0; 70.26
+    // 0x8a29440). The partner of a paired chest moves with it.
+    //
+    // Safety: `entry.actor` is a live actor the loader holds, drawn on this thread only; when `entry.chest_paired` it
+    // is a ChestBlockActor that `ChestPairWriter::write` paired.
+    unsafe fn place(&self, calls: &BlockEntityCalls, entry: &GhostEntity, pos: [i32; 3]) {
+        let at = std::ptr::with_exposed_provenance_mut::<[i32; 3]>(entry.actor + calls.position_at);
+        // SAFETY: `mPosition` of a live actor (`BlockActor.mPosition`).
+        let from = unsafe { at.read_unaligned() };
+        if from == pos {
+            return;
+        }
+        if entry.chest_paired
+            && let Some(writer) = self.chest.as_ref()
+        {
+            // SAFETY: forwarded from the caller.
+            unsafe { writer.move_partner(entry.actor, from, pos) };
+        }
+        // SAFETY: as above.
+        unsafe { at.write_unaligned(pos) };
     }
 
     /// The number of live ghosts.

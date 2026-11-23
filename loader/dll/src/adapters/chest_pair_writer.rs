@@ -68,6 +68,21 @@ impl ChestPairWriter {
         }
     }
 
+    /// Moves the partner position of the chest at `actor`, which `write` paired, by `to - from`, so the partner stays
+    /// at the same offset when the actor moves from `from` to `to`.
+    ///
+    /// # Safety
+    /// `actor` is a live `ChestBlockActor` that `write` paired, of which the loader still holds a use; the thread that
+    /// draws it.
+    pub unsafe fn move_partner(&self, actor: usize, from: [i32; 3], to: [i32; 3]) {
+        // SAFETY: the caller guarantees a live ChestBlockActor; the position at the derived offset is inside it.
+        unsafe {
+            let partner = std::ptr::with_exposed_provenance_mut::<[i32; 3]>(actor + self.paired_position_at);
+            let old = partner.read_unaligned();
+            partner.write_unaligned([0, 1, 2].map(|axis| old[axis].wrapping_add(to[axis].wrapping_sub(from[axis]))));
+        }
+    }
+
     /// Makes the chest at `actor` the lead of a large chest whose other half is at `offset` from it (one block along x
     /// or z). The partner pointer is the actor's own address (the renderer only compares it with null, and it lives as
     /// long as the actor), the partner position is the actor's `mPosition` moved by `offset`, and bit 1 of the flags is

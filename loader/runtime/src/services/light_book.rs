@@ -1,11 +1,13 @@
 use std::sync::{Mutex, MutexGuard};
 
+use crate::services::LightDiff;
 use crate::structs::{LightChange, LightPoint, LightRefusal};
 
 /// The held lights of the mods: one slot per mod, at most `SLOTS`, in the order the slots were taken. Each
-/// change gives the boxes to rebuild: the reach of the old and of the new light of that mod.
+/// change gives the subchunks to rebuild (`LightDiff`): those where the old and the new lights differ.
 pub struct LightBook {
     slots: Mutex<Vec<(usize, LightPoint)>>,
+    diff: LightDiff,
 }
 
 impl Default for LightBook {
@@ -18,7 +20,7 @@ impl LightBook {
     pub const SLOTS: usize = 4;
 
     pub fn new() -> Self {
-        Self { slots: Mutex::new(Vec::new()) }
+        Self { slots: Mutex::new(Vec::new()), diff: LightDiff::new() }
     }
 
     // The slots hold plain data, so a lock poisoned by a panic is recovered.
@@ -41,6 +43,7 @@ impl LightBook {
         if old == point {
             return Ok(LightChange::default());
         }
+        let before = Self::points_of(&slots);
         match (index, point) {
             (Some(index), Some(point)) => slots[index].1 = point,
             (Some(index), None) => {
@@ -54,23 +57,18 @@ impl LightBook {
             }
             (None, None) => {}
         }
-        published(&Self::points_of(&slots));
-        let mut change = LightChange::default();
-        for light in [old, point].into_iter().flatten() {
-            change.add(light.reach_box());
-        }
-        Ok(change)
+        let after = Self::points_of(&slots);
+        published(&after);
+        Ok(self.diff.change(&before, &after))
     }
 
-    /// Clears every light; the change holds the reach of each.
+    /// Clears every light; the change holds the subchunks each lit.
     pub fn clear_all(&self, published: impl FnOnce(&[LightPoint])) -> LightChange {
         let mut slots = self.lock();
-        let mut change = LightChange::default();
-        for (_, light) in slots.drain(..) {
-            change.add(light.reach_box());
-        }
+        let before = Self::points_of(&slots);
+        slots.clear();
         published(&[]);
-        change
+        self.diff.change(&before, &[])
     }
 
     /// Whether `owner` holds a slot.

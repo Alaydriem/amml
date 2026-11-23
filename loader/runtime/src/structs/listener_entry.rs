@@ -9,14 +9,16 @@ pub(crate) struct ListenerEntry<L> {
     pub(crate) id: ListenerId,
     pub(crate) owner: usize,
     pub(crate) band: u8,
+    // The event version the listener asked for at `add`.
+    pub(crate) version: u32,
     pub(crate) listener: L,
     state: Mutex<EntryState>,
     idle: Condvar,
 }
 
 impl<L> ListenerEntry<L> {
-    pub(crate) fn new(id: ListenerId, owner: usize, band: u8, listener: L) -> Self {
-        Self { id, owner, band, listener, state: Mutex::new(EntryState::default()), idle: Condvar::new() }
+    pub(crate) fn new(id: ListenerId, owner: usize, band: u8, version: u32, listener: L) -> Self {
+        Self { id, owner, band, version, listener, state: Mutex::new(EntryState::default()), idle: Condvar::new() }
     }
 
     fn lock(&self) -> MutexGuard<'_, EntryState> {

@@ -1,6 +1,7 @@
+use amml_abi::{AmmlEvent, FramePresent};
 use amml_data::{AdapterCatalog, NeedKind};
 
-use super::{DxgiProbe, OverlayError, OverlayShared, PresentHooks, ProbeTargets};
+use super::{DxgiProbe, OverlayError, OverlayShared, PresentHooks, ProbeTargets, SurfaceCounts};
 use crate::LoaderState;
 
 /// The loader's overlay: the DXGI and D3D12 hooks, the bind of the game's swap chain and window, and the present and
@@ -54,7 +55,13 @@ impl OverlayService {
         OverlayShared::global().present_count()
     }
 
-    // The needs with shape `overlay` in the catalog.
+    /// The draw surfaces made so far, and the state saves for them.
+    pub fn surface_counts() -> SurfaceCounts {
+        OverlayShared::global().cost().counts()
+    }
+
+    // The needs with shape `overlay` in the catalog, and `FramePresent` up to the version that takes the surface on
+    // demand.
     fn offer(state: &LoaderState) {
         for need in AdapterCatalog::needs() {
             if !need.shapes.iter().any(|shape| shape.name == AdapterCatalog::OVERLAY_SHAPE) {
@@ -65,5 +72,6 @@ impl OverlayService {
                 NeedKind::Area => state.areas().offer(need.id, need.version),
             }
         }
+        state.events().offer(FramePresent::ID, FramePresent::ON_DEMAND_VERSION);
     }
 }

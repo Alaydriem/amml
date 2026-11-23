@@ -46,6 +46,7 @@ mod key_adapter;
 mod kinds_adapter;
 mod leave_hold;
 mod level_renderer_adapter;
+mod light_cost;
 mod lighting_table;
 mod loader_log;
 mod loader_settings;

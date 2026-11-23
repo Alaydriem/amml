@@ -249,6 +249,32 @@ fn draw_outside_the_pass_is_refused() {
 }
 
 #[test]
+fn a_ghost_stands_at_its_draw_position_while_it_is_drawn() {
+    let harness = start();
+    let chest = handle(&harness, BlockEntityGame::chest_block());
+    let (_, single) = create(chest, &[], AmmlGhostEntityOptions::default());
+    let (_, paired) = create(chest, &[], chest_pair(0, 1));
+    on_each_pass(move |frame| {
+        assert_eq!(draw(frame, single, AmmlBlockPos { x: 3, y: 65, z: -4 }), AmmlStatus::OK);
+        assert_eq!(draw(frame, single, AmmlBlockPos { x: 10, y: 70, z: 7 }), AmmlStatus::OK);
+        assert_eq!(draw(frame, paired, AmmlBlockPos { x: -8, y: 64, z: 2 }), AmmlStatus::OK);
+    });
+
+    BlockEntityGame::pass(BlockEntityGame::player_renderer(), BlockEntityGame::context(), false);
+
+    // One actor drawn at two places stands at each in turn; the partner of a paired chest moves with it and stays one
+    // block along +z. An unpaired chest keeps its partner position as the game made it.
+    assert_eq!(
+        calls("actor at render"),
+        [
+            "actor at render actor=0 position=3,65,-4 paired=0,0,0",
+            "actor at render actor=0 position=10,70,7 paired=0,0,0",
+            "actor at render actor=1 position=-8,64,2 paired=-8,64,3",
+        ]
+    );
+}
+
+#[test]
 fn metadata_is_disengaged_at_the_derived_flag() {
     let harness = start_with(true, 0x30);
     // The level's flag byte is 0 here: the factory must get what the level gives, not a constant.

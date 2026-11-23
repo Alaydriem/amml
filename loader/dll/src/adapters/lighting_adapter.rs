@@ -7,7 +7,8 @@ use amml_data::{AdapterCatalog, Availability, EntryId, NeedKind};
 use amml_runtime::{EmitterEntry, LightBook, LightCell, LightChange, LightPoint, LightRefusal, VvPlan};
 
 use crate::{
-    BlockHandles, CoordinatorWalk, EmitterPush, LightingDetours, LoaderState, RenderLevelDetours, SessionHook,
+    BlockHandles, CoordinatorWalk, EmitterPush, LightCost, LightingDetours, LoaderState, RenderLevelDetours,
+    SessionHook,
 };
 
 static ADAPTER: OnceLock<LightingAdapter> = OnceLock::new();
@@ -16,9 +17,9 @@ static ADAPTER: OnceLock<LightingAdapter> = OnceLock::new();
 /// Vibrant Visuals hand emitter (`lighting.vibrant`).
 ///
 /// Each mod has one light slot (at most `LightBook::SLOTS`); a block gets the highest value of all lights.
-/// A change of a mod's light marks the reach of its old and new light for a rebuild, which the
+/// A change of a mod's light marks the subchunks whose light differs (`LightDiff`) for a rebuild, which the
 /// `renderLevel` detour does before the frame's own update reads the marks. The light getters read the
-/// lights from a `LightCell` without a lock.
+/// lights from a `LightCell` without a lock. `AMML_PERF=1` adds a `perf` line of the costs (`LightCost`).
 pub struct LightingAdapter {
     state: &'static LoaderState,
     book: LightBook,
@@ -26,6 +27,7 @@ pub struct LightingAdapter {
     pending: Mutex<LightChange>,
     walk: Option<CoordinatorWalk>,
     emitter: Option<EmitterPush>,
+    cost: LightCost,
     entity: AtomicBool,
     rebuild_refused: AtomicBool,
     rebuild_logged: AtomicBool,
@@ -87,6 +89,7 @@ impl LightingAdapter {
             pending: Mutex::new(LightChange::default()),
             walk,
             emitter,
+            cost: LightCost::from_env(),
             entity: AtomicBool::new(entity),
             rebuild_refused: AtomicBool::new(false),
             rebuild_logged: AtomicBool::new(false),
@@ -124,6 +127,15 @@ impl LightingAdapter {
         &self.cell
     }
 
+    /// The block light byte of a getter result (terrain or entity) at `pos`, raised by the lights
+    /// (`LightCell::boost_at`).
+    pub(crate) fn raise(&self, pos: [i32; 3], current: u8) -> u8 {
+        if self.cost.is_on() {
+            self.cost.note_getter(self.cell.might_reach(pos));
+        }
+        self.cell.boost_at(pos, current)
+    }
+
     pub(crate) fn entity_on(&self) -> bool {
         self.entity.load(Ordering::Relaxed)
     }
@@ -154,6 +166,9 @@ impl LightingAdapter {
             self.book.set(owner, point, |points| self.cell.publish(points)).map_err(|refusal| match refusal {
                 LightRefusal::Full => AmmlStatus::REFUSED,
             })?;
+        if !change.is_empty() {
+            self.cost.note_change(change.evaluations());
+        }
         self.pending().join(change);
         Ok(())
     }
@@ -164,6 +179,7 @@ impl LightingAdapter {
             return;
         }
         if let Ok(change) = self.book.set(owner, None, |points| self.cell.publish(points)) {
+            self.cost.note_change(change.evaluations());
             self.pending().join(change);
         }
         curia::info!("lighting cleared", { mod_name: module });
@@ -171,24 +187,32 @@ impl LightingAdapter {
 
     /// Before a world is left: every light goes out and no rebuild is kept for the old world.
     pub(crate) fn world_left(&self) {
-        let _ = self.book.clear_all(|points| self.cell.publish(points));
+        let change = self.book.clear_all(|points| self.cell.publish(points));
+        if !change.is_empty() {
+            self.cost.note_change(change.evaluations());
+        }
         *self.pending() = LightChange::default();
     }
 
-    /// Before the game's `renderLevel`: checks the thread once, then rebuilds the marked reach.
+    /// Before the game's `renderLevel`: checks the thread once, then rebuilds the marked subchunks.
     pub(crate) fn render_level(&self, level_renderer: *mut c_void) {
         self.check_thread();
+        if let Some(line) = self.cost.take_line(std::time::Instant::now()) {
+            line.log();
+        }
         let change = std::mem::take(&mut *self.pending());
         if change.is_empty() || self.rebuild_refused.load(Ordering::Relaxed) {
             return;
         }
         let Some(walk) = &self.walk else { return };
+        let boxes = change.boxes();
         // SAFETY: `level_renderer` is the `this` the game passed to `renderLevel`, on the thread that runs
         // this frame's update, which reads the marks.
-        match unsafe { walk.mark(level_renderer, &change.boxes) } {
+        match unsafe { walk.mark(level_renderer, &boxes) } {
             Ok(calls) => {
+                self.cost.note_marks(change.marks(), calls);
                 if !self.rebuild_logged.swap(true, Ordering::Relaxed) {
-                    curia::info!("lighting rebuild", { boxes: change.boxes.len(), calls: calls });
+                    curia::info!("lighting rebuild", { subchunks: change.marks(), boxes: boxes.len(), calls: calls });
                 }
             }
             Err(reason) => {

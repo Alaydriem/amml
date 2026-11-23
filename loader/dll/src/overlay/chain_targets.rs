@@ -156,6 +156,16 @@ impl ChainTargets {
         Ok((resource, desc, view))
     }
 
+    /// The description of the back buffer of a D3D11 `chain` (buffer 0); the buffer's reference is released on return.
+    pub fn native_desc(chain: &IDXGISwapChain) -> windows::core::Result<D3D11_TEXTURE2D_DESC> {
+        // SAFETY: the chain is live for the Present that called this and has buffer 0.
+        let buffer: ID3D11Texture2D = unsafe { chain.GetBuffer(0) }?;
+        let mut desc = D3D11_TEXTURE2D_DESC::default();
+        // SAFETY: the texture is live and `desc` is writable for the call.
+        unsafe { buffer.GetDesc(&mut desc) };
+        Ok(desc)
+    }
+
     fn view(device: &ID3D11Device, resource: &ID3D11Resource) -> windows::core::Result<ID3D11RenderTargetView> {
         let mut view: Option<ID3D11RenderTargetView> = None;
         // SAFETY: the resource is a live back buffer made with render target binding; the out pointer is a local.

@@ -5,15 +5,18 @@ use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
 use amml_abi::{
-    AmmlBand, AmmlEvent, AmmlPhase, AmmlThread, FramePresent, FramePresented, RenderDeviceReset, SurfaceLost,
-    SwapChainResize, SwapChainResized,
+    AmmlBand, AmmlDrawSurface, AmmlEvent, AmmlPhase, AmmlStatus, AmmlThread, FramePresent, FramePresented,
+    RenderDeviceReset, SurfaceLost, SwapChainResize, SwapChainResized,
 };
 use amml_runtime::{CapturePoint, ResourceKind};
 use windows::Win32::Graphics::Direct3D12::{D3D12_COMMAND_LIST_TYPE_DIRECT, ID3D12CommandQueue};
 use windows::Win32::Graphics::Dxgi::{DXGI_ERROR_INVALID_CALL, DXGI_PRESENT_TEST, IDXGISwapChain};
 use windows::core::{HRESULT, Interface};
 
-use super::{BackBufferCopy, CaptureJob, DrawSurface, DrawWindow, FrameFlow, QueueSlot, StateBackup, SurfaceEnd};
+use super::{
+    BackBufferCopy, CaptureJob, DemandFrame, DrawSurface, DrawWindow, FrameFlow, MadeSurface, PresentCost, QueueSlot,
+    StateBackup, SurfaceDemand, SurfaceEnd,
+};
 use crate::{BlockEntityAdapter, EventHub, LoaderState, TextureAdapter, WorldRenderAdapter};
 
 static SHARED: OverlayShared = OverlayShared::new();
@@ -30,6 +33,12 @@ static SHARED: OverlayShared = OverlayShared::new();
 /// and the copy window opened before the first listener; all three are drop guards, undone after the last listener
 /// (also when a panic unwinds), before the original Present. The surface fields are written back after each
 /// listener. `SurfaceLost` is raised before the loader drops anything, `RenderDeviceReset` after a new device is made.
+///
+/// On demand: when every `FramePresent` listener listens at `FramePresent::ON_DEMAND_VERSION` and no capture is to be
+/// copied, the frame makes no surface before the listeners. They get the device, size and format only; the first
+/// `prepare_surface` (or `copy_back_buffer`) of the frame makes the surface and sets up the same guards
+/// (`SurfaceDemand`), and the later listeners get it in the event. A frame where no listener asks wraps no back
+/// buffer, makes no view and saves no state. `AMML_PERF=1` adds a `perf` line of the present times (`PresentCost`).
 ///
 /// Captures (`CaptureService`): each frame of the bound chain first reads the copies in flight that are ready. A
 /// frame with a surface then copies the `GameOnly` jobs before the first listener and the `WithOverlays` jobs after
@@ -51,6 +60,7 @@ pub struct OverlayShared {
     // A resize inside `FramePresent` was logged.
     nested_resize_logged: AtomicBool,
     flow: Mutex<FrameFlow>,
+    cost: PresentCost,
 }
 
 impl OverlayShared {
@@ -68,6 +78,7 @@ impl OverlayShared {
             drawing: AtomicBool::new(false),
             nested_resize_logged: AtomicBool::new(false),
             flow: Mutex::new(FrameFlow::new()),
+            cost: PresentCost::new(),
         }
     }
 
@@ -77,12 +88,21 @@ impl OverlayShared {
 
     /// Takes the one overlay of the process for `state`. False when it was taken already.
     pub fn claim(&self, state: &'static LoaderState) -> bool {
-        self.state.set(state).is_ok()
+        let claimed = self.state.set(state).is_ok();
+        if claimed {
+            self.cost.read_env();
+        }
+        claimed
     }
 
     /// The hooks are in: the detours start to work.
     pub fn arm(&self) {
         self.armed.store(true, Ordering::Release);
+    }
+
+    /// The surface counts and the `perf` times of the presents.
+    pub fn cost(&self) -> &PresentCost {
+        &self.cost
     }
 
     pub fn present_count(&self) -> u64 {
@@ -108,6 +128,7 @@ impl OverlayShared {
         }
         let state = self.ready()?;
         self.contain("Present", None, || {
+            let since = self.cost.begin_frame();
             // SAFETY: DXGI calls Present with a live swap chain for the call.
             let chain = unsafe { IDXGISwapChain::from_raw_borrowed(&chain) }?;
             if state.shutdown().is_closing() {
@@ -123,8 +144,10 @@ impl OverlayShared {
                 return None;
             }
             let frame = self.presents.fetch_add(1, Ordering::AcqRel) + 1;
-            let listeners = state.events().has_listeners(FramePresent::ID);
+            let lowest = state.events().lowest_version(FramePresent::ID);
+            let listeners = lowest.is_some();
             let capturing = state.capture().has_work();
+            let on_demand = !capturing && lowest.is_some_and(|version| version >= FramePresent::ON_DEMAND_VERSION);
             let wanted = listeners || capturing || self.lock_flow().capture_in_flight();
             // The device is made, and a new one announced, before the frame's targets exist, so a reset listener
             // finds no back buffer held by the loader.
@@ -144,15 +167,48 @@ impl OverlayShared {
             for read in reads {
                 state.capture().deliver(read);
             }
-            let drawn = ready && (listeners || capturing);
-            let surface = if drawn { self.lock_flow().surface(state, chain) } else { None };
-            self.draw(state, frame, sync, flags, surface, listeners);
+            if on_demand {
+                let waiting = if ready { self.lock_flow().waiting_surface(state, chain) } else { None };
+                match waiting {
+                    Some(waiting) => self.draw_on_demand(state, frame, sync, flags, chain, waiting),
+                    None => self.draw(state, frame, sync, flags, None, listeners),
+                }
+            } else {
+                let drawn = ready && (listeners || capturing);
+                let made_since = self.cost.clock();
+                let surface = if drawn { self.lock_flow().surface(state, chain) } else { None };
+                if surface.is_some() {
+                    self.cost.note_surface(false, made_since);
+                }
+                self.draw(state, frame, sync, flags, surface, listeners);
+            }
             if capturing {
                 // A frame with a surface took every waiting screenshot above; these are requests that found none.
                 state.capture().expire_shots(Instant::now());
             }
             self.settle(state);
+            self.cost.end_frame(since);
             Some(frame)
+        })
+    }
+
+    /// The surface of the `FramePresent` this thread is raising now, made on the first call of the frame
+    /// (`AmmlOverlayTable::prepare_surface`). `NOT_AVAILABLE` while the detours do not work, `REFUSED` outside an
+    /// on-demand raise on this thread, `NOT_READY` when the frame can have no surface.
+    pub fn prepare_surface(&'static self) -> Result<AmmlDrawSurface, AmmlStatus> {
+        let Some(state) = self.ready() else {
+            return Err(AmmlStatus::NOT_AVAILABLE);
+        };
+        self.contain("prepare_surface", Err(AmmlStatus::NOT_READY), || {
+            SurfaceDemand::prepare(|chain| {
+                let since = self.cost.clock();
+                let surface = self.lock_flow().surface(state, chain)?;
+                self.cost.note_surface(true, since);
+                let since = self.cost.clock();
+                let made = MadeSurface::open(surface, &self.drawing);
+                self.cost.note_state_save(since);
+                Some(made)
+            })
         })
     }
 
@@ -342,8 +398,9 @@ impl OverlayShared {
 
     // Raises `FramePresent` for frame `frame` and takes its captures. With a surface, the guards are set up in this order
     // and undone in the reverse one: the wrapped back buffer is acquired, the `GameOnly` copy made, the state saved,
-    // the copy window opened and the draw flag set; the `WithOverlays` copy is made after the `NORMAL` band. With no
-    // `FramePresent` listener (`listeners` false) both copies are one and nothing is raised.
+    // the copy window opened, the draw flag set and the settled frame opened (`prepare_surface` gives the lent
+    // surface); the `WithOverlays` copy is made after the `NORMAL` band. With no surface `prepare_surface` gives
+    // `NOT_READY`. With no `FramePresent` listener (`listeners` false) both copies are one and nothing is raised.
     fn draw(
         &self,
         state: &LoaderState,
@@ -364,10 +421,13 @@ impl OverlayShared {
         let context = state.events().context_on(AmmlThread::RENDER);
         let keep = |event: &mut FramePresent| event.surface = lent;
         let Some(surface) = surface else {
+            let _settled = SurfaceDemand::open(DemandFrame::settled(None));
             state.events().raise_keeping(&mut event, &context, &keep);
             return;
         };
+        let since = self.cost.clock();
         let _acquired = surface.acquire();
+        self.cost.note_surface_time(since);
         let capture = state.capture();
         let mut game_only = capture.due(CapturePoint::BeforeListeners, frame);
         if !listeners {
@@ -376,9 +436,12 @@ impl OverlayShared {
             return;
         }
         self.copy(state, &surface, game_only);
+        let since = self.cost.clock();
         let _state = StateBackup::capture(&surface.context);
         let _copy = BackBufferCopy::open(&surface);
         let _drawing = DrawWindow::open(&self.drawing);
+        self.cost.note_state_save(since);
+        let _settled = SurfaceDemand::open(DemandFrame::settled(Some(lent)));
         state.events().raise_split_keeping(&mut event, &context, &keep, AmmlBand::NORMAL, |_| {
             let with_overlays = capture.due(CapturePoint::AfterNormalBand, frame);
             if !with_overlays.is_empty() {
@@ -388,6 +451,31 @@ impl OverlayShared {
                 self.copy(state, &surface, with_overlays);
             }
         });
+    }
+
+    // Raises `FramePresent` for frame `frame` of `chain` to listeners that take the surface on demand: they get
+    // `waiting` until one asks, and the made surface after that. The surface and its guards go when the raise ends.
+    fn draw_on_demand(
+        &self,
+        state: &LoaderState,
+        frame: u64,
+        sync: u32,
+        flags: u32,
+        chain: &IDXGISwapChain,
+        waiting: AmmlDrawSurface,
+    ) {
+        let mut event = FramePresent {
+            header: EventHub::header::<FramePresent>(AmmlPhase::BEFORE),
+            frame_id: frame,
+            sync_interval: sync,
+            flags,
+            surface: waiting,
+        };
+        let context = state.events().context_on(AmmlThread::RENDER);
+        let keep = |event: &mut FramePresent| event.surface = SurfaceDemand::current().unwrap_or(waiting);
+        let demand = SurfaceDemand::open(DemandFrame::new(chain.clone(), waiting));
+        state.events().raise_keeping(&mut event, &context, &keep);
+        drop(demand);
     }
 
     // Runs `body` for detour `entry` and gives its value. A panic is logged once, switches the overlay off, drops

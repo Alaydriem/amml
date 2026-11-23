@@ -1087,11 +1087,12 @@ fn the_block_entity_pass_needs_the_body_hook_and_the_player_vtable() {
 }
 
 // The entries both shapes of `render.block_entities` need besides the factory.
-const BLOCK_ENTITY_COMMON: [&str; 19] = [
+const BLOCK_ENTITY_COMMON: [&str; 20] = [
     "LevelRendererCamera.renderBlockEntitiesBody",
     "LevelRendererPlayer.vtable",
     "BlockActor.loadStatic",
     "BlockActor._getRenderComponent",
+    "BlockActor.mPosition",
     "DefaultDataLoadHelper.vtable",
     "BlockActorRenderDispatcher.render",
     "RenderMetadata.engaged",

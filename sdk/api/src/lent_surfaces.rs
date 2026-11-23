@@ -1,7 +1,7 @@
 use std::any::TypeId;
 use std::cell::RefCell;
 
-use amml_abi::{AmmlDrawSurface, FramePresent, OverlayCopyBackBufferFn};
+use amml_abi::{AmmlDrawSurface, FramePresent, OverlayCopyBackBufferFn, OverlayPrepareSurfaceFn};
 
 thread_local! {
     // The surfaces of the `FramePresent` calls running on this thread, innermost last.
@@ -9,12 +9,13 @@ thread_local! {
 }
 
 /// One `FramePresent` call in progress: the address of the event the listener got, the surface as
-/// the loader wrote it before the call, and the loader's copy function.
+/// the loader wrote it before the call, and the loader's copy and prepare functions.
 #[derive(Clone, Copy)]
 pub(crate) struct LentSurface {
     pub(crate) event: usize,
     pub(crate) surface: AmmlDrawSurface,
     pub(crate) copy_back_buffer: Option<OverlayCopyBackBufferFn>,
+    pub(crate) prepare_surface: Option<OverlayPrepareSurfaceFn>,
 }
 
 /// The surfaces the listener trampoline lends for one call. `FramePresentExt::surface` builds a
@@ -33,14 +34,18 @@ impl LentSurfaces {
     /// # Safety
     /// `event` points to a live `E` for the call, of at least `size_of::<E>()` bytes.
     #[allow(unsafe_code)]
-    pub(crate) unsafe fn lend<E: 'static>(event: *const E, copy_back_buffer: Option<OverlayCopyBackBufferFn>) -> Self {
+    pub(crate) unsafe fn lend<E: 'static>(
+        event: *const E,
+        copy_back_buffer: Option<OverlayCopyBackBufferFn>,
+        prepare_surface: Option<OverlayPrepareSurfaceFn>,
+    ) -> Self {
         if TypeId::of::<E>() != TypeId::of::<FramePresent>() {
             return Self { pushed: false };
         }
         let present = event.cast::<FramePresent>();
         // SAFETY: `E` is `FramePresent` and the caller guarantees the whole struct is readable.
         let surface = unsafe { core::ptr::addr_of!((*present).surface).read() };
-        let entry = LentSurface { event: present.addr(), surface, copy_back_buffer };
+        let entry = LentSurface { event: present.addr(), surface, copy_back_buffer, prepare_surface };
         let pushed = LENT.try_with(|lent| lent.borrow_mut().push(entry)).is_ok();
         Self { pushed }
     }

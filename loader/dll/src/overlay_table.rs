@@ -1,14 +1,16 @@
 use std::ffi::c_void;
 use std::path::Path;
 
-use amml_abi::{AmmlCaptureFrame, AmmlCaptureRequest, AmmlOverlayTable, AmmlShotLayers, AmmlStatus, AmmlStr};
+use amml_abi::{
+    AmmlCaptureFrame, AmmlCaptureRequest, AmmlDrawSurface, AmmlOverlayTable, AmmlShotLayers, AmmlStatus, AmmlStr,
+};
 
-use crate::{BackBufferCopy, Boundary, CaptureService, LoaderState, OverlayService};
+use crate::{BackBufferCopy, Boundary, CaptureService, LoaderState, OverlayService, OverlayShared};
 
-const TABLE_VERSION: u32 = 1;
+const TABLE_VERSION: u32 = 2;
 
 pub(crate) static OVERLAY: AmmlOverlayTable = AmmlOverlayTable {
-    size: AmmlOverlayTable::SIZE_V1,
+    size: AmmlOverlayTable::SIZE_V2,
     version: TABLE_VERSION,
     screenshot: OverlayTable::screenshot,
     open_capture: OverlayTable::open_capture,
@@ -18,13 +20,14 @@ pub(crate) static OVERLAY: AmmlOverlayTable = AmmlOverlayTable {
     close_capture: OverlayTable::close_capture,
     present_count: OverlayTable::present_count,
     copy_back_buffer: OverlayTable::copy_back_buffer,
+    prepare_surface: Some(OverlayTable::prepare_surface),
 };
 
 /// The overlay table behind `AmmlServices::overlay`, and its `extern "C"` functions. Each function checks its
 /// pointers and delegates inside the boundary, so a panic never crosses it. While an area is not offered (no overlay
-/// hooks, or the LeviLamina host), its functions give `NOT_AVAILABLE`: `overlay.surface` for `copy_back_buffer` (and
-/// `present_count` gives 0), `overlay.screenshot` for `screenshot`, `overlay.capture` for the stream functions
-/// (`capture_free_slots` gives 0).
+/// hooks, or the LeviLamina host), its functions give `NOT_AVAILABLE`: `overlay.surface` for `copy_back_buffer` and
+/// `prepare_surface` (and `present_count` gives 0), `overlay.screenshot` for `screenshot`, `overlay.capture` for the
+/// stream functions (`capture_free_slots` gives 0).
 pub struct OverlayTable;
 
 impl OverlayTable {
@@ -137,8 +140,32 @@ impl OverlayTable {
             if !Self::available() {
                 return AmmlStatus::NOT_AVAILABLE;
             }
-            // SAFETY: the caller promises a non-null `dest` is a live COM object for the call.
+            if dest.is_null() {
+                return AmmlStatus::INVALID_ARGUMENT;
+            }
+            // In an on-demand frame the copy needs the surface; in any other frame this changes nothing.
+            let _ = OverlayShared::global().prepare_surface();
+            // SAFETY: the caller promises `dest` is a live COM object for the call.
             unsafe { BackBufferCopy::copy(dest) }
+        })
+    }
+
+    unsafe extern "C" fn prepare_surface(out: *mut AmmlDrawSurface) -> AmmlStatus {
+        Boundary::guard(|| {
+            if !Self::available() {
+                return AmmlStatus::NOT_AVAILABLE;
+            }
+            if out.is_null() {
+                return AmmlStatus::INVALID_ARGUMENT;
+            }
+            match OverlayShared::global().prepare_surface() {
+                Ok(surface) => {
+                    // SAFETY: `out` is non-null and the caller promises it is writable.
+                    unsafe { out.write(surface) };
+                    AmmlStatus::OK
+                }
+                Err(status) => status,
+            }
         })
     }
 

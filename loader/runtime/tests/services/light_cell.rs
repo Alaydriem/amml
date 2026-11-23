@@ -108,3 +108,34 @@ fn a_reader_never_sees_a_mixed_light() {
         assert_eq!(reader.join().unwrap(), 0);
     }
 }
+
+#[test]
+fn the_reach_reject_never_skips_a_lit_block() {
+    let cell = LightCell::new();
+    let points = [centred([10, 70, -3], 15, 0), centred([30, 64, 20], 4, 0)];
+    cell.publish(&points);
+    for x in -10..40 {
+        for y in 50..90 {
+            for z in -22..30 {
+                let pos = [x, y, z];
+                let expected = points.iter().map(|point| point.boost(pos)).fold(2, u8::max);
+                assert_eq!(cell.boost_at(pos, 2), expected, "at {pos:?}");
+                if expected > 2 {
+                    assert!(cell.might_reach(pos));
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn getters_far_from_every_light_skip_the_read() {
+    let cell = LightCell::new();
+    assert!(!cell.might_reach([0, 0, 0]));
+    cell.publish(&[centred([10, 70, -3], 15, 0)]);
+    assert!(cell.might_reach([25, 55, 12]));
+    assert!(!cell.might_reach([26, 70, -3]));
+    assert!(!cell.might_reach([10, 54, -3]));
+    cell.publish(&[]);
+    assert!(!cell.might_reach([10, 70, -3]));
+}

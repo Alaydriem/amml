@@ -1,4 +1,6 @@
-use amml_abi::{AmmlStr, ListenFn, UnlistenFn};
+use std::any::TypeId;
+
+use amml_abi::{AmmlStr, FramePresent, ListenFn, UnlistenFn};
 
 use crate::client_tables::ClientTables;
 use crate::lent_tables::LentTables;
@@ -57,7 +59,7 @@ impl Events {
         let status = unsafe {
             (self.listen)(
                 AmmlStr::from_str(E::ID),
-                E::VERSION,
+                self.version_of::<E>(),
                 order.0,
                 required,
                 Some(ListenerCell::<F>::trampoline::<E>),
@@ -74,5 +76,15 @@ impl Events {
             return Err(ApiError::from(status));
         }
         Ok(Listener::new(self.unlisten, handle, user, ListenerCell::<F>::free))
+    }
+
+    // The version to listen to `E` at: `FramePresent::ON_DEMAND_VERSION` for a `FramePresent` when the loader serves
+    // it (`DrawSurface` then asks for the surface on first use), else the version of `E`.
+    fn version_of<E: Event>(&self) -> u32 {
+        if TypeId::of::<E>() == TypeId::of::<FramePresent>() && self.lent.prepare_surface.is_some() {
+            FramePresent::ON_DEMAND_VERSION
+        } else {
+            E::VERSION
+        }
     }
 }

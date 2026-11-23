@@ -208,6 +208,11 @@ impl EventHub {
         self.bus.has_listeners(event)
     }
 
+    /// The lowest version the listeners of `event` asked for; `None` when it has no listener.
+    pub fn lowest_version(&self, event: &str) -> Option<u32> {
+        self.bus.lowest_version(event)
+    }
+
     // Tells the screen detours whether a listener of `ScreenRender`, `ScreenChanged` or a container hover event exists,
     // after every change of the listener set. A detour reads that one flag and nothing else on its hot path.
     fn refresh_flags(&self) {
