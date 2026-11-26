@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::testing::{FakeBlock, FakeChunk, FakeItem};
-use crate::{ActorBox, BlockHandle, BlockHit, BlockPos, BlockTypeId, SurfaceSample};
+use crate::{ActorBox, ActorTypeId, BlockHandle, BlockHit, BlockPos, BlockTypeId, SurfaceSample};
 
 /// The world of a `FakeClient`: what `LocalPlayer::block_source` gives a block source for, the chunks that
 /// `BlockSource::chunk` finds there (by chunk position), the names `Blocks::type_name` gives and the surfaces
@@ -13,6 +13,10 @@ pub struct FakeWorld {
     pub names: HashMap<BlockTypeId, String>,
     /// The names `Biomes::name` gives, by biome id.
     pub biome_names: HashMap<u16, String>,
+    /// The biome id of each block, by position, that `BlockSource::biome_at` gives for a block in a loaded chunk of
+    /// `chunks`; a position not here, or in a chunk that is not loaded or not in `chunks`, gives `None`. Needs
+    /// `Area::WORLD_BIOMES.at(2)`.
+    pub biomes_at: HashMap<BlockPos, u16>,
     /// The surfaces of each column, by block x and z. `BlockSource::scan_surfaces` gives those of the column within the
     /// block ys asked, lowest first, as the loader does; the chunk of the column must be in `chunks` and loaded, or the
     /// call gives `None`.
@@ -22,6 +26,9 @@ pub struct FakeWorld {
     /// The actors `BlockSource::actors_in` looks through: it gives those whose boxes meet the box asked, in this order,
     /// at most as many as the room given.
     pub actors: Vec<ActorBox>,
+    /// The `ActorType` of each of `actors`, by the same index, that `BlockSource::actors_in_entries` gives; an index
+    /// past the end reads as `ActorTypeId(0)`.
+    pub actor_types: Vec<ActorTypeId>,
     /// The block states `Blocks::from_state` finds exactly, by the block type name and the states asked for, sorted by
     /// state name, each value as text (`2`, `true`, `north`). Needs `Area::WORLD_BLOCK_STATES`.
     pub states: HashMap<(String, Vec<(String, String)>), BlockHandle>,

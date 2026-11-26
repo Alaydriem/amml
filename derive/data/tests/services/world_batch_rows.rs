@@ -41,10 +41,12 @@ const AREAS: &[(&str, u32)] = &[
     ("world.chunk_read", 1),
     ("world.map_color", 1),
     ("world.biomes", 1),
+    ("world.biomes", 2),
     ("world.scan_surfaces", 1),
     ("world.shapes", 1),
     ("world.raycast", 1),
     ("world.actors_in", 1),
+    ("world.actors_in", 2),
     ("render.world_canvas", 2),
     ("camera.pose", 1),
     ("camera.projection", 1),
@@ -57,7 +59,8 @@ fn check_rows(file: &str, kind: NeedKind, wanted: &[(&str, u32)]) {
     let data = BuildDataStore::read(&path).unwrap();
     let rows = AdapterCatalog::availability(&|name| data.entries.contains_key(&EntryId(name.to_string())));
     for (id, version) in wanted {
-        let found: Vec<_> = rows.iter().filter(|row| row.id == *id && row.kind == kind).collect();
+        let found: Vec<_> =
+            rows.iter().filter(|row| row.id == *id && row.kind == kind && row.version >= *version).collect();
         assert!(!found.is_empty(), "{file}: no catalog row for {id}");
         assert!(found.iter().any(|row| row.shape.is_some()), "{file}: {id} has no shape: {found:?}");
         let served = AdapterCatalog::served_version(kind, id).unwrap();

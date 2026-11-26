@@ -264,8 +264,8 @@ impl FakeTables {
         let v13 = services_size >= AmmlServices::SIZE_V13;
         let network = Box::new(FakeNetworkTable::table());
         let world = Box::new(AmmlWorldTable {
-            size: AmmlWorldTable::SIZE_V9,
-            version: 9,
+            size: AmmlWorldTable::SIZE_V11,
+            version: 11,
             sky_darken: Self::world_sky_darken,
             chunk: Some(Self::world_chunk),
             chunk_load_state: Some(Self::world_chunk_load_state),
@@ -289,6 +289,8 @@ impl FakeTables {
             block_handle_of: Some(Self::world_block_handle_of),
             block_changed_state: Some(Self::world_block_changed_state),
             kinds_in_box: Some(Self::world_kinds_in_box),
+            actors_in_v2: Some(Self::world_actors_in_v2),
+            biome_at: Some(Self::world_biome_at),
         });
         let render = Box::new(AmmlRenderTable {
             size: AmmlRenderTable::SIZE_V6,
@@ -3136,10 +3138,48 @@ impl FakeTables {
         if out_count.is_null() || (out.is_null() && cap != 0) {
             return AmmlStatus::INVALID_ARGUMENT;
         }
-        let (_, fake) = match Self::world_source_check_in(source, Area::WORLD_ACTORS_IN) {
-            Ok(checked) => checked,
+        let found = match Self::world_actors_meeting(source, aabb, cap, Area::WORLD_ACTORS_IN) {
+            Ok(found) => found,
             Err(status) => return status,
         };
+        for (index, (actor, _)) in found.iter().enumerate() {
+            // SAFETY: the caller promises `cap` writable boxes at `out`, and `index < cap`.
+            unsafe { out.add(index).write(amml_abi::AmmlActorBox::from(*actor)) };
+        }
+        Self::write(out_count, found.len() as u32)
+    }
+
+    // As `world_actors_in`, with the type of each actor (`FakeWorld::actor_types`, `ActorTypeId(0)` past its end).
+    unsafe extern "C" fn world_actors_in_v2(
+        source: *const c_void,
+        aabb: amml_abi::AmmlAabb,
+        out: *mut amml_abi::AmmlActorEntry,
+        cap: u32,
+        out_count: *mut u32,
+    ) -> AmmlStatus {
+        if out_count.is_null() || (out.is_null() && cap != 0) {
+            return AmmlStatus::INVALID_ARGUMENT;
+        }
+        let found = match Self::world_actors_meeting(source, aabb, cap, Area::WORLD_ACTORS_IN.at(2)) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        for (index, (actor, actor_type)) in found.iter().enumerate() {
+            let entry = crate::ActorEntry::new(actor.aabb, *actor_type, actor.is_local_player);
+            // SAFETY: the caller promises `cap` writable entries at `out`, and `index < cap`.
+            unsafe { out.add(index).write(amml_abi::AmmlActorEntry::from(entry)) };
+        }
+        Self::write(out_count, found.len() as u32)
+    }
+
+    // The actors of the fake world of a call of `area` whose boxes meet `aabb`, at most `cap`, each with its type.
+    fn world_actors_meeting(
+        source: *const c_void,
+        aabb: amml_abi::AmmlAabb,
+        cap: u32,
+        area: Area,
+    ) -> Result<Vec<(crate::ActorBox, crate::ActorTypeId)>, AmmlStatus> {
+        let (_, fake) = Self::world_source_check_in(source, area)?;
         let asked = crate::Aabb::from(aabb);
         let meets = |actor: &crate::ActorBox| {
             let (a, b) = (actor.aabb, asked);
@@ -3150,15 +3190,41 @@ impl FakeTables {
                 && a.min.z <= b.max.z
                 && a.max.z >= b.min.z
         };
-        let found: Vec<crate::ActorBox> = fake
+        Ok(fake
             .world
-            .map(|world| world.actors.into_iter().filter(meets).take(cap as usize).collect())
-            .unwrap_or_default();
-        for (index, actor) in found.iter().enumerate() {
-            // SAFETY: the caller promises `cap` writable boxes at `out`, and `index < cap`.
-            unsafe { out.add(index).write(amml_abi::AmmlActorBox::from(*actor)) };
+            .map(|world| {
+                let types = world.actor_types;
+                world
+                    .actors
+                    .into_iter()
+                    .enumerate()
+                    .filter(|(_, actor)| meets(actor))
+                    .map(|(index, actor)| (actor, types.get(index).copied().unwrap_or_default()))
+                    .take(cap as usize)
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+
+    // The biome of a block of a loaded chunk of the fake world (`FakeWorld::biomes_at`).
+    unsafe extern "C" fn world_biome_at(source: *const c_void, pos: AmmlBlockPos, out: *mut u16) -> AmmlStatus {
+        if out.is_null() {
+            return AmmlStatus::INVALID_ARGUMENT;
         }
-        Self::write(out_count, found.len() as u32)
+        let (_, fake) = match Self::world_source_check_in(source, Area::WORLD_BIOMES.at(2)) {
+            Ok(checked) => checked,
+            Err(status) => return status,
+        };
+        let found = fake.world.and_then(|world| {
+            let loaded =
+                world.chunks.get(&(pos.x >> 4, pos.z >> 4)).is_some_and(|chunk| chunk.load == crate::ChunkLoad::Loaded);
+            let at = crate::BlockPos { x: pos.x, y: pos.y, z: pos.z };
+            loaded.then(|| world.biomes_at.get(&at).copied()).flatten()
+        });
+        match found {
+            Some(id) => Self::write(out, id),
+            None => AmmlStatus::NOT_AVAILABLE,
+        }
     }
 
     // The name of a biome of the fake world.

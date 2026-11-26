@@ -3,7 +3,8 @@ use std::sync::{Arc, Mutex};
 use amml_abi::ClientTick;
 use amml_api::testing::{FakeChunk, FakeClient, FakeGame, FakeWorld};
 use amml_api::{
-    Area, BlockSource, BlockTypeId, ChunkLoad, ColumnReadStats, ColumnRequest, ColumnSample, HookOrder, Rgba, Screen,
+    Area, BlockPos, BlockSource, BlockTypeId, ChunkLoad, ColumnReadStats, ColumnRequest, ColumnSample, HookOrder, Rgba,
+    Screen,
 };
 
 fn tick() -> ClientTick {
@@ -276,4 +277,51 @@ fn without_the_biomes_area_the_biome_is_no_biome_and_names_are_none() {
 
     assert_eq!(sample.biome, ColumnSample::NO_BIOME);
     assert_eq!(fake.ctx().biomes().name(6), None);
+}
+
+const AREAS_BIOME_AT: [Area; 4] =
+    [Area::CLIENT_READ, Area::ACTOR_READ.at(3), Area::WORLD_CHUNK_READ, Area::WORLD_BIOMES.at(2)];
+
+fn biome_world(load: ChunkLoad) -> FakeWorld {
+    let mut world = world_of(load);
+    world.biomes_at.insert(BlockPos { x: 3, y: 70, z: 4 }, 1);
+    world.biomes_at.insert(BlockPos { x: 3, y: -40, z: 4 }, 2);
+    world
+}
+
+#[test]
+fn biome_at_gives_cave_biome_under_surface() {
+    let fake = FakeGame::new();
+    fake.set_client(in_world(biome_world(ChunkLoad::Loaded)));
+
+    let (cave, surface) = with_source(&fake, &AREAS_BIOME_AT, |source| {
+        (source.biome_at(BlockPos { x: 3, y: -40, z: 4 }), source.biome_at(BlockPos { x: 3, y: 70, z: 4 }))
+    });
+
+    assert_eq!((cave, surface), (Some(2), Some(1)));
+}
+
+#[test]
+fn biome_at_unloaded_chunk_gives_none() {
+    let fake = FakeGame::new();
+    fake.set_client(in_world(biome_world(ChunkLoad::NotLoaded)));
+
+    let (not_loaded, no_chunk) = with_source(&fake, &AREAS_BIOME_AT, |source| {
+        (source.biome_at(BlockPos { x: 3, y: -40, z: 4 }), source.biome_at(BlockPos { x: 300, y: 70, z: 4 }))
+    });
+
+    assert_eq!((not_loaded, no_chunk), (None, None));
+}
+
+#[test]
+fn biome_at_without_v2_gives_none() {
+    let fake = FakeGame::new();
+    fake.set_client(in_world(biome_world(ChunkLoad::Loaded)));
+    fake.offer_area(Area::WORLD_BIOMES.at(2));
+    fake.withdraw_area(Area::WORLD_BIOMES.at(2));
+    fake.offer_area(Area::WORLD_BIOMES);
+
+    let found = with_source(&fake, &AREAS_BIOME_AT[..3], |source| source.biome_at(BlockPos { x: 3, y: -40, z: 4 }));
+
+    assert_eq!(found, None);
 }

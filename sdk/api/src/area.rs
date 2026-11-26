@@ -94,7 +94,8 @@ impl Area {
     /// The game's own map colours in `LevelChunk::read_columns` (`ColumnRequest::vanilla_colors`). Needs
     /// `WORLD_CHUNK_READ`.
     pub const WORLD_MAP_COLOR: Self = Self::v1("world.map_color");
-    /// The biome id of each column of `LevelChunk::read_columns` and `Biomes::name`. Needs `WORLD_CHUNK_READ`.
+    /// The biome id of each column of `LevelChunk::read_columns` and `Biomes::name`. Needs `WORLD_CHUNK_READ`. Version 2
+    /// (`Area::WORLD_BIOMES.at(2)`) adds `BlockSource::biome_at`, the biome of one block, cave biomes included.
     pub const WORLD_BIOMES: Self = Self::v1("world.biomes");
     /// `BlockSource::scan_surfaces`. Needs `WORLD_CHUNK_READ`.
     pub const WORLD_SCAN_SURFACES: Self = Self::v1("world.scan_surfaces");
@@ -102,7 +103,8 @@ impl Area {
     pub const WORLD_SHAPES: Self = Self::v1("world.shapes");
     /// `BlockSource::raycast`. `RayOptions::every_block` false needs `WORLD_CHUNK_READ` too.
     pub const WORLD_RAYCAST: Self = Self::v1("world.raycast");
-    /// `BlockSource::actors_in`.
+    /// `BlockSource::actors_in`. Version 2 (`Area::WORLD_ACTORS_IN.at(2)`) adds `BlockSource::actors_in_entries`, the
+    /// same actors with the `ActorType` of each.
     pub const WORLD_ACTORS_IN: Self = Self::v1("world.actors_in");
     /// `Blocks::{from_state, rotated, name, item}`: block states as owned `BlockHandle`s.
     pub const WORLD_BLOCK_STATES: Self = Self::v1("world.block_states");

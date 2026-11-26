@@ -5,15 +5,16 @@ use amml::{
     ShapesAdapter, SurfaceShape, WorldAdapter,
 };
 use amml_abi::{
-    AmmlAabb, AmmlActorBox, AmmlActorTable, AmmlApi, AmmlApplyStats, AmmlBlockHit, AmmlBlockPos, AmmlChunkLoad,
-    AmmlColumnReadStats, AmmlColumnRequest, AmmlColumnSample, AmmlFace, AmmlRayOptions, AmmlRgba, AmmlServices,
-    AmmlShapeOp, AmmlStatus, AmmlStr, AmmlSurfaceSample, AmmlVec3, AmmlWorldTable,
+    AmmlAabb, AmmlActorBox, AmmlActorEntry, AmmlActorTable, AmmlApi, AmmlApplyStats, AmmlBlockHit, AmmlBlockPos,
+    AmmlChunkLoad, AmmlColumnReadStats, AmmlColumnRequest, AmmlColumnSample, AmmlFace, AmmlRayOptions, AmmlRgba,
+    AmmlServices, AmmlShapeOp, AmmlStatus, AmmlStr, AmmlSurfaceSample, AmmlVec3, AmmlWorldTable,
 };
 use amml_runtime::ModRegistry;
 
 use crate::support::{
-    ActorGame, CLIENT_A, Candidate, ChunkGame, ChunkKind, ClientGame, ColorGame, ColorShape, EventsMod, FreeCameraGame,
-    GAME_CLIENT_A, Harness, HeapProbe, LogFile, RayGame, SessionGame, SpanOrder, SurfaceGame,
+    ActorGame, CLIENT_A, Candidate, ChunkGame, ChunkKind, ClientGame, ColorGame, ColorShape, EventsMod, FakeRegistry,
+    FakeStorage, FreeCameraGame, GAME_CLIENT_A, Harness, HeapProbe, LogFile, RayGame, SessionGame, SpanOrder,
+    SurfaceGame,
 };
 
 // Installs the session, client, actor and world adapters over every stand-in entry but `without`, for the chunk
@@ -163,13 +164,15 @@ fn chunk_handle(harness: &Harness) -> usize {
 }
 
 #[test]
-fn the_services_table_has_a_v9_world_table() {
+fn the_services_table_has_a_v11_world_table() {
     let harness = Harness::start();
     // SAFETY: the loader's tables live for the process.
     let services = unsafe { &*services(&harness) };
     assert!(services.size >= AmmlServices::SIZE_V9);
-    assert_eq!(table(&harness).size, AmmlWorldTable::SIZE_V9);
-    assert_eq!(table(&harness).version, 9);
+    assert_eq!(table(&harness).size, AmmlWorldTable::SIZE_V11);
+    assert_eq!(table(&harness).version, 11);
+    assert!(table(&harness).actors_in_v2.is_some());
+    assert!(table(&harness).biome_at.is_some());
 }
 
 #[test]
@@ -1543,6 +1546,24 @@ fn actors_in(table: &AmmlWorldTable, source: usize, aabb: AmmlAabb, cap: u32) ->
     (status, out)
 }
 
+// `actors_in_v2` of `source` for `aabb` with room for `cap` entries: the status and the entries written.
+fn actors_in_v2(table: &AmmlWorldTable, source: usize, aabb: AmmlAabb, cap: u32) -> (AmmlStatus, Vec<AmmlActorEntry>) {
+    let mut out = vec![AmmlActorEntry::default(); cap as usize];
+    let mut count = u32::MAX;
+    // SAFETY: the table is live; `out` holds `cap` entries and `count` is writable.
+    let status = unsafe {
+        (table.actors_in_v2.unwrap())(
+            std::ptr::with_exposed_provenance(source),
+            aabb,
+            out.as_mut_ptr(),
+            cap,
+            &mut count,
+        )
+    };
+    out.truncate(if status == AmmlStatus::OK { count as usize } else { 0 });
+    (status, out)
+}
+
 fn stone_at(pos: [i32; 3], face: u8) -> Candidate {
     Candidate {
         block: ChunkGame::block(ChunkKind::Stone),
@@ -1830,4 +1851,68 @@ fn actors_in_off_the_game_thread_or_with_a_bad_box_is_refused() {
     assert_eq!(off_thread, AmmlStatus::REFUSED);
     assert_eq!(not_finite, AmmlStatus::INVALID_ARGUMENT);
     assert!(RayGame::fetch_calls().is_empty());
+}
+
+#[test]
+fn without_the_actor_type_entry_actors_in_v1_is_offered_and_v2_is_not() {
+    let harness = start_with_rays(&["ActorTypeComponent.typeId"]);
+    let table = table(&harness);
+    let source = block_source_handle(&harness);
+    RayGame::add_actor([1.0, 60.0, 1.0, 1.6, 61.8, 1.6]);
+
+    assert!(harness.state.areas().is_available(WorldAdapter::ACTORS_IN, 1));
+    assert!(!harness.state.areas().is_available(WorldAdapter::ACTORS_IN, 2));
+    assert_eq!(actors_in(&table, source, QUERY, 4).1.len(), 1);
+    assert_eq!(actors_in_v2(&table, source, QUERY, 4).0, AmmlStatus::NOT_AVAILABLE);
+}
+
+#[test]
+fn with_the_actor_type_entry_actors_in_v1_and_v2_are_offered() {
+    let harness = start_with_rays(&[]);
+
+    assert!(harness.state.areas().is_available(WorldAdapter::ACTORS_IN, 1));
+    assert!(harness.state.areas().is_available(WorldAdapter::ACTORS_IN, 2));
+}
+
+#[test]
+fn actors_in_v2_gives_the_type_of_each_actor_and_marks_the_local_player() {
+    let harness = start_with_rays(&[]);
+    let table = table(&harness);
+    let source = block_source_handle(&harness);
+    // Entity 5 (version 1) holds a zombie type, entity 6 a cow type; entity 9 has no `ActorTypeComponent`.
+    let (zombie, cow, untyped) = ((1 << 18) | 5, 6, 9);
+    let mut types = FakeStorage::new(&[true], &[true], 4);
+    types.insert(zombie, 0);
+    types.insert(cow, 1);
+    types.component_mut(0).copy_from_slice(&0x30B20u32.to_le_bytes());
+    types.component_mut(1).copy_from_slice(&0x130Bu32.to_le_bytes());
+    let registry = FakeRegistry::new(&[(RayGame::ACTOR_TYPE_ID, &types)], 4);
+    RayGame::add_entity_actor([1.0, 60.0, 1.0, 1.6, 61.8, 1.6], registry.address(), zombie);
+    RayGame::add_existing_actor(ActorGame::player());
+    RayGame::add_entity_actor([2.0, 60.0, 2.0, 2.6, 61.8, 2.6], registry.address(), cow);
+    RayGame::add_entity_actor([3.0, 60.0, 3.0, 3.6, 61.8, 3.6], registry.address(), untyped);
+
+    let (status, entries) = actors_in_v2(&table, source, QUERY, 8);
+
+    assert_eq!((status, entries.len()), (AmmlStatus::OK, 4));
+    assert_eq!(entries[0].aabb, AmmlAabb { min: vec3(1.0, 60.0, 1.0), max: vec3(1.6, 61.8, 1.6) });
+    let kinds: Vec<(u32, u8)> = entries.iter().map(|entry| (entry.actor_type, entry.is_local_player)).collect();
+    // The stand-in player has no entt registry in its context, so its type reads as 0.
+    assert_eq!(kinds, [(0x30B20, 0), (0, 1), (0x130B, 0), (0, 0)]);
+}
+
+#[test]
+fn actors_in_v2_writes_at_most_the_room_given() {
+    let harness = start_with_rays(&[]);
+    let table = table(&harness);
+    let source = block_source_handle(&harness);
+    for index in 0..5 {
+        let x = index as f32;
+        RayGame::add_actor([x, 60.0, 0.0, x + 0.6, 61.8, 0.6]);
+    }
+
+    let (status, entries) = actors_in_v2(&table, source, QUERY, 3);
+
+    assert_eq!((status, entries.len()), (AmmlStatus::OK, 3));
+    assert_eq!(entries[2].aabb.min.x, 2.0);
 }

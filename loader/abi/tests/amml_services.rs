@@ -416,6 +416,8 @@ impl AreaTables {
                 block_handle_of: None,
                 block_changed_state: None,
                 kinds_in_box: None,
+                actors_in_v2: None,
+                biome_at: None,
             },
             render: AmmlRenderTable {
                 size: AmmlRenderTable::SIZE_V1,

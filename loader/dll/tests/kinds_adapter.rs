@@ -93,11 +93,12 @@ fn names(ids: &[u32]) -> Vec<String> {
 }
 
 #[test]
-fn the_world_table_is_a_v9_table_with_the_scan() {
+fn the_world_table_covers_v9_with_the_scan() {
     let harness = start_in_world();
 
-    assert_eq!(table(&harness).size, AmmlWorldTable::SIZE_V9);
-    assert_eq!(table(&harness).version, 9);
+    assert!(table(&harness).size >= AmmlWorldTable::SIZE_V9);
+    assert!(table(&harness).version >= 9);
+    assert!(table(&harness).kinds_in_box.is_some());
     assert!(harness.state.areas().is_available("world.kinds_in_box", 1));
 }
 

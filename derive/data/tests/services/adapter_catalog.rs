@@ -234,6 +234,30 @@ fn chunk_read_row_needs_the_chunk_entries_and_the_block_source_chain() {
     assert_eq!(without.missing, ["Block.mBlockType"]);
 }
 
+// The `world.actors_in` row at `version` for the entries `resolved`.
+fn actors_in_row(resolved: &[&str], version: u32) -> Availability {
+    AdapterCatalog::availability(&|name| resolved.contains(&name))
+        .into_iter()
+        .find(|row| row.id == "world.actors_in" && row.version == version)
+        .unwrap()
+}
+
+#[test]
+fn actors_in_v2_needs_the_actor_type_entry_and_v1_does_not() {
+    let need = AdapterCatalog::needs().iter().find(|need| need.id == "world.actors_in" && need.version == 2).unwrap();
+    let v2 = need.shapes[0].entries;
+    let without_type: Vec<&str> = v2.iter().copied().filter(|name| *name != "ActorTypeComponent.typeId").collect();
+
+    let v1_without = actors_in_row(&without_type, 1);
+    let v2_without = actors_in_row(&without_type, 2);
+    let (v1_with, v2_with) = (actors_in_row(v2, 1), actors_in_row(v2, 2));
+
+    assert_eq!(v1_without.shape, Some("default"));
+    assert_eq!((v2_without.shape, v2_without.missing), (None, vec!["ActorTypeComponent.typeId"]));
+    assert_eq!((v1_with.shape, v2_with.shape), (Some("default"), Some("default")));
+    assert_eq!(AdapterCatalog::served_version(NeedKind::Area, "world.actors_in"), Some(2));
+}
+
 #[test]
 fn map_color_row_has_one_shape_per_build_and_biomes_need_only_what_they_use() {
     let component = entries_of("world.map_color");

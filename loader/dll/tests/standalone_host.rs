@@ -32,6 +32,7 @@ fn the_standalone_host_also_wants_the_entries_of_the_session_events() {
             "ActorRenderDispatcher.render",
             "ActorRotationComponent.mRot",
             "ActorShaderManager.setEntityConstants",
+            "ActorTypeComponent.typeId",
             "AnimatedImageData.mImage",
             "AnimatedImageData.mType",
             "AnimatedImageData.size",
@@ -577,7 +578,7 @@ fn start_logs_coverage_defers_the_heap_check_and_works_once() {
     assert!(LoaderState::get().is_some());
     assert!(paths.mods.is_dir());
     let log = LogFile::wait_for(&paths.logs.join("loader.log"), "deferred");
-    assert!(log.contains("resolved 0/470"), "{log}");
+    assert!(log.contains("resolved 0/471"), "{log}");
     assert!(log.contains("game heap round trip deferred"), "{log}");
     assert!(!log.contains("game heap ok"), "{log}");
     assert!(StandaloneHost::start(&paths, 0x1000).is_err());

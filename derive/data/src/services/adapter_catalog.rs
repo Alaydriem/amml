@@ -640,6 +640,21 @@ static WORLD_ACTORS_IN: [AdapterShape; 1] = AdapterShape::single(
         "Dimension.getBlockSourceFromMainChunkSource",
     ],
 );
+// `world.actors_in` version 2: the v1 entries, and the `ActorType` of each actor read from its `ActorTypeComponent`
+// through the entt registry and entity id of its entity context (`Actor.mEntityContext`).
+static WORLD_ACTORS_IN_V2: [AdapterShape; 1] = AdapterShape::single(
+    "default",
+    &[
+        "BlockSource.fetchEntities",
+        "BlockSource.fetchEntitiesSpanOrder",
+        "Actor.aabbShapeComponent",
+        "ClientInstance.getLocalPlayer",
+        "Actor.getDimension",
+        "Dimension.getBlockSourceFromMainChunkSource",
+        "Actor.mEntityContext",
+        "ActorTypeComponent.typeId",
+    ],
+);
 // The block states of the game, as owned block handles: the registry lookup by name (the registry is
 // `BlockTypeRegistry.instance` + 18h, the address both instance recipes subtract 18h from) for the type, its default
 // state and the `version` of that state's serialization tag (`Block.mSerializationId`, read through the `CompoundTag`
@@ -1394,7 +1409,7 @@ static NETWORK_PACKET_WIRE: [AdapterShape; 1] = AdapterShape::single(
     ],
 );
 
-static NEEDS: [AdapterNeed; 154] = [
+static NEEDS: [AdapterNeed; 155] = [
     AdapterNeed::event("frame.update", &FRAME_UPDATE),
     AdapterNeed::event("client.tick", &CLIENT_TICK),
     AdapterNeed::event_at("client.game_tick", 2, &CLIENT_GAME_TICK),
@@ -1489,11 +1504,12 @@ static NEEDS: [AdapterNeed; 154] = [
     AdapterNeed::area("world.sky_darken", &WORLD_SKY_DARKEN),
     AdapterNeed::area("world.chunk_read", &WORLD_CHUNK_READ),
     AdapterNeed::area("world.map_color", &WORLD_MAP_COLOR),
-    AdapterNeed::area("world.biomes", &WORLD_BIOMES),
+    AdapterNeed::area_at("world.biomes", 2, &WORLD_BIOMES),
     AdapterNeed::area("world.scan_surfaces", &WORLD_SCAN_SURFACES),
     AdapterNeed::area("world.shapes", &WORLD_SHAPES),
     AdapterNeed::area("world.raycast", &WORLD_RAYCAST),
     AdapterNeed::area("world.actors_in", &WORLD_ACTORS_IN),
+    AdapterNeed::area_at("world.actors_in", 2, &WORLD_ACTORS_IN_V2),
     AdapterNeed::area("world.block_states", &WORLD_BLOCK_STATES),
     AdapterNeed::area("world.blocks", &WORLD_BLOCKS),
     AdapterNeed::area("world.kinds_in_box", &WORLD_KINDS_IN_BOX),

@@ -1,9 +1,10 @@
 use core::ffi::c_void;
 
 use crate::{
-    AmmlAabb, AmmlActorBox, AmmlApplyStats, AmmlBlockHandle, AmmlBlockHit, AmmlBlockInfo, AmmlBlockMatch, AmmlBlockPos,
-    AmmlChunkLoad, AmmlColumnReadStats, AmmlColumnRequest, AmmlColumnSample, AmmlItemSnapshot, AmmlKindsResult,
-    AmmlRayOptions, AmmlShapeOp, AmmlStateEntry, AmmlStatus, AmmlStr, AmmlSurfaceSample, AmmlVec3,
+    AmmlAabb, AmmlActorBox, AmmlActorEntry, AmmlApplyStats, AmmlBlockHandle, AmmlBlockHit, AmmlBlockInfo,
+    AmmlBlockMatch, AmmlBlockPos, AmmlChunkLoad, AmmlColumnReadStats, AmmlColumnRequest, AmmlColumnSample,
+    AmmlItemSnapshot, AmmlKindsResult, AmmlRayOptions, AmmlShapeOp, AmmlStateEntry, AmmlStatus, AmmlStr,
+    AmmlSurfaceSample, AmmlVec3,
 };
 
 /// Gives the sky darkness of `dimension` in `out` (0 for full daylight, up to 15). `dimension` is a handle that
@@ -109,6 +110,24 @@ pub type WorldActorsInFn = unsafe extern "C" fn(
     cap: u32,
     out_count: *mut u32,
 ) -> AmmlStatus;
+
+/// As `WorldActorsInFn`, with the `ActorType` of each actor: its `ActorTypeComponent`, read through the entt registry
+/// of the actor's entity context without a game call; 0 for an actor without the component. Version 10, area
+/// `world.actors_in` version 2.
+pub type WorldActorsInV2Fn = unsafe extern "C" fn(
+    source: *const c_void,
+    aabb: AmmlAabb,
+    out: *mut AmmlActorEntry,
+    cap: u32,
+    out_count: *mut u32,
+) -> AmmlStatus;
+
+/// Writes the biome id of the block at `pos` to `out`: the biome the game keeps for that block, so a cave block gives
+/// its cave biome, not the biome of the column surface. The id is the one `ColumnSample::biome` gives, and its name
+/// is read through `WorldBiomeNameFn`. `NOT_AVAILABLE` when the chunk of `pos` is not loaded or the game gives no
+/// biome there; `INVALID_ARGUMENT` for a null `out`; `REFUSED` as `raycast`. Version 11, area `world.biomes`
+/// version 2.
+pub type WorldBiomeAtFn = unsafe extern "C" fn(source: *const c_void, pos: AmmlBlockPos, out: *mut u16) -> AmmlStatus;
 
 /// Finds the block state of the block type `name` (such as `minecraft:oak_stairs`) with the `count` states at
 /// `states`, as the game reads a block tag, and writes it to `out` as a handle owned by the mod `module` and bound to
@@ -250,6 +269,8 @@ pub struct AmmlWorldTable {
     pub block_handle_of: Option<WorldBlockHandleOfFn>,
     pub block_changed_state: Option<WorldBlockChangedStateFn>,
     pub kinds_in_box: Option<WorldKindsInBoxFn>,
+    pub actors_in_v2: Option<WorldActorsInV2Fn>,
+    pub biome_at: Option<WorldBiomeAtFn>,
 }
 
 impl AmmlWorldTable {
@@ -273,6 +294,10 @@ impl AmmlWorldTable {
     pub const SIZE_V8: u32 = 184;
     /// `size` of a v9 world table: v8 plus `kinds_in_box`.
     pub const SIZE_V9: u32 = 192;
+    /// `size` of a v10 world table: v9 plus `actors_in_v2`.
+    pub const SIZE_V10: u32 = 200;
+    /// `size` of a v11 world table: v10 plus `biome_at`.
+    pub const SIZE_V11: u32 = 208;
 
     /// A copy of the table at `table`, read as far as its own `size` covers; a field a later version adds reads
     /// as zero bytes (`None`). A null table, or one shorter than v1, gives `None`.
@@ -300,4 +325,4 @@ impl AmmlWorldTable {
     }
 }
 
-const _: () = assert!(core::mem::size_of::<AmmlWorldTable>() == AmmlWorldTable::SIZE_V9 as usize);
+const _: () = assert!(core::mem::size_of::<AmmlWorldTable>() == AmmlWorldTable::SIZE_V11 as usize);

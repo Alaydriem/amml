@@ -2,7 +2,10 @@ use std::sync::{Arc, Mutex};
 
 use amml_abi::ClientTick;
 use amml_api::testing::{FakeClient, FakeGame, FakeWorld};
-use amml_api::{Aabb, ActorBox, Area, BlockHit, BlockPos, BlockSource, Face, HookOrder, RayOptions, Screen, Vec3};
+use amml_api::{
+    Aabb, ActorBox, ActorEntry, ActorTypeId, Area, BlockHit, BlockPos, BlockSource, Face, HookOrder, RayOptions,
+    Screen, Vec3,
+};
 
 fn tick() -> ClientTick {
     ClientTick { header: FakeGame::header::<ClientTick>() }
@@ -125,4 +128,99 @@ fn actors_in_gives_at_most_256_boxes() {
         with_source(&fake, &AREAS, |source| source.actors_in(aabb(vec3(-8.0, 56.0, -8.0), vec3(8.0, 72.0, 8.0))));
 
     assert_eq!(found.len(), 256);
+}
+
+const AREAS_V2: [Area; 4] =
+    [Area::CLIENT_READ, Area::ACTOR_READ.at(3), Area::WORLD_RAYCAST, Area::WORLD_ACTORS_IN.at(2)];
+
+const AROUND: Aabb = Aabb { min: Vec3 { x: -8.0, y: 56.0, z: -8.0 }, max: Vec3 { x: 8.0, y: 72.0, z: 8.0 } };
+
+fn mob_at(x: f32) -> ActorBox {
+    ActorBox { aabb: aabb(vec3(x, 60.0, 0.0), vec3(x + 0.6, 61.8, 0.6)), is_local_player: false }
+}
+
+#[test]
+fn actors_in_entries_gives_type_and_box() {
+    let fake = FakeGame::new();
+    let zombie = mob_at(1.0);
+    let player = ActorBox { is_local_player: true, ..mob_at(2.0) };
+    fake.set_client(in_world(FakeWorld {
+        actors: vec![zombie, player],
+        actor_types: vec![ActorTypeId(0x30B20), ActorTypeId(0x1313)],
+        ..FakeWorld::default()
+    }));
+
+    let (count, entries) = with_source(&fake, &AREAS_V2, |source| {
+        let mut out = [ActorEntry::default(); 8];
+        let count = source.actors_in_entries(AROUND, &mut out);
+        (count, out)
+    });
+
+    assert_eq!(count, 2);
+    assert_eq!(entries[0], ActorEntry::new(zombie.aabb, ActorTypeId(0x30B20), false));
+    assert_eq!(entries[1], ActorEntry::new(player.aabb, ActorTypeId(0x1313), true));
+}
+
+#[test]
+fn actors_in_entries_reads_a_missing_type_as_zero() {
+    let fake = FakeGame::new();
+    fake.set_client(in_world(FakeWorld {
+        actors: vec![mob_at(1.0), mob_at(2.0)],
+        actor_types: vec![ActorTypeId(0xB21)],
+        ..FakeWorld::default()
+    }));
+
+    let types = with_source(&fake, &AREAS_V2, |source| {
+        let mut out = [ActorEntry::default(); 4];
+        let count = source.actors_in_entries(AROUND, &mut out);
+        out[..count].iter().map(|entry| entry.actor_type).collect::<Vec<_>>()
+    });
+
+    assert_eq!(types, [ActorTypeId(0xB21), ActorTypeId(0)]);
+}
+
+#[test]
+fn actors_in_entries_caps_at_buffer_len() {
+    let fake = FakeGame::new();
+    let actors: Vec<ActorBox> = (0..5).map(|index| mob_at(index as f32)).collect();
+    fake.set_client(in_world(FakeWorld { actors, ..FakeWorld::default() }));
+
+    let (count, last) = with_source(&fake, &AREAS_V2, |source| {
+        let mut out = [ActorEntry::default(); 3];
+        let count = source.actors_in_entries(AROUND, &mut out);
+        (count, out[2].aabb.min.x)
+    });
+
+    assert_eq!((count, last), (3, 2.0));
+}
+
+#[test]
+fn actors_in_entries_without_v2_gives_zero() {
+    let fake = FakeGame::new();
+    fake.set_client(in_world(FakeWorld { actors: vec![mob_at(1.0)], ..FakeWorld::default() }));
+    fake.offer_area(Area::WORLD_ACTORS_IN.at(2));
+    fake.withdraw_area(Area::WORLD_ACTORS_IN.at(2));
+    fake.offer_area(Area::WORLD_ACTORS_IN);
+
+    let (count, boxes) = with_source(&fake, &AREAS_V2[..3], |source| {
+        let mut out = [ActorEntry::default(); 4];
+        (source.actors_in_entries(AROUND, &mut out), source.actors_in(AROUND))
+    });
+
+    assert_eq!(count, 0);
+    assert_eq!(boxes, vec![mob_at(1.0)]);
+}
+
+#[test]
+fn actors_in_entries_with_a_box_that_is_not_finite_gives_zero() {
+    let fake = FakeGame::new();
+    fake.set_client(in_world(FakeWorld { actors: vec![mob_at(1.0)], ..FakeWorld::default() }));
+    let bad = aabb(vec3(f32::NAN, 56.0, -8.0), vec3(8.0, 72.0, 8.0));
+
+    let count = with_source(&fake, &AREAS_V2, move |source| {
+        let mut out = [ActorEntry::default(); 4];
+        source.actors_in_entries(bad, &mut out)
+    });
+
+    assert_eq!(count, 0);
 }

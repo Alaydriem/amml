@@ -1,10 +1,10 @@
 use std::ffi::c_void;
 
 use amml_abi::{
-    AmmlAabb, AmmlActorBox, AmmlApplyStats, AmmlBlockHandle, AmmlBlockHit, AmmlBlockInfo, AmmlBlockMatch, AmmlBlockPos,
-    AmmlChunkLoad, AmmlColumnReadStats, AmmlColumnRequest, AmmlColumnSample, AmmlItemSnapshot, AmmlKindsResult,
-    AmmlRayOptions, AmmlShapeOp, AmmlStateEntry, AmmlStateValue, AmmlStatus, AmmlStr, AmmlSurfaceSample, AmmlVec3,
-    AmmlWorldTable,
+    AmmlAabb, AmmlActorBox, AmmlActorEntry, AmmlApplyStats, AmmlBlockHandle, AmmlBlockHit, AmmlBlockInfo,
+    AmmlBlockMatch, AmmlBlockPos, AmmlChunkLoad, AmmlColumnReadStats, AmmlColumnRequest, AmmlColumnSample,
+    AmmlItemSnapshot, AmmlKindsResult, AmmlRayOptions, AmmlShapeOp, AmmlStateEntry, AmmlStateValue, AmmlStatus,
+    AmmlStr, AmmlSurfaceSample, AmmlVec3, AmmlWorldTable,
 };
 use amml_runtime::BlockTagValue;
 
@@ -13,10 +13,10 @@ use crate::{
     ShapesAdapter, WorldAdapter,
 };
 
-const TABLE_VERSION: u32 = 9;
+const TABLE_VERSION: u32 = 11;
 
 pub(crate) static WORLD: AmmlWorldTable = AmmlWorldTable {
-    size: AmmlWorldTable::SIZE_V9,
+    size: AmmlWorldTable::SIZE_V11,
     version: TABLE_VERSION,
     sky_darken: WorldTable::sky_darken,
     chunk: Some(WorldTable::chunk),
@@ -41,6 +41,8 @@ pub(crate) static WORLD: AmmlWorldTable = AmmlWorldTable {
     block_handle_of: Some(WorldTable::block_handle_of),
     block_changed_state: Some(WorldTable::block_changed_state),
     kinds_in_box: Some(WorldTable::kinds_in_box),
+    actors_in_v2: Some(WorldTable::actors_in_v2),
+    biome_at: Some(WorldTable::biome_at),
 };
 
 /// The world table behind `AmmlServices::world`, and its `extern "C"` functions. Each function checks its
@@ -318,6 +320,60 @@ impl WorldTable {
                 Ok(count) => {
                     // SAFETY: `out_count` is non-null and the caller promises it is writable.
                     unsafe { out_count.write(count) };
+                    AmmlStatus::OK
+                }
+                Err(status) => status,
+            }
+        })
+    }
+
+    unsafe extern "C" fn actors_in_v2(
+        source: *const c_void,
+        aabb: AmmlAabb,
+        out: *mut AmmlActorEntry,
+        cap: u32,
+        out_count: *mut u32,
+    ) -> AmmlStatus {
+        Boundary::guard(|| {
+            if out_count.is_null()
+                || (out.is_null() && cap != 0)
+                || !Self::finite(&aabb.min)
+                || !Self::finite(&aabb.max)
+            {
+                return AmmlStatus::INVALID_ARGUMENT;
+            }
+            let entries: &mut [AmmlActorEntry] = if cap == 0 {
+                &mut []
+            } else {
+                // SAFETY: `out` is non-null and the caller promises `cap` entries are writable.
+                unsafe { std::slice::from_raw_parts_mut(out, cap as usize) }
+            };
+            let found = CameraAdapter::check_game_call()
+                .and_then(|()| WorldAdapter::get().ok_or(AmmlStatus::NOT_AVAILABLE))
+                .and_then(|adapter| adapter.actors_in_entries(source, &aabb, entries));
+            match found {
+                Ok(count) => {
+                    // SAFETY: `out_count` is non-null and the caller promises it is writable.
+                    unsafe { out_count.write(count) };
+                    AmmlStatus::OK
+                }
+                Err(status) => status,
+            }
+        })
+    }
+
+    unsafe extern "C" fn biome_at(source: *const c_void, pos: AmmlBlockPos, out: *mut u16) -> AmmlStatus {
+        Boundary::guard(|| {
+            if out.is_null() {
+                return AmmlStatus::INVALID_ARGUMENT;
+            }
+            let found = CameraAdapter::check_game_call()
+                .and_then(|()| WorldAdapter::get().ok_or(AmmlStatus::NOT_AVAILABLE))
+                .and_then(|adapter| adapter.biome_at(source, pos));
+            match found {
+                Ok(id) => {
+                    // SAFETY: `out` is non-null and the caller promises it is writable.
+                    unsafe { out.write(id) };
                     AmmlStatus::OK
                 }
                 Err(status) => status,

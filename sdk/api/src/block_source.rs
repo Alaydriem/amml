@@ -2,13 +2,13 @@ use std::ffi::c_void;
 use std::marker::PhantomData;
 
 use amml_abi::{
-    AmmlAabb, AmmlActorBox, AmmlBlockHit, AmmlBlockPos, AmmlKindsResult, AmmlRayOptions, AmmlSurfaceSample,
-    AmmlWorldTable,
+    AmmlAabb, AmmlActorBox, AmmlActorEntry, AmmlBlockHit, AmmlBlockPos, AmmlKindsResult, AmmlRayOptions,
+    AmmlSurfaceSample, AmmlWorldTable,
 };
 
 use crate::{
-    Aabb, ActorBox, ApiError, Block, BlockHit, BlockPos, BlockTypeId, Blocks, ColumnPos, KindsInBox, LevelChunk,
-    RayOptions, SurfaceSample, Vec3,
+    Aabb, ActorBox, ActorEntry, ApiError, Block, BlockHit, BlockPos, BlockTypeId, Blocks, ColumnPos, KindsInBox,
+    LevelChunk, RayOptions, SurfaceSample, Vec3,
 };
 
 /// The block source of the dimension of a `LocalPlayer` (`LocalPlayer::block_source`), as an opaque handle. Two values
@@ -188,6 +188,48 @@ impl<'f> BlockSource<'f> {
         }
         out.truncate((count as usize).min(Self::MAX_ACTORS));
         out.into_iter().map(ActorBox::from).collect()
+    }
+
+    /// The biome id at the block `pos`: the biome the game keeps for that block, so a block in a cave gives the cave
+    /// biome where `ColumnSample::biome` gives the biome of the column surface. The id is one `Biomes::name` names. `None`
+    /// when the chunk of `pos` is not loaded, when the game gives no biome there, when the loader refuses the call or
+    /// does not serve the area at version 2. Area `world.biomes` version 2 (`Area::WORLD_BIOMES.at(2)`), world table v11.
+    pub fn biome_at(&self, pos: BlockPos) -> Option<u16> {
+        let biome_at = self.world.and_then(|world| world.biome_at)?;
+        let mut id = 0u16;
+        // SAFETY: the loader checks the handle before it reads game memory; `id` is a live local.
+        #[allow(unsafe_code)]
+        let status = unsafe { biome_at(self.handle, AmmlBlockPos::from(pos), &mut id) };
+        status.is_ok().then_some(id)
+    }
+
+    /// The actors the game keeps here whose boxes meet `aabb`, written to `out` in the game's order with a copy of the
+    /// box, the `ActorType` (`ActorTypeId(0)` when the loader found none) and the local player mark; gives the number
+    /// written, at most `out.len()` and `MAX_ACTORS` (256). No heap allocation. 0 when there are none, when the box is
+    /// not finite, when the loader refuses the call or does not serve the area at version 2. Area `world.actors_in`
+    /// version 2 (`Area::WORLD_ACTORS_IN.at(2)`).
+    pub fn actors_in_entries(&self, aabb: Aabb, out: &mut [ActorEntry]) -> usize {
+        let Some(actors_in) = self.world.and_then(|world| world.actors_in_v2) else { return 0 };
+        let finite = |point: Vec3| point.x.is_finite() && point.y.is_finite() && point.z.is_finite();
+        if !finite(aabb.min) || !finite(aabb.max) {
+            return 0;
+        }
+        let mut found = [AmmlActorEntry::default(); Self::MAX_ACTORS];
+        let room = out.len().min(Self::MAX_ACTORS);
+        let mut count = 0u32;
+        // SAFETY: the loader checks the handle before it reads game memory; `found` holds at least `room` entries and
+        // `count` is a live local.
+        #[allow(unsafe_code)]
+        let status =
+            unsafe { actors_in(self.handle, AmmlAabb::from(aabb), found.as_mut_ptr(), room as u32, &mut count) };
+        if !status.is_ok() {
+            return 0;
+        }
+        let written = (count as usize).min(room);
+        for (slot, entry) in out.iter_mut().zip(&found[..written]) {
+            *slot = ActorEntry::from(*entry);
+        }
+        written
     }
 }
 

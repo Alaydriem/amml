@@ -45,12 +45,17 @@ pub enum SpanOrder {
 }
 
 // A stand-in actor for `fetchEntities`: a vtable word, a pad word, then the pointer to its box at 10h, as the stand-in
-// player of `ActorGame` (`Actor.aabbShapeComponent` 10h).
+// player of `ActorGame` (`Actor.aabbShapeComponent` 10h); then its `EntityContext` at 20h (`Actor.mEntityContext`):
+// the entity registry, the entt registry at 28h and the entity id at 30h.
 #[repr(C)]
 struct StandInActor {
     _vtable: usize,
     _pad: usize,
     aabb: *const [f32; 6],
+    _rotation: usize,
+    _entity_registry: usize,
+    entt: *const c_void,
+    entity: u32,
 }
 
 // A stand-in `_Ref_count_base` for the weak entity reference of a `HitResult`: vtable, uses, weaks (at 0Ch).
@@ -91,15 +96,18 @@ pub struct RayGame;
 impl RayGame {
     pub const CLIP_SLOT: u64 = 7;
     pub const FETCH_SLOT: u64 = 8;
+    /// `ActorTypeComponent.typeId` of 26.63 and 70.26.
+    pub const ACTOR_TYPE_ID: u32 = 0x4F6B_A419;
 
-    /// The block source entries with `BlockSource.fetchEntitiesSpanOrder` at `order`; `without` names entries to leave
-    /// out. Resets the scene.
+    /// The block source entries with `BlockSource.fetchEntitiesSpanOrder` at `order`, and `ActorTypeComponent.typeId`;
+    /// `without` names entries to leave out. Resets the scene.
     pub fn entries_in_order(without: &[&str], order: u64) -> Vec<(&'static str, Resolved)> {
         Self::reset();
         [
             ("BlockSource.clip", EntryKind::VSlot, Self::CLIP_SLOT),
             ("BlockSource.fetchEntities", EntryKind::VSlot, Self::FETCH_SLOT),
             ("BlockSource.fetchEntitiesSpanOrder", EntryKind::Field, order),
+            ("ActorTypeComponent.typeId", EntryKind::Field, u64::from(Self::ACTOR_TYPE_ID)),
         ]
         .into_iter()
         .filter(|(name, _, _)| !without.contains(name))
@@ -151,8 +159,22 @@ impl RayGame {
 
     /// Adds one stand-in actor with the box `aabb` to the actors the fetch gives; gives its address.
     pub fn add_actor(aabb: [f32; 6]) -> usize {
+        Self::add_entity_actor(aabb, std::ptr::null(), 0)
+    }
+
+    /// `add_actor` for an actor whose entity context names the entt registry `entt` (null: none) and the entity id
+    /// `entity`.
+    pub fn add_entity_actor(aabb: [f32; 6], entt: *const c_void, entity: u32) -> usize {
         let aabb = Box::new(aabb);
-        let actor = Box::new(StandInActor { _vtable: 0, _pad: 0, aabb: &raw const *aabb });
+        let actor = Box::new(StandInActor {
+            _vtable: 0,
+            _pad: 0,
+            aabb: &raw const *aabb,
+            _rotation: 0,
+            _entity_registry: 0,
+            entt,
+            entity,
+        });
         let address = std::ptr::from_ref(&*actor).addr();
         let mut scene = SCENE.lock().unwrap();
         let scene = scene.as_mut().unwrap();

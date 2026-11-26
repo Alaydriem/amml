@@ -2,8 +2,8 @@ use std::ffi::c_void;
 use std::sync::OnceLock;
 
 use amml_abi::{
-    AmmlAabb, AmmlActorBox, AmmlBlockHit, AmmlBlockPos, AmmlChunkLoad, AmmlColumnReadStats, AmmlColumnRequest,
-    AmmlColumnSample, AmmlRayOptions, AmmlStatus, AmmlSurfaceSample, AmmlThread, AmmlVec3,
+    AmmlAabb, AmmlActorBox, AmmlActorEntry, AmmlBlockHit, AmmlBlockPos, AmmlChunkLoad, AmmlColumnReadStats,
+    AmmlColumnRequest, AmmlColumnSample, AmmlRayOptions, AmmlStatus, AmmlSurfaceSample, AmmlThread, AmmlVec3,
 };
 use amml_data::{AdapterCatalog, Availability, EntryId, NeedKind};
 
@@ -25,6 +25,7 @@ enum Hook {
     Scan,
     Raycast,
     ActorsIn,
+    BiomeAt,
 }
 
 impl Hook {
@@ -39,6 +40,7 @@ impl Hook {
             Self::Scan => "BlockSource.getBrightnessPair",
             Self::Raycast => "BlockSource.clip",
             Self::ActorsIn => "BlockSource.fetchEntities",
+            Self::BiomeAt => "LevelChunk.getBiome",
         }
     }
 }
@@ -55,7 +57,7 @@ impl Hook {
 /// accepted only for a chunk given in the frame of the call.
 ///
 /// `world.raycast` and `world.actors_in` are offered only when their game calls resolved (`RaycastAdapter`,
-/// `ActorsInAdapter`).
+/// `ActorsInAdapter`); `world.actors_in` version 2 also needs the actor type of `ActorsInAdapter`.
 pub struct WorldAdapter {
     state: &'static LoaderState,
     // Offset of `mSkyDarken` in Dimension.
@@ -66,7 +68,7 @@ pub struct WorldAdapter {
     raycast: Option<RaycastAdapter>,
     actors: Option<ActorsInAdapter>,
     // The thread the calls of each hook ran on, logged once and again on a change.
-    threads: [ThreadNote; 8],
+    threads: [ThreadNote; 9],
 }
 
 impl WorldAdapter {
@@ -77,12 +79,16 @@ impl WorldAdapter {
     pub const SCAN_SURFACES: &'static str = "world.scan_surfaces";
     pub const RAYCAST: &'static str = "world.raycast";
     pub const ACTORS_IN: &'static str = "world.actors_in";
-    // The only version of `world.raycast` and of `world.actors_in`.
+    // The only version of `world.raycast`, and the first of `world.actors_in`.
     const RAY_VERSION: u32 = 1;
+    // The version of `world.actors_in` that gives the actor type.
+    const ACTORS_IN_TYPE_VERSION: u32 = 2;
     // The only version of `world.scan_surfaces`.
     const SCAN_SURFACES_VERSION: u32 = 1;
-    // The only version of `world.map_color` and of `world.biomes`.
+    // The only version of `world.map_color`, and the first of `world.biomes`.
     const COLUMN_EXTRA_VERSION: u32 = 1;
+    // The version of `world.biomes` that reads the biome at a block position.
+    const BIOME_AT_VERSION: u32 = 2;
     // The only version of `world.chunk_read`.
     const CHUNK_READ_VERSION: u32 = 1;
     // The columns of a chunk, and the samples `read_columns` takes.
@@ -112,9 +118,9 @@ impl WorldAdapter {
             chunk: if chunk_resolved { ChunkAdapter::new(state) } else { None },
             raycast: RaycastAdapter::new(state),
             actors: ActorsInAdapter::new(state),
-            threads: [const { ThreadNote::new() }; 8],
+            threads: [const { ThreadNote::new() }; 9],
         };
-        let ready: Vec<bool> = rows.iter().map(|row| adapter.ready(row.id)).collect();
+        let ready: Vec<bool> = rows.iter().map(|row| adapter.ready(row.id, row.version)).collect();
         if ADAPTER.set(adapter).is_err() {
             curia::warn!("the world adapter is already installed");
             return rows;
@@ -131,7 +137,7 @@ impl WorldAdapter {
                     } else {
                         "chunk adapter"
                     };
-                    curia::info!("area not available", { area: row.id, missing: missing });
+                    curia::info!("area not available", { area: row.id, version: row.version, missing: missing });
                 }
                 None => curia::info!("area not available", { area: row.id, missing: row.missing.join(", ") }),
             }
@@ -139,14 +145,18 @@ impl WorldAdapter {
         rows
     }
 
-    // Whether the area `area` has what it needs: every chunk area needs the chunk reads, and the column extras need
-    // their own calls; the ray and the actor areas need their game calls.
-    fn ready(&self, area: &str) -> bool {
+    // Whether the area `area` at `version` has what it needs: every chunk area needs the chunk reads, and the column
+    // extras need their own calls; the ray and the actor areas need their game calls, and the actor area at version 2
+    // the actor type.
+    fn ready(&self, area: &str, version: u32) -> bool {
         if area == Self::RAYCAST {
             return self.raycast.is_some();
         }
         if area == Self::ACTORS_IN {
-            return self.actors.is_some();
+            return self
+                .actors
+                .as_ref()
+                .is_some_and(|actors| version < Self::ACTORS_IN_TYPE_VERSION || actors.has_actor_type());
         }
         let chunk_area =
             area == Self::CHUNK_READ || area == Self::MAP_COLOR || area == Self::BIOMES || area == Self::SCAN_SURFACES;
@@ -301,6 +311,34 @@ impl WorldAdapter {
         // SAFETY: `source` is the live block source of the local player of the primary client (checked above), and the
         // call runs on the game thread.
         unsafe { actors.actors_in(source, aabb, local_player, out) }
+    }
+
+    /// As `actors_in`, with the `ActorType` of each actor (0 for an actor without one). Area `world.actors_in` version
+    /// 2.
+    pub fn actors_in_entries(
+        &self,
+        source: *const c_void,
+        aabb: &AmmlAabb,
+        out: &mut [AmmlActorEntry],
+    ) -> Result<u32, AmmlStatus> {
+        let source = self.checked_source(Self::ACTORS_IN, Self::ACTORS_IN_TYPE_VERSION, source, Hook::ActorsIn)?;
+        let actors = self.actors.as_ref().ok_or(AmmlStatus::NOT_AVAILABLE)?;
+        let local_player = ClientAdapter::get().and_then(ClientAdapter::primary_local_player);
+        // SAFETY: `source` is the live block source of the local player of the primary client (checked above), and the
+        // call runs on the game thread.
+        unsafe { actors.actors_in_entries(source, aabb, local_player, out) }
+    }
+
+    /// The biome id at the block position `pos` of `source`, a block source handle of the current world, written to the
+    /// name book of the world so `biome_name` finds its name. `NOT_AVAILABLE` for a chunk that is not loaded or a block
+    /// with no biome. Area `world.biomes` version 2.
+    pub fn biome_at(&self, source: *const c_void, pos: AmmlBlockPos) -> Result<u16, AmmlStatus> {
+        let source = self.checked_source(Self::BIOMES, Self::BIOME_AT_VERSION, source, Hook::BiomeAt)?;
+        let chunk = self.chunk.as_ref().ok_or(AmmlStatus::NOT_AVAILABLE)?;
+        let epoch = self.state.events().gate().epoch().0;
+        // SAFETY: `source` is the live block source of the local player of the primary client (checked above), and the
+        // call runs on the game thread.
+        unsafe { chunk.biome_id_at(source, [pos.x, pos.y, pos.z], epoch) }
     }
 
     /// The chunk reads, for the areas that build on them; `None` when the build has no chunk layout the loader knows.

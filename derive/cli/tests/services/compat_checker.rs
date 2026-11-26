@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use amml_data::{BuildData, BuildId, EntryId, EntryKind, Resolved};
+use amml_data::{AdapterCatalog, BuildData, BuildId, EntryId, EntryKind, Resolved};
 use amml_derive::{CompatChecker, ModUses};
 
 fn data_with(entries: &[&str]) -> BuildData {
@@ -149,4 +149,26 @@ fn an_unknown_event_needs_a_newer_loader() {
     let report = CompatChecker::check(&data_with(&[]), &[uses], &[]);
     assert!(report.rows[0].loader_too_old);
     assert_eq!(report.rows[0].missing, ["loader too old: it has no event `nope.nothing`"]);
+}
+
+fn actors_in_at(version: u32) -> ModUses {
+    let text = format!(
+        "namespace = \"a\"\nname = \"b\"\nuses {{\n  feature \"census\" {{\n    area \"world.actors_in\" {{\n      version = {version}\n      required = true\n    }}\n  }}\n}}\n"
+    );
+    ModUses::parse(Path::new("."), &text).unwrap()
+}
+
+#[test]
+fn an_area_asked_at_version_one_is_judged_by_its_version_one_row() {
+    let need = AdapterCatalog::needs().iter().find(|need| need.id == "world.actors_in" && need.version == 2).unwrap();
+    let without_type: Vec<&str> =
+        need.shapes[0].entries.iter().copied().filter(|name| *name != "ActorTypeComponent.typeId").collect();
+    let data = data_with(&without_type);
+
+    let v1 = CompatChecker::check(&data, &[actors_in_at(1)], &[]);
+    let v2 = CompatChecker::check(&data, &[actors_in_at(2)], &[]);
+
+    assert!(v1.rows[0].available, "{:?}", v1.rows[0].missing);
+    assert!(!v2.rows[0].available);
+    assert_eq!(v2.rows[0].missing, ["ActorTypeComponent.typeId"]);
 }

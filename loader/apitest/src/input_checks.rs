@@ -126,7 +126,8 @@ impl InputChecks {
         let world = client.world_active();
         let menu = client.showing_menu();
         let screen = client.top_screen();
-        let expected = player && world == Some(true) && menu == Some(false) && screen == Some(Screen::Other);
+        let expected =
+            player && world == Some(true) && menu == Some(false) && matches!(screen, Some(Screen::Hud | Screen::Other));
         if !expected && run.ticks < Self::WAIT_TICKS {
             return;
         }
@@ -539,6 +540,7 @@ impl InputChecks {
         match screen {
             Some(Screen::Start) => "Start",
             Some(Screen::Pause) => "Pause",
+            Some(Screen::Hud) => "Hud",
             Some(_) => "Other",
             None => "none",
         }

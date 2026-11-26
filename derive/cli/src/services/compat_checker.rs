@@ -37,8 +37,11 @@ impl CompatChecker {
                     feature.events.iter().map(|event| (NeedKind::Event, &event.name, event.version, event.required));
                 let areas = feature.areas.iter().map(|area| (NeedKind::Area, &area.name, area.version, area.required));
                 for (kind, name, version, required) in events.chain(areas) {
-                    let held =
-                        availability.iter().find(|row| row.id == name && row.kind == kind && row.version >= version);
+                    // The lowest catalog version that serves the asked one, whatever the row order.
+                    let held = availability
+                        .iter()
+                        .filter(|row| row.id == name && row.kind == kind && row.version >= version)
+                        .min_by_key(|row| row.version);
                     let (available, shape, missing) = match held {
                         Some(row) => (
                             row.shape.is_some(),

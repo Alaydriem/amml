@@ -3,6 +3,7 @@
 
 pub mod amml_aabb;
 pub mod amml_actor_box;
+pub mod amml_actor_entry;
 pub mod amml_actor_table;
 pub mod amml_actor_target;
 pub mod amml_amount;
@@ -148,6 +149,7 @@ pub mod world_epoch;
 
 pub use amml_aabb::AmmlAabb;
 pub use amml_actor_box::AmmlActorBox;
+pub use amml_actor_entry::AmmlActorEntry;
 pub use amml_actor_table::{
     ActorAabbFn, ActorBlockSourceFn, ActorBuildAtFn, ActorBuildDelayFn, ActorDimensionFn, ActorGameTypeFn,
     ActorHealthFn, ActorIsAliveFn, ActorPermissionLevelFn, ActorPickRangeFn, ActorPointFn, ActorRotationFn,
@@ -328,9 +330,9 @@ pub use amml_wire_connection::AmmlWireConnection;
 pub use amml_wire_dir::AmmlWireDir;
 pub use amml_world_info::AmmlWorldInfo;
 pub use amml_world_table::{
-    AmmlWorldTable, WorldActorsInFn, WorldBiomeNameFn, WorldBlockTypeNameFn, WorldChunkFn, WorldChunkLoadStateFn,
-    WorldRaycastFn, WorldReadColumnsFn, WorldScanSurfacesFn, WorldShapesApplyFn, WorldShapesMaxBatchFn,
-    WorldShapesTargetEpochFn, WorldSkyDarkenFn,
+    AmmlWorldTable, WorldActorsInFn, WorldActorsInV2Fn, WorldBiomeAtFn, WorldBiomeNameFn, WorldBlockTypeNameFn,
+    WorldChunkFn, WorldChunkLoadStateFn, WorldRaycastFn, WorldReadColumnsFn, WorldScanSurfacesFn, WorldShapesApplyFn,
+    WorldShapesMaxBatchFn, WorldShapesTargetEpochFn, WorldSkyDarkenFn,
 };
 pub use amml_world_text::AmmlWorldText;
 pub use events::{

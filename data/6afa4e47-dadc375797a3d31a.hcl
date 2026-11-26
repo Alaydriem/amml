@@ -131,6 +131,13 @@ resolved "ActorShaderManager.setEntityConstants" {
   fingerprint = "1be6df199fae002a"
 }
 
+resolved "ActorTypeComponent.typeId" {
+  kind        = "field"
+  value       = "0x4f6ba419"
+  recipes     = 2
+  fingerprint = "d6824e5f031ddd94"
+}
+
 resolved "AnimatedImageData.mImage" {
   kind        = "field"
   value       = "0x8"

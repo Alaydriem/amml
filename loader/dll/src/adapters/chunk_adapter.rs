@@ -547,6 +547,24 @@ impl ChunkAdapter {
         unsafe { self.biome_at(chunk, column) }
     }
 
+    /// The biome id at the world block position `pos` of the live block source `source`, as `sample_column` reads it, and
+    /// recorded under `epoch` so `biome_name` finds its name. `NOT_AVAILABLE` when the chunk of the column is not
+    /// loaded, the build has no biome reader or the game gives no biome.
+    ///
+    /// # Safety
+    /// `source` is the live block source of the local player of the primary client, called on the game thread.
+    pub unsafe fn biome_id_at(&self, source: usize, pos: [i32; 3], epoch: u64) -> Result<u16, AmmlStatus> {
+        let reader = self.biomes.as_ref().ok_or(AmmlStatus::NOT_AVAILABLE)?;
+        // SAFETY: as the function's contract; the arithmetic shift floors a negative position to its chunk.
+        if !unsafe { self.is_loaded(source, pos[0] >> 4, pos[2] >> 4) }? {
+            return Err(AmmlStatus::NOT_AVAILABLE);
+        }
+        // SAFETY: as the function's contract.
+        let biome = unsafe { self.biome_at_world(source, pos) };
+        // SAFETY: the game gives a live biome of the chunk, or null.
+        unsafe { reader.id(biome, epoch) }.ok_or(AmmlStatus::NOT_AVAILABLE)
+    }
+
     // The block at `pos` of the live chunk; 0 for none.
     pub(crate) unsafe fn block_at(&self, chunk: usize, pos: ChunkBlockPos) -> usize {
         // SAFETY: the entry is `Block const& LevelChunk::getBlock(ChunkBlockPos const&) const`.

@@ -7,7 +7,9 @@
 
 pub mod aabb;
 pub mod actor_box;
+pub mod actor_entry;
 pub mod actor_target;
+pub mod actor_type_id;
 pub mod actor_unique_id;
 pub mod amml_mod;
 pub mod amount;
@@ -255,7 +257,9 @@ pub mod world_storage_opened_ext;
 
 pub use aabb::Aabb;
 pub use actor_box::ActorBox;
+pub use actor_entry::ActorEntry;
 pub use actor_target::ActorTarget;
+pub use actor_type_id::ActorTypeId;
 pub use actor_unique_id::ActorUniqueId;
 pub use amml_abi::WorldEpoch;
 pub use amml_mod::AmmlMod;
