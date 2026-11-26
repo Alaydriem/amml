@@ -134,6 +134,7 @@ impl RecipeSet {
             Check::LeafStart => ("leaf_start", &[EntryKind::Function]),
             Check::InVtableOf { .. } => ("in_vtable_of", &[EntryKind::Function]),
             Check::InVtable { .. } => ("in_vtable", &[EntryKind::Function]),
+            Check::InStoredVtable => ("in_stored_vtable", &[EntryKind::Function]),
             Check::Section { .. } => ("section", &[EntryKind::Function, EntryKind::Global]),
             Check::Range { .. } => ("range", &[EntryKind::VSlot, EntryKind::Field, EntryKind::Global]),
             Check::EntryIs { .. } => {

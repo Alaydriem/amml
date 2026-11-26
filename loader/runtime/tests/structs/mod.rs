@@ -1,4 +1,13 @@
 mod amml_version;
+mod camera_kind_names;
+mod collection_names;
+mod emitter_entry;
 mod entry_table;
+mod glyph_page;
 mod grade_report;
+mod header_stamp;
 mod image_layout;
+mod light_point;
+mod panel_names;
+mod screen_kind_table;
+mod ui_scope_stack;

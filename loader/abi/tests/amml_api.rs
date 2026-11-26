@@ -3,6 +3,8 @@ use core::mem::offset_of;
 
 use amml_abi::{AMML_API_VERSION, AmmlApi, AmmlLogLevel, AmmlStatus, AmmlStr};
 
+use crate::support::TestTables;
+
 struct Stubs;
 
 impl Stubs {
@@ -48,34 +50,40 @@ impl Stubs {
             heap_new: Self::heap_new,
             heap_delete: Self::heap_delete,
             mod_dir: Self::mod_dir,
+            services: core::ptr::null(),
         }
     }
+}
+
+fn supports(api: &AmmlApi, offset: usize, size: usize) -> bool {
+    // SAFETY: `api` is a live, aligned AmmlApi.
+    unsafe { AmmlApi::supports(&raw const *api, offset, size) }
 }
 
 #[test]
 fn full_table_supports_every_field() {
     let api = Stubs::api(AmmlApi::SIZE_V1);
-    assert!(api.supports(offset_of!(AmmlApi, resolve), size_of::<usize>()));
-    assert!(api.supports(offset_of!(AmmlApi, mod_dir), size_of::<usize>()));
+    assert!(supports(&api, offset_of!(AmmlApi, resolve), size_of::<usize>()));
+    assert!(supports(&api, offset_of!(AmmlApi, mod_dir), size_of::<usize>()));
 }
 
 #[test]
 fn field_beyond_size_is_unsupported() {
     let older = Stubs::api(offset_of!(AmmlApi, mod_dir) as u32);
-    assert!(older.supports(offset_of!(AmmlApi, heap_delete), size_of::<usize>()));
-    assert!(!older.supports(offset_of!(AmmlApi, mod_dir), size_of::<usize>()));
+    assert!(supports(&older, offset_of!(AmmlApi, heap_delete), size_of::<usize>()));
+    assert!(!supports(&older, offset_of!(AmmlApi, mod_dir), size_of::<usize>()));
 }
 
 #[test]
 fn field_straddling_size_is_unsupported() {
     let api = Stubs::api(offset_of!(AmmlApi, mod_dir) as u32 + 4);
-    assert!(!api.supports(offset_of!(AmmlApi, mod_dir), size_of::<usize>()));
+    assert!(!supports(&api, offset_of!(AmmlApi, mod_dir), size_of::<usize>()));
 }
 
 #[test]
 fn overflowing_range_is_unsupported() {
     let api = Stubs::api(AmmlApi::SIZE_V1);
-    assert!(!api.supports(usize::MAX, 2));
+    assert!(!supports(&api, usize::MAX, 2));
 }
 
 #[repr(C, align(8))]
@@ -96,4 +104,41 @@ fn header_reads_a_short_table_without_touching_the_rest() {
 fn header_of_a_null_table_is_none() {
     // SAFETY: a null pointer is checked before any read.
     assert_eq!(unsafe { AmmlApi::header(core::ptr::null()) }, None);
+}
+
+#[test]
+fn a_v2_sized_table_reports_no_services() {
+    let table = TestTables::v3();
+    let mut v2 = table.api;
+    v2.size = AmmlApi::SIZE_V1;
+    // SAFETY: `v2` is a live, aligned AmmlApi.
+    assert_eq!(unsafe { AmmlApi::services(&raw const v2) }, None);
+}
+
+#[test]
+fn a_v3_table_gives_its_services_pointer() {
+    let table = TestTables::v3();
+    // SAFETY: `table.api` is a live, aligned AmmlApi of size SIZE_V3.
+    assert_eq!(unsafe { AmmlApi::services(&raw const table.api) }, Some(table.services_ptr()));
+}
+
+#[test]
+fn a_v3_table_with_a_null_services_pointer_reports_no_services() {
+    let table = TestTables::v3();
+    let mut api = table.api;
+    api.services = core::ptr::null();
+    // SAFETY: `api` is a live, aligned AmmlApi of size SIZE_V3.
+    assert_eq!(unsafe { AmmlApi::services(&raw const api) }, None);
+}
+
+#[test]
+fn services_of_a_null_table_is_none() {
+    // SAFETY: a null pointer is checked before any read.
+    assert_eq!(unsafe { AmmlApi::services(core::ptr::null()) }, None);
+}
+
+#[test]
+fn a_null_table_supports_nothing() {
+    // SAFETY: a null pointer is checked before any read.
+    assert!(!unsafe { AmmlApi::supports(core::ptr::null(), 0, 1) });
 }

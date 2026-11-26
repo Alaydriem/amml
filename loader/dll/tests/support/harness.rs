@@ -30,7 +30,18 @@ impl Harness {
         let mod_data = with_mod_data.then(|| root.path().join("mod-data"));
         let dirs = LoaderDirs::new(root.path().join("mods"), root.path().join("logs"), mod_data);
         // SAFETY: the only entries that are called are the two heap entries, which point to `HeapProbe`.
-        let state = unsafe { LoaderState::init(LoaderConfig::new(Self::BASE, Self::table(), dirs)) }.unwrap();
+        let state = unsafe { LoaderState::init(LoaderConfig::new(Self::BASE, Self::table(&[]), dirs)) }.unwrap();
+        Self { root, state }
+    }
+
+    // Like `start`, with `extra` entries in the table beside the fixed ones.
+    pub fn start_with_entries(extra: &[(&str, Resolved)]) -> Self {
+        let root = tempdir().unwrap();
+        let dirs =
+            LoaderDirs::new(root.path().join("mods"), root.path().join("logs"), Some(root.path().join("mod-data")));
+        // SAFETY: the entries that are called are the heap entries and the `extra` entries, which point to
+        // stand-in functions and vtables of the test binary.
+        let state = unsafe { LoaderState::init(LoaderConfig::new(Self::BASE, Self::table(extra), dirs)) }.unwrap();
         Self { root, state }
     }
 
@@ -84,8 +95,8 @@ impl Harness {
         fs::write(dir.join("amml.hcl"), manifest).unwrap();
     }
 
-    fn table() -> EntryTable {
-        let ids = [
+    fn table(extra: &[(&str, Resolved)]) -> EntryTable {
+        let mut ids = vec![
             "Echo.found",
             "Echo.absent",
             "Echo.slot",
@@ -95,6 +106,7 @@ impl Harness {
             "core.operator_new",
             "core.operator_delete",
         ];
+        ids.extend(extra.iter().map(|(id, _)| *id));
         let wanted: Vec<EntryId> = ids.iter().map(|id| EntryId((*id).to_string())).collect();
         let mut table = EntryTable::new(&wanted);
         let resolved = |kind, value| Resolved { kind, value, recipes_agreeing: 2 };
@@ -115,6 +127,9 @@ impl Harness {
         ];
         for (id, value) in entries {
             table.insert(EntryId(id.to_string()), value, "cache");
+        }
+        for (id, value) in extra {
+            table.insert(EntryId((*id).to_string()), *value, "cache");
         }
         table
     }

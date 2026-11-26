@@ -298,3 +298,31 @@ fn leaf_start_refuses_a_called_target_in_a_section_that_is_not_executable() {
     let img = fx.image();
     assert!(!Leaf::passes(&img, data));
 }
+
+#[test]
+fn in_stored_vtable_needs_a_table_that_code_stores_as_a_vptr_at_one_offset() {
+    let mut fx = ImageFixture::new(BASE);
+    let held = fx.put_text(&[0xC3]);
+    let unstored = fx.put_text(&[0xC3]);
+    // a non-code qword, then a table of two slots, then a table that no code stores
+    let mut bytes = 0u64.to_le_bytes().to_vec();
+    bytes.extend((BASE + u64::from(held)).to_le_bytes());
+    bytes.extend((BASE + u64::from(held)).to_le_bytes());
+    bytes.extend(0u64.to_le_bytes());
+    bytes.extend((BASE + u64::from(unstored)).to_le_bytes());
+    let data = fx.put_data(&bytes);
+    let table = data + 8;
+    // `lea rax,[rip+table]; mov [rcx+0A0h],rax; ret`
+    let site = fx.put_text(&[]);
+    let mut code = vec![0x48, 0x8D, 0x05];
+    code.extend(table.wrapping_sub(site + 7).to_le_bytes());
+    code.extend([0x48, 0x89, 0x81, 0xA0, 0x00, 0x00, 0x00, 0xC3]);
+    let start = fx.put_text(&code);
+    fx.put_function(start, start + code.len() as u32);
+    let img = fx.image();
+    let rtti = RttiIndex::new(&img);
+    let check = Check::InStoredVtable;
+
+    assert!(CheckRunner::run(&img, &rtti, &check, EntryKind::Function, u64::from(held), &BTreeMap::new()));
+    assert!(!CheckRunner::run(&img, &rtti, &check, EntryKind::Function, u64::from(unstored), &BTreeMap::new()));
+}

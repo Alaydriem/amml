@@ -11,6 +11,9 @@ pub enum Step {
     FunctionStartOf,
     // the vtable that holds the function at the cursor
     VtableHolding,
+    // the offset of the subobject whose vptr is the table holding the function at the cursor: the one displacement at
+    // which code stores that table as a vptr
+    VptrOffset,
     // `nth` absent: exactly one function must load the string
     StringXref { text: String, nth: Option<u32> },
     RttiVtable { class: String, slot: Option<u32> },
@@ -70,6 +73,7 @@ impl Step {
             Self::PatternAny { .. } => "pattern_any",
             Self::FunctionStartOf => "function_start_of",
             Self::VtableHolding => "vtable_holding",
+            Self::VptrOffset => "vptr_offset",
             Self::StringXref { .. } => "string_xref",
             Self::RttiVtable { .. } => "rtti_vtable",
             Self::Ref { .. } => "ref",
@@ -114,7 +118,9 @@ impl Step {
                 None => Err(format!("step `{}` has no value to work on", self.name())),
             },
             Self::Add { .. } => input.ok_or_else(|| format!("step `{}` has no value to work on", self.name())),
-            Self::Alternative | Self::MemberDisplacement { .. } => needs_rva().map(|()| ValueType::Number),
+            Self::Alternative | Self::MemberDisplacement { .. } | Self::VptrOffset => {
+                needs_rva().map(|()| ValueType::Number)
+            }
         }
     }
 }

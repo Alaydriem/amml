@@ -1,8 +1,8 @@
 use crate::support::Fixture;
 use amml_msvc::MsvcVec;
 use amml_msvc_fixture::{
-    fx_sizeof_vector, fx_vec_int_delete, fx_vec_int_make, fx_vec_int_sum_and_destroy_in_place, fx_vec_vec3_delete,
-    fx_vec_vec3_make, fx_vec_vec3_sum,
+    fx_sizeof_vector, fx_vec_int_delete, fx_vec_int_make, fx_vec_int_sum, fx_vec_int_sum_and_destroy_in_place,
+    fx_vec_vec3_delete, fx_vec_vec3_make, fx_vec_vec3_sum,
 };
 
 #[test]
@@ -93,4 +93,34 @@ fn set_raw_parts_repoints_the_vector_and_cpp_reads_the_new_elements() {
         mine.set_raw_parts(old[0], old[1], old[2]);
         mine.release(&heap);
     }
+}
+
+#[test]
+fn push_in_grows_a_cpp_vector_that_cpp_then_reads_and_frees() {
+    let heap = Fixture::heap();
+    // SAFETY: the probe returns a live std::vector<int> with capacity 3.
+    let p = unsafe { fx_vec_int_make(3) };
+    // SAFETY: `p` is a live std::vector<int>, which MsvcVec<i32> mirrors; nothing else uses it.
+    let v = unsafe { &mut *(p as *mut MsvcVec<i32>) };
+    // Past 1024 elements the block is a big allocation of the STL (4096 bytes or more).
+    for value in 3..1500 {
+        // SAFETY: the block came from the fixture's operator new, which the fixture heap mirrors.
+        unsafe { v.push_in(&heap, value) }.unwrap();
+    }
+    assert_eq!(v.as_slice(), (0..1500).collect::<Vec<_>>().as_slice());
+    // SAFETY: `p` is live.
+    assert_eq!(unsafe { fx_vec_int_sum(p) }, (0..1500).sum::<i32>());
+    // SAFETY: C++ frees the grown block with its own allocator; `p` is not used again.
+    unsafe { fx_vec_int_delete(p) };
+}
+
+#[test]
+fn push_in_refuses_a_vector_that_is_not_one() {
+    let mut buffer = [0i32; 4];
+    let first = buffer.as_mut_ptr();
+    let mut v = unsafe { MsvcVec::from_slice_in(&Fixture::heap(), &[0i32; 0]) }.unwrap();
+    // SAFETY: test pointers over a live buffer, in the wrong order; push_in refuses before any write.
+    unsafe { v.set_raw_parts(first.wrapping_add(2), first, first.wrapping_add(4)) };
+    // SAFETY: refused before any write or free.
+    assert!(matches!(unsafe { v.push_in(&Fixture::heap(), 1) }, Err(amml_msvc::MsvcError::BadVector)));
 }

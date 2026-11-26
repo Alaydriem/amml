@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use amml_data::{BuildId, EntryId};
 
-use super::{Degraded, Failure};
+use super::{Degraded, Failure, LayoutRefusal};
 
 // the share of entries a derive run should reach
 const TARGET_PERCENT: f64 = 95.0;
@@ -21,6 +21,8 @@ pub struct Report {
     pub stored_failures: Vec<(EntryId, String)>,
     // sorted by entry id
     pub failures: Vec<Failure>,
+    // entries refused by an `entry_is` layout gate, sorted by entry id; not failures and not counted in `total`
+    pub not_for_build: Vec<(EntryId, LayoutRefusal)>,
     // resolved entries with a failed recipe or a single unchecked recipe, sorted by entry id
     pub degraded: Vec<Degraded>,
     pub notes: BTreeMap<EntryId, String>,

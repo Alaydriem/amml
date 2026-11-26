@@ -1846,6 +1846,20 @@ resolved "LevelChunk.mSubChunks" {
   fingerprint = "f2fb83559b1a36d7"
 }
 
+resolved "LevelData.mCheatsEnabled" {
+  kind        = "field"
+  value       = "0x4c8"
+  recipes     = 2
+  fingerprint = "1e2dab39e4c6ba0e"
+}
+
+resolved "LevelData.mCommandsEnabled" {
+  kind        = "field"
+  value       = "0x4c9"
+  recipes     = 2
+  fingerprint = "8d9d78e52df5d03d"
+}
+
 resolved "LevelData.mLevelName" {
   kind        = "field"
   value       = "0x2b0"
@@ -2509,6 +2523,13 @@ resolved "Player.getPlayerGameType" {
   value       = "0x2e2100"
   recipes     = 2
   fingerprint = "78f381179070f11b"
+}
+
+resolved "Player.getPlayerPermissionLevel" {
+  kind        = "function"
+  value       = "0x2c9c70"
+  recipes     = 2
+  fingerprint = "775aa2ac8f5e1382"
 }
 
 resolved "Player.playerInventory" {

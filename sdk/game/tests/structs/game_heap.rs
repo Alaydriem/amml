@@ -63,6 +63,7 @@ impl HeapLoader {
             heap_new: Self::heap_new,
             heap_delete: Self::heap_delete,
             mod_dir: Self::mod_dir,
+            services: std::ptr::null(),
         };
         // SAFETY: the table is live and full size.
         unsafe { Api::from_raw(&raw const table, AMML_API_VERSION) }.unwrap()

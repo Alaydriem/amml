@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use amml_data::{BuildData, BuildId, Entry, EntryId, EntryKind, Recipe, RecipeSet, Resolved, Step};
+use amml_data::{BuildData, BuildId, Check, Entry, EntryId, EntryKind, OperandKind, Recipe, RecipeSet, Resolved, Step};
 use amml_derive::{Degraded, DeriveOutcome, Failure, FailureReason, ReportWriter, StepError};
 
 struct Cases;
@@ -182,4 +182,68 @@ fn the_report_lists_the_reused_entries_sorted() {
 
     let none = DeriveOutcome::new(Cases::data(&[("A", 1)]), Vec::new(), Vec::new());
     assert!(!ReportWriter::render(&ReportWriter::new(&none, &set, Cases::secs(1), true, None)).contains("## Reused"));
+}
+
+impl Cases {
+    fn guard(name: &str) -> Entry {
+        let mut entry =
+            Self::entry(name, vec![Self::pattern(), Step::Operand { index: 1, kind: OperandKind::Displacement }], "");
+        entry.kind = EntryKind::Field;
+        entry
+    }
+
+    fn gated(name: &str, guard: &str, value: u64) -> Entry {
+        let mut entry = Self::entry(name, vec![Self::pattern()], "");
+        entry.checks.push(Check::EntryIs { entry: Self::id(guard), value });
+        entry
+    }
+}
+
+#[test]
+fn an_entry_refused_by_its_layout_gate_is_listed_apart_and_left_out_of_the_count() {
+    let set = RecipeSet::new(vec![
+        Cases::guard("G"),
+        Cases::entry("A", vec![Cases::pattern()], ""),
+        Cases::gated("Old", "G", 0x1c8),
+    ])
+    .unwrap();
+    let failures = vec![Failure::new(
+        Cases::id("Old"),
+        FailureReason::CheckFailed(Check::EntryIs { entry: Cases::id("G"), value: 0x1c8 }),
+    )];
+    let out = DeriveOutcome::new(Cases::data(&[("G", 0x228), ("A", 1)]), failures, Vec::new());
+    let report = ReportWriter::new(&out, &set, Cases::secs(1), true, None);
+    let text = ReportWriter::render(&report);
+    assert!(text.contains("- derived 2/2 (100.00%)"), "{text}");
+    assert!(text.contains("- not for this build: 1"), "{text}");
+    assert!(text.contains("\n## Failures\n\nnone\n"), "{text}");
+    assert!(text.contains("\n## Not for this build\n\n| id | reason |\n| --- | --- |\n| Old | entry_is G = 0x1c8; this build has 0x228 |\n"), "{text}");
+    assert!(report.summary_line().starts_with("derived 2/2 (100.00%)"), "{}", report.summary_line());
+}
+
+#[test]
+fn a_reused_failure_refused_by_its_layout_gate_is_listed_apart_too() {
+    let set = RecipeSet::new(vec![Cases::guard("G"), Cases::gated("Old", "G", 0x1c8)]).unwrap();
+    let mut data = Cases::data(&[("G", 0x228)]);
+    data.failed.insert(Cases::id("Old"), "check failed: entry_is G = 0x1c8".to_string());
+    let mut out = DeriveOutcome::new(data, Vec::new(), Vec::new());
+    out.reused = vec![Cases::id("Old")];
+    let text = ReportWriter::render(&ReportWriter::new(&out, &set, Cases::secs(1), true, None));
+    assert!(text.contains("- derived 1/1 (100.00%)"), "{text}");
+    assert!(text.contains("| Old | entry_is G = 0x1c8; this build has 0x228 |"), "{text}");
+    assert!(!text.contains("(stored)"), "{text}");
+}
+
+#[test]
+fn an_entry_whose_gate_did_not_resolve_stays_a_failure() {
+    let set = RecipeSet::new(vec![Cases::guard("G"), Cases::gated("Old", "G", 0x1c8)]).unwrap();
+    let failures = vec![
+        Failure::new(Cases::id("G"), FailureReason::AllRecipesFailed(vec![StepError::NoMatch])),
+        Failure::new(Cases::id("Old"), FailureReason::DependencyFailed(Cases::id("G"))),
+    ];
+    let out = DeriveOutcome::new(Cases::data(&[]), failures, Vec::new());
+    let text = ReportWriter::render(&ReportWriter::new(&out, &set, Cases::secs(1), true, None));
+    assert!(text.contains("- derived 0/2 (0.00%)"), "{text}");
+    assert!(text.contains("| Old | dependency failed: G |"), "{text}");
+    assert!(!text.contains("## Not for this build"), "{text}");
 }

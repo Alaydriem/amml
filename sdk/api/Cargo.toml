@@ -1,0 +1,44 @@
+[package]
+name = "amml-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+autotests = false
+
+[lints]
+workspace = true
+
+[features]
+# `testing::FakeGame`, a v3 loader table for mod tests
+test = ["dep:amml-runtime"]
+# The draw surface as `windows` D3D11 types: `ComRef::with`, `DrawSurface::copy_back_buffer`
+d3d = ["dep:windows"]
+
+[dependencies]
+amml-abi = { path = "../../loader/abi" }
+amml-runtime = { path = "../../loader/runtime", optional = true }
+thiserror.workspace = true
+# Not the workspace entry: a mod gets the D3D11 types only, not the WinRT features of the workspace list
+windows = { version = "0.62", optional = true, features = ["Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi_Common"] }
+
+[dev-dependencies]
+# The tests use `FakeGame`; this turns the feature on when the workspace runs without features
+amml-api = { path = ".", features = ["test"] }
+# The manifest readers `Uses::to_hcl` is checked against: the compat check's `ModUses` and the loader's
+# `ModRegistry`
+amml-derive = { path = "../../derive/cli" }
+amml-runtime = { path = "../../loader/runtime" }
+tempfile.workspace = true
+# A WARP device for the `d3d` tests of the draw surface
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Direct3D",
+  "Win32_Graphics_Direct3D11",
+  "Win32_Graphics_Dxgi_Common",
+] }
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"

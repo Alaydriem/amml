@@ -1,12 +1,13 @@
 entry "PlayerListAddEntry.size" {
   kind     = "field"
-  notes    = "The size of one element of PlayerListPacketPayload::mEntries (std::vector<std::variant<RemoveEntry, AddEntry>>, the vector at packet+30h): D8h on 26.60, B8h on 26.51 (26.60 added std::string mPlayFabId to AddEntry). It is the loop step of LegacyClientNetworkHandler::handle(PlayerListPacket) (ClientNetworkHandler.handle.PlayerListPacket: 0x6bdd410 on 26.60, 0x1348a10 on 26.51), which walks the entries with `add r14,imm32`; the vector size in the same function is divided by the same size (`sar rcx,3; imul` by the inverse of 1Bh on 26.60, 17h on 26.51). One recipe, a pattern_any with one alternative per build, both with the add at offset 0, read as the immediate: on 26.60 the add falls through into the end test and the variant index test (`add r14,imm32; cmp r14,[rbp+..]; je; movzx eax,byte ptr [r14+..]; test eax,eax; je`); on 26.51 it jumps back to the loop head before the AddEntry branch (`add r14,imm32; jmp; nop; cmp eax,1; jne; mov rax,[r14+..]; xor rax,[rbp+..]`). Each alternative matches once on its own build and never on the other. Every displacement, immediate and branch byte is a wildcard. The range check keeps the value plausible."
+  notes    = "The size of one element of PlayerListPacketPayload::mEntries (std::vector<std::variant<RemoveEntry, AddEntry>>, the vector at packet+30h): D8h on 26.60 and later, B8h on 26.51 (26.60 added std::string mPlayFabId to AddEntry). It is the loop step of LegacyClientNetworkHandler::handle(PlayerListPacket) (ClientNetworkHandler.handle.PlayerListPacket), which walks the entries with `add reg,imm32`; the vector size in the same function is divided by the same size (`sar rcx,3; imul` by the inverse of 1Bh on 26.60 and later, 17h on 26.51). One recipe, a pattern_any with one alternative per loop shape, each with the add read as the immediate. Alternative 0 (26.60 to 26.63): the add falls through into the end test and the variant index test (`add r14,imm32; cmp r14,[rbp+..]; je; movzx eax,byte ptr [r14+..]; test eax,eax; je`). Alternative 1 (26.51): the add jumps back to the loop head before the AddEntry branch (`add r14,imm32; jmp; nop; cmp eax,1; jne; mov rax,[r14+..]; xor rax,[rbp+..]`). Alternative 2 (1.26.70.26): the loop head holds the entry pointer in a register and the add ends the entry with a jump back, the exit block (`mov rax,[rbp+..]; cmp rax,[rbp+..]; je`) follows it; the anchor is the last add, the one before the exit block: `add r15,imm32; jmp; mov rax,[rbp+..]; cmp rax,[rbp+..]; je`. Alternative 2 keeps the register byte of `add r15` (C7): the 26.63 handler has the same exit block after `add r14` (C6), and the byte is what keeps the two alternatives apart on that build. Each alternative matches once on its own build and never on the other builds. Every displacement, immediate and branch byte is a wildcard. The range check keeps the value plausible. What changed in 6afa4e47: the loop was rebuilt (register r14 became r15, the loop head became a jump target, the end test moved off the add); would have survived with a better recipe. Evidence on 6afa4e47: the same handler (reached by the LegacyClientNetworkHandler.vtable slot that inspect packets gives, 184 against 179) has the exit add at the end of the entry loop with the same immediate as the vector size divisor (imul by the inverse of 1Bh, so 1Bh*8 = D8h), and the exit-add shape of the 26.63 handler (`add; jmp; mov rax,[rbp+..]; cmp rax,[rbp+..]; je`, one match there) matches once in the new handler, at its last add."
 
   recipe {
     step "pattern_any" {
       patterns = [
         "49 81 C6 ?? ?? ?? ?? 4C 3B B5 ?? ?? ?? ?? 0F 84 ?? ?? ?? ?? 41 0F B6 86 ?? ?? ?? ?? 85 C0 0F 84",
         "49 81 C6 ?? ?? ?? ?? E9 ?? ?? ?? ?? ?? ?? ?? ?? 83 F8 ?? 0F 85 ?? ?? ?? ?? 49 8B 46 ?? 48 33 45",
+        "49 81 C7 ?? ?? ?? ?? E9 ?? ?? ?? ?? 48 8B 85 ?? ?? ?? ?? 48 3B 85 ?? ?? ?? ?? 0F 84",
       ]
       offset = 0
     }
@@ -24,11 +25,11 @@ entry "PlayerListAddEntry.size" {
 
 entry "PlayerListPacket.variantIndex" {
   kind     = "field"
-  notes    = "The offset of the std::variant index byte inside one PlayerListPacketPayload::mEntries element: D0h on 26.60, B0h on 26.51 (the AddEntry storage comes first and grew by 20h on 26.60). Index 0 is RemoveEntry, index 1 is AddEntry. LegacyClientNetworkHandler::handle(PlayerListPacket) (0x6bdd410 on 26.60, 0x1348a10 on 26.51) reads it at the loop head and branches on 0 and 1. One recipe: the end test and the index read (`cmp r14,[rbp+..]; je; movzx eax,byte ptr [r14+..]; test eax,eax; j..`; the last jump is je on 26.60 and jne on 26.51, so only its first opcode byte is kept), read as the displacement of the movzx. Every displacement and branch byte is a wildcard. The range check keeps the value plausible."
+  notes    = "The offset of the std::variant index byte inside one PlayerListPacketPayload::mEntries element: D0h on 26.60 and later, B0h on 26.51 (the AddEntry storage comes first and grew by 20h on 26.60). Index 0 is RemoveEntry, index 1 is AddEntry. LegacyClientNetworkHandler::handle(PlayerListPacket) (ClientNetworkHandler.handle.PlayerListPacket) reads it at the loop head and branches on 0 and 1. One recipe: the end test and the index read (`cmp reg,[rbp+..]; je; movzx eax,byte ptr [reg+..]; test eax,eax; j..`; the last jump is je on 26.60 and later and jne on 26.51, so only its first opcode byte is kept), read as the displacement of the movzx. The register bytes of the cmp (ModRM) and of the movzx are wildcards, because the loop register changed from r14 to r15 on 1.26.70.26. Every displacement and branch byte is a wildcard. The range check keeps the value plausible. What changed in 6afa4e47: only the loop register (r14 became r15, rbp stays); would have survived with a better recipe. Evidence on 6afa4e47: the pattern drafted from the 26.63 loop head matches once in the 70.26 handler (reached by the LegacyClientNetworkHandler.vtable slot that inspect packets gives, 184 against 179), and the same value D0h is the offset that the same handler adds 8 to for the element size (the variant index byte is the last byte before the end of the D8h element)."
 
   recipe {
     step "pattern" {
-      bytes  = "4C 3B B5 ?? ?? ?? ?? 0F 84 ?? ?? ?? ?? 41 0F B6 86 ?? ?? ?? ?? 85 C0 0F"
+      bytes  = "4C 3B ?? ?? ?? ?? ?? 0F 84 ?? ?? ?? ?? 41 0F B6 ?? ?? ?? ?? ?? 85 C0 0F"
       offset = 13
     }
     step "operand" {
@@ -45,12 +46,12 @@ entry "PlayerListPacket.variantIndex" {
 
 entry "PlayerListAddEntry.mSkin" {
   kind     = "field"
-  notes    = "The offset of PlayerListPacketPayload::AddEntry::mSkin (SerializedSkinRef, a shared_ptr: element at +0, control block at +8) in one mEntries element: A8h on 26.60, 88h on 26.51 (26.60 added std::string mPlayFabId before it). The stable members are mUUID at +8 and mId (ActorUniqueID) at +18h on both builds. In the AddEntry branch of LegacyClientNetworkHandler::handle(PlayerListPacket) (0x6bdd410 on 26.60, 0x1348a10 on 26.51) the entry's UUID is compared with the local player's, then the skin is tested for validity (`lea rbx,[r14+mSkin]; mov rcx,rbx; call`). One recipe: `cmp eax,1; jne; mov rax,[r14+..]; xor rax,[rbp+..]; mov rcx,[r14+..]; xor rcx,[rbp+..]; or rcx,rax; sete sil; lea rbx,[r14+..]; mov rcx,rbx; call`, read as the displacement of the lea. The same bytes match once on both builds. Every displacement, immediate and branch byte is a wildcard. The range check keeps the value plausible."
+  notes    = "The offset of PlayerListPacketPayload::AddEntry::mSkin (SerializedSkinRef, a shared_ptr: element at +0, control block at +8) in one mEntries element: A8h on 26.60 and later, 88h on 26.51 (26.60 added std::string mPlayFabId before it). The stable members are mUUID at +8 and mId (ActorUniqueID) at +18h on all builds. In the AddEntry branch of LegacyClientNetworkHandler::handle(PlayerListPacket) (ClientNetworkHandler.handle.PlayerListPacket) the entry's UUID is compared with the local player's, then the skin is tested for validity (`lea rbx,[reg+mSkin]; mov rcx,rbx; call`). One recipe: the end of that compare and the lea (`or rcx,rax; sete sil; lea rbx,[reg+..]; mov rcx,rbx; call`), read as the displacement of the lea. The compare's own loads are not in the pattern: their form changed on 1.26.70.26 (the local UUID moved from a disp8 to a disp32 frame slot and the loop register from r14 to r15). The register byte of the lea is a wildcard; every displacement, immediate and branch byte is a wildcard. The same bytes match once on 26.60 to 26.63 and on 1.26.70.26, in the one handler. The range check keeps the value plausible. What changed in 6afa4e47: the loads before the lea (register and frame displacement width); would have survived with a better recipe. Evidence on 6afa4e47: the pattern drafted from the 26.63 handler tail of the UUID compare matches once in the 70.26 handler (reached by the LegacyClientNetworkHandler.vtable slot that inspect packets gives, 184 against 179), and the lea's result is passed to the same call position as on 26.63: the AddEntry branch passes rbx (entry+mSkin) in r8 to the same call that follows the skin test (`mov rcx,rdi; mov r14,rdx; mov r8,rbx; call`) on both builds."
 
   recipe {
     step "pattern" {
-      bytes  = "83 F8 ?? 0F 85 ?? ?? ?? ?? 49 8B 46 ?? 48 33 45 ?? 49 8B 4E ?? 48 33 4D ?? 48 09 C1 40 0F 94 C6 49 8D 9E ?? ?? ?? ?? 48 89 D9 E8"
-      offset = 32
+      bytes  = "48 09 C1 40 0F 94 C6 49 8D ?? ?? ?? ?? ?? 48 89 D9 E8"
+      offset = 7
     }
     step "operand" {
       index = 1
@@ -130,11 +131,11 @@ entry "PlayerListAddEntry.mXUID" {
 
 entry "PlayerListPacket.mEntries" {
   kind     = "field"
-  notes    = "The offset of PlayerListPacketPayload::mEntries (std::vector<std::variant<RemoveEntry, AddEntry>>: begin at +0, end at +8) in PlayerListPacket: 30h on 26.60. LegacyClientNetworkHandler::handle(PlayerListPacket) (ClientNetworkHandler.handle.PlayerListPacket, 0x6bdd410 on 26.60) loads the begin and the end and divides the byte span by the element size (PlayerListAddEntry.size), then reloads both after it reserves its own list. Recipe 0 is the first load (`mov rax,[rbp+..] (the packet); mov r14,[rax+..]; mov rdx,[rax+..]; mov rcx,rdx; sub rcx,r14; sar rcx,imm; mov rax,imm64`), read as the displacement of `mov r14,[rax+..]`. Recipe 1 is the reload after the reserve call (`nop; mov rax,[rbp+..]; mov r14,[rax+..]; mov rax,[rax+..]; mov [rbp+..],rax; jmp`), read the same way. Both are in the one handler; they share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. The range check keeps the value plausible. The recipes were written on 26.60 only; 26.51 was not checked."
+  notes    = "The offset of PlayerListPacketPayload::mEntries (std::vector<std::variant<RemoveEntry, AddEntry>>: begin at +0, end at +8) in PlayerListPacket: 30h on 26.60 and later. LegacyClientNetworkHandler::handle(PlayerListPacket) (ClientNetworkHandler.handle.PlayerListPacket) loads the begin and the end and divides the byte span by the element size (PlayerListAddEntry.size), then reloads both after it reserves its own list. Recipe 0 is the first load (`mov rax,[rbp+..] (the packet); mov r14,[rax+..]; mov rdx,[rax+..]; mov rcx,rdx; sub rcx,r14; sar rcx,imm; mov rax,imm64`), read as the displacement of `mov r14,[rax+..]`; the ModRM bytes of the load and of the sub are wildcards (r14 became r15 on 1.26.70.26). Recipe 1 is the reload after the reserve call (`nop; mov rax,[rbp+..]; mov r14,[rax+..]; mov rax,[rax+..]; mov [rbp+..],rax`), read the same way, as a pattern_any with one alternative per tail: alternative 0 (26.60 to 26.63) ends with `jmp`, alternative 1 (1.26.70.26) with the two aligned loads of the loop constants (`movaps xmm6,[rip+..]; movaps xmm7,[rip+..]`). Both are in the one handler; they share no pattern bytes beyond the packet load. Every displacement, immediate and branch byte is a wildcard. The range check keeps the value plausible. What changed in 6afa4e47: the loop register (r14 became r15), and the jump after the reload became a fall-through into the loop head; would have survived with a better recipe. Evidence on 6afa4e47: the pattern of recipe 0, drafted from the 26.63 first load, matches once in the 70.26 handler (reached by the LegacyClientNetworkHandler.vtable slot that inspect packets gives, 184 against 179), and the reload of recipe 1 in the 70.26 handler reads the same displacement (30h, end at 38h) at the place where the 26.63 handler reloads after the reserve call."
 
   recipe {
     step "pattern" {
-      bytes  = "48 8B 85 ?? ?? ?? ?? 4C 8B 70 ?? 48 8B 50 ?? 48 89 D1 4C 29 F1 48 C1 F9 ?? 48 B8"
+      bytes  = "48 8B 85 ?? ?? ?? ?? 4C 8B ?? ?? 48 8B 50 ?? 48 89 D1 4C 29 ?? 48 C1 F9 ?? 48 B8"
       offset = 7
     }
     step "operand" {
@@ -144,8 +145,11 @@ entry "PlayerListPacket.mEntries" {
   }
 
   recipe {
-    step "pattern" {
-      bytes  = "90 48 8B 85 ?? ?? ?? ?? 4C 8B 70 ?? 48 8B 40 ?? 48 89 85 ?? ?? ?? ?? EB"
+    step "pattern_any" {
+      patterns = [
+        "90 48 8B 85 ?? ?? ?? ?? 4C 8B 70 ?? 48 8B 40 ?? 48 89 85 ?? ?? ?? ?? EB",
+        "90 48 8B 85 ?? ?? ?? ?? 4C 8B ?? ?? 48 8B 40 ?? 48 89 85 ?? ?? ?? ?? 0F 28 35 ?? ?? ?? ?? 0F 28 3D ?? ?? ?? ??",
+      ]
       offset = 8
     }
     step "operand" {

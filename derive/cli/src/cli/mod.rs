@@ -1,6 +1,8 @@
 pub mod build_id_args;
 pub mod callers_args;
 pub mod command;
+pub mod compat_args;
+pub mod compat_command;
 pub mod derive_args;
 pub mod derive_command;
 pub mod disasm_args;
@@ -28,6 +30,8 @@ use clap::Parser;
 pub use build_id_args::BuildIdArgs;
 pub use callers_args::CallersArgs;
 pub use command::Command;
+pub use compat_args::CompatArgs;
+pub use compat_command::CompatCommand;
 pub use derive_args::DeriveArgs;
 pub use derive_command::DeriveCommand;
 pub use disasm_args::DisasmArgs;
@@ -60,6 +64,8 @@ impl Cli {
     /// derives differ (the report is written, the data is not); 4 when an output cannot be written.
     /// `lint`: 0 without open findings, 1 with them, 2 and 4 as for `derive`; its summary goes to standard error so
     /// the report can use standard output.
+    /// `compat`: 0 when every required event of every mod is available on the build, 1 otherwise, 2 and 4 as for
+    /// `derive`; the table goes to standard output.
     /// `inspect`: 0 with the result on standard output, 2 when the executable, address, pattern or class is unusable.
     /// `signature`: 0 when every entry is known and, with `--compare`, the same; 1 when any entry changed or is
     /// unknown, 2 and 4 as for `derive`; its summary goes to standard error.
@@ -97,6 +103,16 @@ impl Cli {
                 Ok(text) => {
                     println!("{text}");
                     ExitCode::SUCCESS
+                }
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    ExitCode::from(error.exit_code())
+                }
+            },
+            Command::Compat(args) => match CompatCommand::run(args) {
+                Ok(report) => {
+                    print!("{}", report.render());
+                    ExitCode::from(report.exit_code())
                 }
                 Err(error) => {
                     eprintln!("error: {error}");

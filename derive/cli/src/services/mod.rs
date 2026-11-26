@@ -1,5 +1,6 @@
 pub mod check_runner;
 pub mod code_xref;
+pub mod compat_checker;
 pub mod deriver;
 pub mod disasm;
 pub mod entry_explainer;
@@ -27,6 +28,7 @@ pub mod vtable_reader;
 
 pub use check_runner::CheckRunner;
 pub use code_xref::CodeXref;
+pub use compat_checker::CompatChecker;
 pub use deriver::Deriver;
 pub use disasm::Disasm;
 pub use entry_explainer::EntryExplainer;

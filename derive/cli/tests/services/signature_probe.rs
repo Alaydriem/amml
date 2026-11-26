@@ -1,4 +1,4 @@
-use amml_data::{DataError, Entry, EntryId, EntryKind, Recipe, RecipeSet, Step};
+use amml_data::{DataError, Entry, EntryId, EntryKind, OperandKind, Recipe, RecipeSet, Step};
 use amml_derive::cli::SignatureCommand;
 use amml_derive::testing::ImageFixture;
 use amml_derive::{
@@ -349,4 +349,71 @@ fn a_conditional_jump_out_of_the_range_does_not_end_the_scan() {
     let signature = Probe::of(&code);
     Probe::known(&signature);
     assert_eq!(Probe::ints(&signature), vec![(Register::RCX, 32), (Register::R8, 32)]);
+}
+
+#[test]
+fn a_hooked_vslot_is_probed_at_the_function_in_its_slot_of_each_vtable_it_names() {
+    let mut fx = ImageFixture::new(BASE);
+    let two = fx.put_text(&TWO_ARGS);
+    fx.put_function(two, two + TWO_ARGS.len() as u32);
+    let three = fx.put_text(&THREE_ARGS);
+    fx.put_function(three, three + THREE_ARGS.len() as u32);
+    // two tables of two slots: A holds THREE_ARGS then TWO_ARGS, B holds TWO_ARGS then THREE_ARGS, so slot 1 holds
+    // a different function in each
+    let mut table = |slots: [u32; 2]| {
+        let bytes: Vec<u8> = slots.iter().flat_map(|rva| (BASE + u64::from(*rva)).to_le_bytes()).collect();
+        fx.put_rdata(&bytes)
+    };
+    let a = table([three, two]);
+    let b = table([two, three]);
+    // lea rax,[rip+A]; lea rbx,[rip+B]: each table is the rip target of its own lea
+    let lea = |fx: &mut ImageFixture, modrm: u8, target: u32| {
+        let at = fx.put_text(&[]);
+        let rel = (target as i32 - (at as i32 + 7)).to_le_bytes();
+        fx.put_text(&[0x48, 0x8D, modrm, rel[0], rel[1], rel[2], rel[3], 0xCC]);
+    };
+    lea(&mut fx, 0x05, a);
+    lea(&mut fx, 0x1D, b);
+    let global = |id: &str, bytes: &str| Entry {
+        id: EntryId(id.to_string()),
+        kind: EntryKind::Global,
+        msvc_name: None,
+        recipes: vec![Recipe {
+            steps: vec![
+                Step::Pattern { bytes: bytes.to_string(), offset: 0, literal_ok: Vec::new() },
+                Step::Operand { index: 1, kind: OperandKind::RipTarget },
+            ],
+        }],
+        checks: Vec::new(),
+        notes: String::new(),
+        hooked: false,
+    };
+    let slot_of = |vtable: &str| Recipe {
+        steps: vec![
+            Step::Pattern { bytes: "53 56 48 83 EC 28 89 D3".to_string(), offset: 0, literal_ok: Vec::new() },
+            Step::SlotOf { vtable: EntryId(vtable.to_string()) },
+        ],
+    };
+    let vslot = Entry {
+        id: EntryId("V".to_string()),
+        kind: EntryKind::VSlot,
+        msvc_name: None,
+        recipes: vec![slot_of("A.vtable")],
+        checks: Vec::new(),
+        notes: String::new(),
+        hooked: true,
+    };
+    let mut on_b = slot_of("B.vtable");
+    on_b.steps[0] = Step::Pattern { bytes: "53 56 41 56 48 83 EC 28".to_string(), offset: 0, literal_ok: Vec::new() };
+    let vslot = Entry { recipes: vec![vslot.recipes[0].clone(), on_b], ..vslot };
+    let set = RecipeSet::new(vec![global("A.vtable", "48 8D 05"), global("B.vtable", "48 8D 1D"), vslot]).unwrap();
+
+    let file = SignatureCommand::probe(&fx.image(), &set).unwrap();
+
+    let ids: Vec<_> = file.entries.iter().map(|entry| entry.id.0.as_str()).collect();
+    assert_eq!(ids, vec!["V", "V (B.vtable)"]);
+    assert_eq!(file.entries[0].rva, Some(two));
+    assert_eq!(file.entries[1].rva, Some(three));
+    assert_eq!(Probe::ints(&file.entries[0].signature), vec![(Register::RCX, 64), (Register::RDX, 32)]);
+    assert_eq!(Probe::ints(&file.entries[1].signature).len(), 3);
 }

@@ -1,0 +1,33 @@
+[package]
+name = "events-mod"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "events_mod"
+crate-type = ["cdylib"]
+
+[dependencies]
+amml-abi = { path = "../../../../abi" }
+
+[features]
+# The `client.tick` listener records its call and returns `PANICKED`.
+panic-listener = []
+# `amml_mod_enable` provides the table `test.table` 1.0.
+provider = []
+# `amml_mod_load` provides the table `test.table` 1.0 and `amml_mod_enable` returns `FAILED`.
+provider-fails = []
+# The `client.tick` listen is required, under the feature `ticker` of the `uses` block.
+require-tick = []
+# `amml_mod_load` makes a required `client.tick` listen.
+require-in-load = []
+# The `uses` block also holds a required area row `input.key_inject` under the feature `keys`.
+require-area = []
+# The `uses` block also holds an optional area row `input.key_inject` under the feature `keys`, and an optional
+# area row `actor.read` version 9 (newer than the loader serves) under the feature `future`.
+optional-area = []
+# The `uses` block also holds an optional area row `camera.free` under the feature `freecam`.
+free-camera = []
+# The `uses` block also holds an optional area row `world.shapes` under the feature `markers`.
+world-shapes = []

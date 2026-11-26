@@ -32,7 +32,7 @@ egui.workspace = true
 amml-i18n.workspace = true
 amml-ui.workspace = true
 curia.workspace = true
-png = "0.18.1"
+png.workspace = true
 
 [features]
 # The live component pages: one gallery page per Paper artboard, for the gallery example and the snapshot tests

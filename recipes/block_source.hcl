@@ -35,7 +35,7 @@ entry "BlockSource.clip" {
 
 entry "BlockSource.fetchEntities" {
   kind     = "vslot"
-  notes    = "Slot of `gsl::span<gsl::not_null<Actor*>> BlockSource::fetchEntities(Actor const* except, AABB const& bb, bool useHitbox, bool getDisplayEntities)` in the BlockSource vtable: 31 in 26.51. The span (the count at +0, the pointer at +8, as the implementation stores them: `mov [rdi],r8; mov [rdi+8],rcx`) comes back through a hidden buffer in rdx; except in r8, the box in r9, the two bools on the stack. The span points into a member vector of the BlockSource and is valid until the next fetch. One recipe: the body (`mov rsi,rdx; movzx edx,byte ptr [rsp+0D8h]; movzx eax,byte ptr [rsp+0D0h]; test r8,r8`, the two bool arguments and the null test of except), then function_start_of and slot_of the BlockSource vtable. The function then calls the implementation (0x2d845f0). Grade: the argument shape (two stack bools after a pointer and a reference) and the span store of the implementation. Every displacement, immediate and branch byte is a wildcard. Recipe 1 anchors in another part of the same body: the branch that wraps a non-null except pointer in a one-element span (`mov [rsp+58h],r8; mov qword ptr [rsp+98h],0; mov qword ptr [rsp+40h],1; lea r8,[rsp+58h]; mov [rsp+48h],r8; jmp`), then function_start_of and slot_of. The function is reached only through the vtable (no direct caller), so both recipes anchor in the body, as the ClientNetworkHandler handle slots do."
+  notes    = "Slot of `gsl::span<gsl::not_null<Actor*>> BlockSource::fetchEntities(Actor const* except, AABB const& bb, bool useHitbox, bool getDisplayEntities)` in the BlockSource vtable: 31 in 26.51. The span (the count at +0, the pointer at +8, as the implementation stores them: `mov [rdi],r8; mov [rdi+8],rcx`) comes back through a hidden buffer in rdx; except in r8, the box in r9, the two bools on the stack. The span points into a member vector of the BlockSource and is valid until the next fetch. One recipe: the body (`mov rsi,rdx; movzx edx,byte ptr [rsp+0D8h]; movzx eax,byte ptr [rsp+0D0h]; test r8,r8`, the two bool arguments and the null test of except), then function_start_of and slot_of the BlockSource vtable. The function then calls the implementation (0x2d845f0). Grade: the argument shape (two stack bools after a pointer and a reference) and the span store of the implementation. Every displacement, immediate and branch byte is a wildcard. Recipe 1 anchors in another part of the same body: the branch that wraps a non-null except pointer in a one-element span (`mov [rsp+58h],r8; mov qword ptr [rsp+98h],0; mov qword ptr [rsp+40h],1; lea r8,[rsp+58h]; mov [rsp+48h],r8; jmp`), then function_start_of and slot_of. The function is reached only through the vtable (no direct caller), so both recipes anchor in the body, as the ClientNetworkHandler handle slots do. What changed in 6afa4e47-dadc375797a3d31a (preview 1.26.70.26): slot 32 (one virtual was added before it). The function body is the same; the compiler writes the one-element span of the non-null except pointer in another order (the pointer to [rsp+40h] and the count 1 to [rsp+48h], where the old build wrote the count first), so recipe 1 is a pattern_any with one alternative per store order. The callee (the implementation, which holds the loop that calls getChunk) is the same function on both builds; on 6afa4e47 the span layout itself changed: the implementation stores the result as `mov [rsi],rax; mov [rsi+8],rcx` (the pointer at +0 and the count at +8), where 26.51 to 26.63 store the count at +0 and the pointer at +8, so a mod that reads the returned span must not use the count-first layout on this build (mod-code work; the entry value is the same function on every build, the span layout is not). Evidence on 6afa4e47: recipe 0 (arguments after the prologue) and recipe 1 (the span construction) are in two parts of one function and give 20h; the implementation it calls is the function that calls getChunk (slot 43), as the old one calls slot 42. Class: would have survived with a better recipe (store order), plus a new virtual in the vtable."
 
   recipe {
     step "pattern" {
@@ -48,8 +48,11 @@ entry "BlockSource.fetchEntities" {
   }
 
   recipe {
-    step "pattern" {
-      bytes = "4C 89 44 24 ?? 48 C7 84 24 ?? ?? ?? ?? ?? ?? ?? ?? 48 C7 44 24 ?? ?? ?? ?? ?? 4C 8D 44 24 ?? 4C 89 44 24 ?? EB"
+    step "pattern_any" {
+      patterns = [
+        "4C 89 44 24 ?? 48 C7 84 24 ?? ?? ?? ?? ?? ?? ?? ?? 48 C7 44 24 ?? ?? ?? ?? ?? 4C 8D 44 24 ?? 4C 89 44 24 ?? EB",
+        "4C 89 44 24 ?? 48 C7 84 24 ?? ?? ?? ?? ?? ?? ?? ?? 4C 8D 44 24 ?? 4C 89 44 24 ?? 48 C7 44 24 ?? ?? ?? ?? ?? EB",
+      ]
     }
     step "function_start_of" {}
     step "slot_of" {
@@ -60,6 +63,32 @@ entry "BlockSource.fetchEntities" {
   check "range" {
     min = 20
     max = 45
+  }
+}
+
+entry "BlockSource.fetchEntitiesSpanOrder" {
+  kind     = "field"
+  notes    = "Which word order the span that BlockSource::fetchEntities gives back has: 0 the count first and the pointer second (a gsl-style span: 26.51 to 6aed1906-b127418e74d2f2f9), 1 the pointer first and the count second (a std::span: 6afa4e47-dadc375797a3d31a). The loader (ActorsInAdapter) reads the span by this value and refuses any other value, so the world.actors_in area is not offered on a build where neither shape is found. The value is the code shape itself, read with pattern_any and the `alternative` step, as BlockType.mMaterialInline. One recipe: the epilogue of the fetchEntities body (the implementation the slot function calls, 0x32d3b80 on 6aed1906, 0x47a38c0 on 6afa4e47), right after the call that destroys its std::function argument: the load of the begin and the end of the member vector that the body filled, the subtraction, `sar reg,3` (8-byte elements: the span holds Actor pointers) and the two stores through the hidden result pointer. Alternative 0 (6aed1906, 0x32d3f58): `mov rcx,[rdi+F0h]; mov rax,[rdi+F8h]; mov rdx,rax; sub rdx,rcx; mov r8,rdx; sar r8,3; mov rsi,[rbp+F8h]; mov [rsi],r8; cmp rdx,-8; je; mov [rsi+8],rcx` (the count at +0, the begin at +8). Alternative 1 (6afa4e47, 0x47a3dc8): `mov rax,[rdi+F8h]; mov rcx,[rdi+100h]; sub rcx,rax; sar rcx,3; mov rsi,[rbp+C8h]; mov [rsi],rax; mov [rsi+8],rcx` (the begin at +0, the count at +8). The register bytes are kept: they carry which value goes to which store. Every displacement is a wildcard, and the `cmp` immediate and the branch byte of alternative 0. Kept literals: the shift count 3 (the element size; a build with another element type must fail to derive, so that the loader never reads other elements as Actor pointers) and the store displacement 8 (the second word). Each alternative matches once on its own build, inside the body function, and not at all on the other build (`inspect scan`, logs task15/scan-order-a0-63.txt .. a1-70.txt). The pattern starts after a call and ends before the next one. The check is range 0..1. Keep one alternative per value: widen an alternative with wildcards instead of adding one. New in 6afa4e47-dadc375797a3d31a for the world batch (loader plan Task 15). Class: real code change (the return type of the slot changed from a gsl span to a std::span)."
+
+  recipe {
+    step "pattern_any" {
+      patterns   = [
+        "48 8B 8F ?? ?? ?? ?? 48 8B 87 ?? ?? ?? ?? 48 89 C2 48 29 CA 49 89 D0 49 C1 F8 03 48 8B B5 ?? ?? ?? ?? 4C 89 06 48 83 FA ?? 74 ?? 48 89 4E 08",
+        "48 8B 87 ?? ?? ?? ?? 48 8B 8F ?? ?? ?? ?? 48 29 C1 48 C1 F9 03 48 8B B5 ?? ?? ?? ?? 48 89 06 48 89 4E 08",
+      ]
+      literal_ok = [
+        "0.26: sar r8,3: the 8-byte element of the span (Actor pointers); another element size must not derive",
+        "0.46: mov [rsi+8],rcx: the second word of the span, which this entry tells apart",
+        "1.20: sar rcx,3: the 8-byte element of the span (Actor pointers); another element size must not derive",
+        "1.34: mov [rsi+8],rcx: the second word of the span, which this entry tells apart",
+      ]
+    }
+    step "alternative" {}
+  }
+
+  check "range" {
+    min = 0
+    max = 1
   }
 }
 
@@ -96,7 +125,7 @@ entry "BlockSource.vtable" {
 
 entry "BlockSource.getChunk" {
   kind     = "vslot"
-  notes    = "Slot of LevelChunk* BlockSource::getChunk(int x, int z) const in the BlockSource vtable: 42 in 26.51. The LeviLamina header (IBlockSource) declares getChunk(int, int) before getChunk(ChunkPos const&), at header-order slots 41 and 42; MSVC places overloads in reverse, so the table holds getChunk(ChunkPos const&) at 41 and getChunk(int, int) at 42. The slot 42 body proves it: it stores edx and r8d as a ChunkPos on the stack and calls slot 41 with its address (`mov [rsp+28h],edx; mov [rsp+2Ch],r8d; mov rax,[rcx]; mov rax,[rax+148h]; lea rdx,[rsp+28h]; call [guard]`); slot 41 compares the ChunkPos with the cached position and tests the chunk state against 11 (Loaded). Recipe 0 is that body, then function_start_of, then slot_of in BlockSource.vtable. Recipe 1 is a call site in a non-virtual BlockSource function that loops over chunk columns (`mov rax,[rdi]; mov rax,[rax+disp]; mov rcx,rdi; mov edx,r12d; mov r8d,r15d; call [guard]; mov r14,rax; test rax,rax; je`). Recipe 2 is a call site in a function next to the Dimension code (`mov rcx,[rbp+..]; mov rax,[rcx]; mov rax,[rax+disp]; mov edx,edi; mov r8d,r14d; call [guard]; mov rdi,rax; test rax,rax; je`), which then reads the chunk. Recipes 1 and 2 read the displacement and turn it into a slot. The three recipes are in three functions. Every displacement, immediate and branch byte is a wildcard. The range check is a window around the known slot. What changed in 6ad79ee4-17d51891a1119914 (26.60), repaired in Plan 6c Task 8: register allocation changed (`mov edx,r12d` became `mov edx,r13d`). Recipe 1 now wildcards that ModRM byte and ends at the `call [guard]`. The old recipe 2 (a third call site) did not match on 26.60, and its function could not be found again with two pieces of evidence, so it was removed; recipes 0 and 1 are in two functions and agree (2Ah on both). Class: would have survived with a pattern that ends at the call and wildcards the register byte."
+  notes    = "Slot of LevelChunk* BlockSource::getChunk(int x, int z) const in the BlockSource vtable: 42 in 26.51. The LeviLamina header (IBlockSource) declares getChunk(int, int) before getChunk(ChunkPos const&), at header-order slots 41 and 42; MSVC places overloads in reverse, so the table holds getChunk(ChunkPos const&) at 41 and getChunk(int, int) at 42. The slot 42 body proves it: it stores edx and r8d as a ChunkPos on the stack and calls slot 41 with its address (`mov [rsp+28h],edx; mov [rsp+2Ch],r8d; mov rax,[rcx]; mov rax,[rax+148h]; lea rdx,[rsp+28h]; call [guard]`); slot 41 compares the ChunkPos with the cached position and tests the chunk state against 11 (Loaded). Recipe 0 is that body, then function_start_of, then slot_of in BlockSource.vtable. Recipe 1 is a call site in a non-virtual BlockSource function that loops over chunk columns (`mov rax,[rdi]; mov rax,[rax+disp]; mov rcx,rdi; mov edx,r12d; mov r8d,r15d; call [guard]; mov r14,rax; test rax,rax; je`). Recipe 2 is a call site in a function next to the Dimension code (`mov rcx,[rbp+..]; mov rax,[rcx]; mov rax,[rax+disp]; mov edx,edi; mov r8d,r14d; call [guard]; mov rdi,rax; test rax,rax; je`), which then reads the chunk. Recipes 1 and 2 read the displacement and turn it into a slot. The three recipes are in three functions. Every displacement, immediate and branch byte is a wildcard. The range check is a window around the known slot. What changed in 6ad79ee4-17d51891a1119914 (26.60), repaired in Plan 6c Task 8: register allocation changed (`mov edx,r12d` became `mov edx,r13d`). Recipe 1 now wildcards that ModRM byte and ends at the `call [guard]`. The old recipe 2 (a third call site) did not match on 26.60, and its function could not be found again with two pieces of evidence, so it was removed; recipes 0 and 1 are in two functions and agree (2Ah on both). Class: would have survived with a pattern that ends at the call and wildcards the register byte. What changed in 6afa4e47-dadc375797a3d31a (preview 1.26.70.26): the BlockSource vtable gained one virtual between slot 18 and slot 31 (getChunk(int, int) is slot 43; the chunk lookup by ChunkPos 42, fetchEntities 32; getBlock at 2 and getDimensionId at 18 did not move). Recipe 1 is now a chain in the loop function that is the implementation of fetchEntities: its AABB-copy bytes (`movdqu xmm0,[rax]; movdqa [rbp+..],xmm0; lea rax,[rbp+..]; mov [rsp+..],rax; movzx eax,byte ptr [rbp+..]`) are unique on both builds, then the getChunk call site inside that function (`mov rax,[rdi]; mov rax,[rax+disp]; mov rcx,rdi; mov edx,r12d; mov r8d,reg; call [guard]`). The REX and ModRM bytes of the `mov r8d,reg` are wildcards (it is `mov r8d,esi` now), and the chain is needed because the call-site pattern alone matches other functions once those bytes are wildcards. Evidence on 6afa4e47: recipe 0 (the body of slot 42/43, from the old body) and recipe 1 (a call site in the old fetchEntities implementation, found again by its body) both give 2Bh; the same one-slot shift shows in the other BlockSource entries. Class: would have survived with a better recipe (register byte), plus a new virtual in the vtable."
 
   recipe {
     step "pattern" {
@@ -110,7 +139,10 @@ entry "BlockSource.getChunk" {
 
   recipe {
     step "pattern" {
-      bytes  = "48 8B 07 48 8B 80 ?? ?? ?? ?? 48 89 F9 44 89 ?? 45 89 F8 FF 15"
+      bytes = "F3 0F 6F 00 66 0F 7F 45 ?? 48 8D 45 ?? 48 89 44 24 ?? 0F B6 85 ?? ?? ?? ?? 88 44 24 ??"
+    }
+    step "pattern" {
+      bytes  = "48 8B 07 48 8B 80 ?? ?? ?? ?? 48 89 F9 44 89 ?? ?? 89 ?? FF 15"
       offset = 3
     }
     step "operand" {
@@ -128,21 +160,21 @@ entry "BlockSource.getChunk" {
 
 entry "BlockSource.getBrightnessPair" {
   kind     = "function"
-  notes    = "BrightnessPair BlockSource::getBrightnessPair(BlockPos const&) const, a non-virtual member. The pair (2 bytes, sky first, block second) is returned through a hidden pointer: rcx = BlockSource this, rdx = the 2-byte result buffer, r8 = BlockPos const&; the function returns the buffer in rax. The body shows it: it looks the chunk up with BlockSource slot 41 (`mov rax,[rcx]; mov rax,[rax+148h]` on a ChunkPos of x>>4, z>>4), and when there is no chunk it copies the 2-byte default brightness at BlockSource+0E8h (`movzx eax,word ptr [rbx+0E8h]; mov [rsi],ax`); otherwise it reads the sky nibble from the sub chunk array at +8 and the block nibble from the array at +10h and stores them as `mov [rsi],r9b; mov [rsi+1],dl`, so sky is first. A thin wrapper (a function that forwards `mov rcx,[rcx+4A0h]` with rdx and r8 untouched) and a call site that passes `lea rdx,[rsp+..]; mov rcx,rsi; mov r8,rdi` and then reads the second byte of the buffer (`cmp byte ptr [rsp+2Dh],0Bh`, the block light) show the same registers. Recipe 0 is the tail of the body, the two byte stores and the stack-guard check, then function_start_of. Recipe 1 is that call site in a spawn-light function (a call right after a float compare against a constant): the target of the call is the function. They are in two functions. Every register, displacement, immediate and branch byte is a wildcard; the patterns stop before the stack-guard call. The check is function_start, which Recipe 1 can fail. What changed in 6ad79ee4-17d51891a1119914 (26.60): the function is at a new place with the same body; only the end differs: the second byte store uses another register (`mov [rsi],r9b; mov [rsi+1],r10b`) and the stack-guard check is done in another order (`mov rax,[rsp+28h]; xor rax,rsp; mov rcx,[rip+..]; cmp rcx,rax; jne` instead of `mov rcx,[rsp+28h]; xor rcx,rsp; cmp rcx,[rip+..]; jne`). The old recipe 0 matched nothing; it is a pattern_any with one alternative per build now. Class: would have survived with a better recipe (register and guard-order bytes wildcarded, or an anchor away from the guard). Cold run result: degraded (recipe 0 no match, the call site agreed)."
+  notes    = "BrightnessPair BlockSource::getBrightnessPair(BlockPos const&) const, a non-virtual member. The pair (2 bytes, sky first, block second) is returned through a hidden pointer: rcx = BlockSource this, rdx = the 2-byte result buffer, r8 = BlockPos const&; the function returns the buffer in rax. The body shows it: it looks the chunk up with BlockSource slot 41 (`mov rax,[rcx]; mov rax,[rax+148h]` on a ChunkPos of x>>4, z>>4), and when there is no chunk it copies the 2-byte default brightness at BlockSource+0E8h (`movzx eax,word ptr [rbx+0E8h]; mov [rsi],ax`); otherwise it reads the sky nibble from the sub chunk array at +8 and the block nibble from the array at +10h and stores them as `mov [rsi],r9b; mov [rsi+1],dl`, so sky is first. A thin wrapper (a function that forwards `mov rcx,[rcx+4A0h]` with rdx and r8 untouched) and a call site that passes `lea rdx,[rsp+..]; mov rcx,rsi; mov r8,rdi` and then reads the second byte of the buffer (`cmp byte ptr [rsp+2Dh],0Bh`, the block light) show the same registers. Recipe 0 is the tail of the body, the two byte stores and the stack-guard check, then function_start_of. Recipe 1 is that call site in a spawn-light function (a call right after a float compare against a constant): the target of the call is the function. They are in two functions. Every register, displacement, immediate and branch byte is a wildcard; the patterns stop before the stack-guard call. The check is function_start, which Recipe 1 can fail. What changed in 6ad79ee4-17d51891a1119914 (26.60): the function is at a new place with the same body; only the end differs: the second byte store uses another register (`mov [rsi],r9b; mov [rsi+1],r10b`) and the stack-guard check is done in another order (`mov rax,[rsp+28h]; xor rax,rsp; mov rcx,[rip+..]; cmp rcx,rax; jne` instead of `mov rcx,[rsp+28h]; xor rcx,rsp; cmp rcx,[rip+..]; jne`). The old recipe 0 matched nothing; it is a pattern_any with one alternative per build now. Class: would have survived with a better recipe (register and guard-order bytes wildcarded, or an anchor away from the guard). Cold run result: degraded (recipe 0 no match, the call site agreed). What changed in 6afa4e47-dadc375797a3d31a (preview 1.26.70.26): the function now looks up the sub chunk with a helper call that writes the two bytes into the result buffer, so the old tail (two byte stores, then the guard) is gone, and the thin wrapper that forwarded to it (the member at +4A0h, now +4C0h) holds a copy of the same body with the same tail, so a tail anchor matches two functions. Recipe 0 is now the head of the body (the ChunkPos shifts, the chunk lookup call through the BlockSource vtable, `lea rdx,[rsp+..]`, call [guard]), then function_start_of; it has the BlockSource in rcx and is unique on 6aed1906 and 6afa4e47 (the wrapper loads its member first). Recipe 1 is a pattern_any with one alternative per caller: 26.51 to 26.63 the spawn-light function (a call after a float compare, then `cmp byte ptr [rsp+..],0Bh`), and on 6afa4e47 the one direct caller that reads the two result bytes (`lea rdx,[rsp+..]; lea rbx,[rsp+..]; mov rcx,rsi; mov r8,rbx; call; shl edi,8; movzx eax,word ptr [rsp+..]`); most other callers inline the body now (the function is small). Evidence on 6afa4e47: the head anchor (drafted from the old function start, unique on both builds) and the call site of the remaining direct caller give the same function; the twin wrapper has no direct caller. The second piece is weaker than for other entries because the old callers moved or were inlined. Class: real code change (inlined callers, helper call)."
 
   recipe {
-    step "pattern_any" {
-      patterns = [
-        "44 88 ?? 88 ?? ?? 48 8B 4C 24 ?? 48 31 E1 48 3B 0D ?? ?? ?? ?? 75 ?? 48 89 F0",
-        "44 88 ?? 44 88 ?? ?? 48 8B 44 24 ?? 48 31 E0 48 8B 0D ?? ?? ?? ?? 48 39 C1 75 ?? 48 89 F0",
-      ]
+    step "pattern" {
+      bytes = "C1 F8 ?? 89 44 24 ?? 41 8B 40 ?? C1 F8 ?? 89 44 24 ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8D 54 24 ?? FF 15"
     }
     step "function_start_of" {}
   }
 
   recipe {
-    step "pattern" {
-      bytes  = "48 8D 54 24 ?? 48 89 F1 49 89 F8 E8 ?? ?? ?? ?? 80 7C 24 ?? ?? 76 ??"
+    step "pattern_any" {
+      patterns = [
+        "48 8D 54 24 ?? 48 89 F1 49 89 F8 E8 ?? ?? ?? ?? 80 7C 24 ?? ?? 76 ??",
+        "48 8D 5C 24 ?? 48 89 F1 49 89 D8 E8 ?? ?? ?? ?? C1 E7 ?? 0F B7 44 24 ??",
+      ]
       offset = 11
     }
     step "operand" {
@@ -239,11 +271,15 @@ entry "BlockSource.removeListener" {
 
 entry "BlockSource.getDimensionId" {
   kind     = "vslot"
-  notes    = "Slot of DimensionType BlockSource::getDimensionId() const in BlockSource.vtable: 18 (12h) in 26.51 (LeviLamina IConstBlockSource header order: hasChunksAt 15 to 17, getDimensionId 18, shouldFireEvents 19). DimensionType is returned through a hidden out pointer in rdx, not in eax: the slot 18 body is `mov rsi,rdx; mov rcx,[rcx+30h]; mov rax,[rcx]; mov rax,[rax+10h]; call [guard]; mov rax,rsi` (it forwards to Dimension.getDimensionId, slot 2, which writes the id to [rdx]). 43 functions have that body, so it is not used. Recipe 0 is a call site after Actor.getDimensionBlockSource (`mov byte ptr [rbp+..],0; mov rcx,rbx; call; mov rcx,[rax]; mov r8,[rcx+disp]; lea rdx,[rbp+..]; mov rcx,rax; mov rax,r8; call [guard]; cmp dword ptr [rbp+..],1; jne`). Recipe 1 is a call site after Dimension.getBlockSourceFromMainChunkSource on a dimension weak reference (`mov rax,[rbx]; mov rax,[rax+disp]; mov rcx,rbx; call [guard]; mov rcx,[rax]; mov r8,[rcx+disp]; lea rbx,[rsp+..]; mov rcx,rax; mov rdx,rbx; mov rax,r8; call [guard]`). Both read the displacement of the r8 load and turn it into a slot. They are in two functions. Every displacement, immediate and branch byte is a wildcard. The range check is a window around the known slot. What changed in 6ad79ee4-17d51891a1119914 (26.60), repaired in Plan 6c Task 8: the compiler now puts a nop after many calls, so an old pattern that ran past a call stopped matching. Recipe 0 is now a pattern_any that starts at the slot read and ends after the compare: `mov r8,[rcx+disp]; lea rdx,[rbp+..]; mov rcx,rax; mov rax,r8; call [guard]; cmp dword ptr [rbp+..],imm8; jne near` without (26.51) or with (26.60) the nop after the call. On 26.51 the function has two such calls (the first with a short jne); the near jne picks one. 12h on both. Evidence on 26.60: the function is found from the old function by a draft (one match); the call after Actor.getDimensionBlockSource reads 90h; recipe 1 still matched. Class: real code change (one of the two calls was removed) plus the nops."
+  notes    = "Slot of DimensionType BlockSource::getDimensionId() const in BlockSource.vtable: 18 (12h) in 26.51 (LeviLamina IConstBlockSource header order: hasChunksAt 15 to 17, getDimensionId 18, shouldFireEvents 19). DimensionType is returned through a hidden out pointer in rdx, not in eax: the slot 18 body is `mov rsi,rdx; mov rcx,[rcx+30h]; mov rax,[rcx]; mov rax,[rax+10h]; call [guard]; mov rax,rsi` (it forwards to Dimension.getDimensionId, slot 2, which writes the id to [rdx]). 43 functions have that body, so it is not used. Recipe 0 is a call site after Actor.getDimensionBlockSource (`mov byte ptr [rbp+..],0; mov rcx,rbx; call; mov rcx,[rax]; mov r8,[rcx+disp]; lea rdx,[rbp+..]; mov rcx,rax; mov rax,r8; call [guard]; cmp dword ptr [rbp+..],1; jne`). Recipe 1 is a call site after Dimension.getBlockSourceFromMainChunkSource on a dimension weak reference (`mov rax,[rbx]; mov rax,[rax+disp]; mov rcx,rbx; call [guard]; mov rcx,[rax]; mov r8,[rcx+disp]; lea rbx,[rsp+..]; mov rcx,rax; mov rdx,rbx; mov rax,r8; call [guard]`). Both read the displacement of the r8 load and turn it into a slot. They are in two functions. Every displacement, immediate and branch byte is a wildcard. The range check is a window around the known slot. What changed in 6ad79ee4-17d51891a1119914 (26.60), repaired in Plan 6c Task 8: the compiler now puts a nop after many calls, so an old pattern that ran past a call stopped matching. Recipe 0 is now a pattern_any that starts at the slot read and ends after the compare: `mov r8,[rcx+disp]; lea rdx,[rbp+..]; mov rcx,rax; mov rax,r8; call [guard]; cmp dword ptr [rbp+..],imm8; jne near` without (26.51) or with (26.60) the nop after the call. On 26.51 the function has two such calls (the first with a short jne); the near jne picks one. 12h on both. Evidence on 26.60: the function is found from the old function by a draft (one match); the call after Actor.getDimensionBlockSource reads 90h; recipe 1 still matched. Class: real code change (one of the two calls was removed) plus the nops. What changed in 6afa4e47-dadc375797a3d31a (preview 1.26.70.26): slot 18 did not move. Recipe 0 is a pattern_any with a third alternative for the new shape: the call after Actor.getDimensionBlockSource is a direct call now, the function keeps only the call whose compare is followed by a short jne, and the alternative ends at the call that follows (`add r14,imm32; lea rdx,[rbp+..]; mov rcx,r14; call`), so it does not match the first call of the 26.63 function (that one is followed by `lea r9,..`). Recipe 1 is the call-site tail only (`mov rcx,[rax]; mov r8,[rcx+disp]; lea rbx,[rsp+..]; mov rcx,rax; mov rdx,rbx; mov rax,r8; call [guard]`), without the weak-pointer lock before it, which became a direct call; it is unique on 6aed1906 and 6afa4e47 and reads the same displacement. Evidence on 6afa4e47: both recipes are in two functions found from the old call sites and give 12h. Class: would have survived with a better recipe (the anchor ran into code that changed)."
 
   recipe {
     step "pattern_any" {
-      patterns = ["4C 8B 81 ?? ?? ?? ?? 48 8D 55 ?? 48 89 C1 4C 89 C0 FF 15 ?? ?? ?? ?? 83 7D ?? ?? 0F 85", "4C 8B 81 ?? ?? ?? ?? 48 8D 55 ?? 48 89 C1 4C 89 C0 FF 15 ?? ?? ?? ?? 90 83 7D ?? ?? 0F 85"]
+      patterns = [
+        "4C 8B 81 ?? ?? ?? ?? 48 8D 55 ?? 48 89 C1 4C 89 C0 FF 15 ?? ?? ?? ?? 83 7D ?? ?? 0F 85",
+        "4C 8B 81 ?? ?? ?? ?? 48 8D 55 ?? 48 89 C1 4C 89 C0 FF 15 ?? ?? ?? ?? 90 83 7D ?? ?? 0F 85",
+        "4C 8B 81 ?? ?? ?? ?? 48 8D 55 ?? 48 89 C1 4C 89 C0 FF 15 ?? ?? ?? ?? 90 83 7D ?? ?? 75 ?? 49 81 C6 ?? ?? ?? ?? 48 8D 55 ?? 4C 89 F1 E8",
+      ]
     }
     step "operand" {
       index = 1
@@ -254,8 +290,8 @@ entry "BlockSource.getDimensionId" {
 
   recipe {
     step "pattern" {
-      bytes  = "48 8B 03 48 8B 40 ?? 48 89 D9 FF 15 ?? ?? ?? ?? 48 8B 08 4C 8B 81 ?? ?? ?? ?? 48 8D 5C 24 ?? 48 89 C1 48 89 DA 4C 89 C0 FF 15"
-      offset = 19
+      bytes  = "48 8B 08 4C 8B 81 ?? ?? ?? ?? 48 8D 5C 24 ?? 48 89 C1 48 89 DA 4C 89 C0 FF 15"
+      offset = 3
     }
     step "operand" {
       index = 1
@@ -273,20 +309,25 @@ entry "BlockSource.getDimensionId" {
 entry "BlockSource.getBlock" {
   kind      = "function"
   msvc_name = "?$getBlock@BlockSource@@QEBAAEBVBlock@@AEBVBlockPos@@@Z"
-  notes     = "Block const& BlockSource::getBlock(BlockPos const&) const, the body behind the `$getBlock` thunk: rcx = this, rdx = pos. It is slot 2 of BlockSource.vtable (IConstBlockSource order: getBlock(pos, layer) is slot 1 after the MSVC overload reverse, and its body jumps to slot 2 for layer 0 and slot 4, getExtraBlock, for layer 1). The body checks y against the height range (+38h/+3Ah), gets the chunk with slot 41 and reads the block from the sub chunk storage at +30h (getExtraBlock reads +38h). Recipe 0 is the storage read (`imul rax,rcx,68h; mov rcx,[rdx+rax+30h]; test rcx,rcx; je; movzx eax,word ptr [rsi+..]; movzx r9d,word ptr [rsi]`), then function_start_of; the storage byte 30h is kept. Recipe 1 is a direct call (`lea rdx,[rsp+..]; mov rbx,rcx; mov rcx,rdi; mov r14,r8; call`). Checks function_start and in_vtable BlockSource.vtable 0..3 (getExtraBlock at 4 is left out)."
+  notes     = "Block const& BlockSource::getBlock(BlockPos const&) const, the body behind the `$getBlock` thunk: rcx = this, rdx = pos. It is slot 2 of BlockSource.vtable (IConstBlockSource order: getBlock(pos, layer) is slot 1 after the MSVC overload reverse, and its body jumps to slot 2 for layer 0 and slot 4, getExtraBlock, for layer 1). The body checks y against the height range (+38h/+3Ah), gets the chunk with slot 41 and reads the block from the sub chunk storage at +30h (getExtraBlock reads +38h). Recipe 0 is the storage read (`imul rax,rcx,68h; mov rcx,[rdx+rax+30h]; test rcx,rcx; je; movzx eax,word ptr [rsi+..]; movzx r9d,word ptr [rsi]`), then function_start_of; the storage byte 30h is kept. Recipe 1 is a direct call (`lea rdx,[rsp+..]; mov rbx,rcx; mov rcx,rdi; mov r14,r8; call`). Checks function_start and in_vtable BlockSource.vtable 0..3 (getExtraBlock at 4 is left out). What changed in 6afa4e47-dadc375797a3d31a (preview 1.26.70.26): the body no longer reads the sub chunk storage inline (it calls a helper with the block position packed into three bytes), and the y-range test uses short branches, so recipe 0 is a pattern_any: alternative 0 is the storage read (26.51 to 26.63), alternative 1 is the y-range test (`movsx ecx,word ptr [reg+3Ah]; cmp eax,ecx; jl; movsx ecx,word ptr [reg+38h]; cmp eax,ecx; jge`), the ChunkPos shifts and the chunk lookup call (slot 42 now). It is unique on 6afa4e47 and leaves out getExtraBlock. Recipe 1 is a chain through the first caller: its AABB test prelude (`movq xmm0,[r8]; movq xmm1,[rcx+disp]; pcmpgtd xmm1,xmm0; pshufd; movmskpd`) is unique on both builds, then the call that is followed by `mov [rsi],rax` is read as the branch target (the old standalone call-site pattern is gone because the caller register allocation changed). Evidence on 6afa4e47: the new function has 9 direct callers as the old one has (8 in one cluster and 1 far), and both recipes (a body shape from the old body, and the call in the old caller found again by its prelude) give the same function in slot 2 of BlockSource.vtable. Class: real code change (the storage read) plus a better recipe."
 
   recipe {
-    step "pattern" {
-      bytes      = "48 6B C1 ?? 48 8B 4C 02 30 48 85 C9 74 ?? 0F B7 46 ?? 44 0F B7 0E"
-      literal_ok = ["8: sub chunk storage +30h (layer 0): getExtraBlock, slot 4, reads +38h with the same code"]
+    step "pattern_any" {
+      patterns = [
+        "48 6B C1 ?? 48 8B 4C 02 30 48 85 C9 74 ?? 0F B7 46 ?? 44 0F B7 0E",
+        "0F BF ?? ?? 39 C8 7C ?? 0F BF ?? ?? 39 C8 7D ?? 8B ?? C1 F8 ?? 89 44 24 ?? 8B ?? ?? C1 F8 ?? 89 44 24 ?? 48 8B ?? 48 8B 80 ?? ?? ?? ?? 48 8D ?? 24 ?? 48 89 ?? 48 89 ?? FF 15",
+      ]
+      literal_ok = ["0.8: sub chunk storage +30h (layer 0): getExtraBlock, slot 4, reads +38h with the same code"]
     }
     step "function_start_of" {}
   }
 
   recipe {
     step "pattern" {
-      bytes  = "48 8D 54 24 ?? 48 89 CB 48 89 F9 4D 89 C6 E8"
-      offset = 14
+      bytes = "F3 41 0F 7E 00 F3 0F 7E 89 ?? ?? ?? ?? 66 0F 66 C8 66 0F 70 C9 ?? 66 0F 50 C1"
+    }
+    step "pattern" {
+      bytes = "E8 ?? ?? ?? ?? 48 89 06"
     }
     step "operand" {
       index = 0

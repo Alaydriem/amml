@@ -155,6 +155,7 @@ impl<'a> RecipeRunner<'a> {
             }
             Step::VtableSlot { slot } => self.vtable_slot(Self::need(cursor)?.rva()?, *slot).map(Cursor::Rva),
             Step::VtableHolding => self.vtables.table_holding(Self::need(cursor)?.rva()?).map(Cursor::Rva),
+            Step::VptrOffset => self.vtables.vptr_offset(Self::need(cursor)?.rva()?).map(Cursor::Number),
             Step::ReadPointer => self.read_pointer(Self::need(cursor)?.rva()?).map(Cursor::Rva),
             Step::SlotOf { vtable } => {
                 let function = Self::need(cursor)?.rva()?;

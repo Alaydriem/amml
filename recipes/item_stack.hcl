@@ -84,7 +84,7 @@ entry "ItemStack.vtable" {
 
 entry "ItemStack.reinit" {
   kind     = "vslot"
-  notes    = "Slot of void ItemStack::reinit(Item const&, int count, int auxValue) in the ItemStack vtable: 3 on 26.51. Each reinit overload builds a temporary ItemStack with the matching constructor, assigns it to this and destroys it: slot 1 copies a 16-byte string_view argument first, slot 2 passes a null user-data pointer in r9 (the Block overload, two arguments), slot 3 passes a null user-data pointer on the stack (`mov qword ptr [rsp+20h],0`) and the item, count and aux in rdx, r8d and r9d (this overload). The ItemInstance reinit overloads have the same head, so recipe 0 runs past the assignment to the net id copy that only ItemStack has: `mov rsi,rcx; mov qword ptr [rsp+..],0; lea rdi,[rbp-..]; mov rcx,rdi; call; lea rbx,[rip+..]; mov [rbp-..],rbx; mov dword ptr [rbp+..],0; mov byte ptr [rbp+..],0; mov rcx,rsi; mov rdx,rdi; call; lea rdi,[rbp+..]; sub rsi,..`, then function_start_of and slot_of ItemStack.vtable. Recipe 1 is the neighbour route: ItemStack::setNull (slot 4, its head `push rbp; push rsi; sub rsp,..; lea rbp,[rsp+..]; mov qword ptr [rbp+..],-2; mov rsi,rcx; lea rcx,[rbp+..]; mov [rbp+..],rdx`), slot_of ItemStack.vtable, minus 1 (the header puts setNull right after the reinit overloads). Every displacement, immediate and branch byte is a wildcard. Range window 0..8 (the table has 7 slots). Both recipes are now a pattern_any, one alternative per shape: alternative 1 has the nops that 26.60 adds after the calls. Recipe 1 also runs on past the two calls of setNull (the optional copy and the base setNull) to the empty net id store and `sub rsi,-80h`, because the 26.51 head alone matches 11 functions on 26.60. Value 3 on both builds. What changed in 6ad79ee4-17d51891a1119914 (26.60): nops after calls; the slot bodies are the same (the ItemStack vtable on 26.60 holds the same 7 slots). Would have survived with a better recipe."
+  notes    = "Slot of void ItemStack::reinit(Item const&, int count, int auxValue) in the ItemStack vtable: 3 on 26.51. Each reinit overload builds a temporary ItemStack with the matching constructor, assigns it to this and destroys it: slot 1 copies a 16-byte string_view argument first, slot 2 passes a null user-data pointer in r9 (the Block overload, two arguments), slot 3 passes a null user-data pointer on the stack (`mov qword ptr [rsp+20h],0`) and the item, count and aux in rdx, r8d and r9d (this overload). The ItemInstance reinit overloads have the same head, so recipe 0 runs past the assignment to the net id copy that only ItemStack has: `mov rsi,rcx; mov qword ptr [rsp+..],0; lea rdi,[rbp-..]; mov rcx,rdi; call; lea rbx,[rip+..]; mov [rbp-..],rbx; mov dword ptr [rbp+..],0; mov byte ptr [rbp+..],0; mov rcx,rsi; mov rdx,rdi; call; lea rdi,[rbp+..]; sub rsi,..`, then function_start_of and slot_of ItemStack.vtable. Recipe 1 is the neighbour route: ItemStack::setNull (slot 4, its head `push rbp; push rsi; sub rsp,..; lea rbp,[rsp+..]; mov qword ptr [rbp+..],-2; mov rsi,rcx; lea rcx,[rbp+..]; mov [rbp+..],rdx`), slot_of ItemStack.vtable, minus 1 (the header puts setNull right after the reinit overloads). Every displacement, immediate and branch byte is a wildcard. Range window 0..8 (the table has 7 slots). Both recipes are now a pattern_any, one alternative per shape: alternative 1 has the nops that 26.60 adds after the calls. Recipe 1 also runs on past the two calls of setNull (the optional copy and the base setNull) to the empty net id store and `sub rsi,-80h`, because the 26.51 head alone matches 11 functions on 26.60. Value 3 on both builds. What changed in 6ad79ee4-17d51891a1119914 (26.60): nops after calls; the slot bodies are the same (the ItemStack vtable on 26.60 holds the same 7 slots). Would have survived with a better recipe. What changed in 6afa4e47-dadc375797a3d31a (26.70.26): the slot is still 3. The compiler dropped the nop after the second call of setNull (the one after `mov rcx,rsi; call`) and kept the one after the first call, so recipe 1 has a third alternative with the nop after the first call only. Evidence on 26.70.26: (1) recipe 0 finds the reinit overload by its body (the old pattern still matches once) and slot_of gives 3; (2) recipe 1 finds setNull by the head and the two calls of the old setNull body and gives slot 4, minus 1 gives 3; the bodies are in two functions. Class: would have survived with a better recipe."
 
   recipe {
     step "pattern_any" {
@@ -102,6 +102,7 @@ entry "ItemStack.reinit" {
       patterns = [
         "55 56 48 81 EC ?? ?? ?? ?? 48 8D AC 24 ?? ?? ?? ?? 48 C7 45 ?? ?? ?? ?? ?? 48 89 CE 48 8D 4D ?? 48 89 55 ?? E8 ?? ?? ?? ?? 48 8D 55 ?? 48 89 F1 E8 ?? ?? ?? ?? C7 45 ?? ?? ?? ?? ?? C6 45 ?? ?? 48 83 EE ??",
         "55 56 48 81 EC ?? ?? ?? ?? 48 8D AC 24 ?? ?? ?? ?? 48 C7 45 ?? ?? ?? ?? ?? 48 89 CE 48 8D 4D ?? 48 89 55 ?? E8 ?? ?? ?? ?? 90 48 8D 55 ?? 48 89 F1 E8 ?? ?? ?? ?? 90 C7 45 ?? ?? ?? ?? ?? C6 45 ?? ?? 48 83 EE ??",
+        "55 56 48 81 EC ?? ?? ?? ?? 48 8D AC 24 ?? ?? ?? ?? 48 C7 45 ?? ?? ?? ?? ?? 48 89 CE 48 8D 4D ?? 48 89 55 ?? E8 ?? ?? ?? ?? 90 48 8D 55 ?? 48 89 F1 E8 ?? ?? ?? ?? C7 45 ?? ?? ?? ?? ?? C6 45 ?? ?? 48 83 EE ??",
       ]
     }
     step "slot_of" { vtable = "ItemStack.vtable" }
@@ -116,12 +117,12 @@ entry "ItemStack.reinit" {
 
 entry "ItemStack.fromTag" {
   kind     = "function"
-  notes    = "static ItemStack ItemStack::fromTag(CompoundTag const& tag): rcx the hidden result pointer (the 98h-byte ItemStack the caller owns), rdx the tag; returns the result pointer in rax. It builds a local ItemStack (ItemStackBase constructor, the ItemStack vtable, an empty net id variant), loads it from the tag with the shared stack loader (which reads Name, Count, Damage, WasPickedUp, CanPlaceOn and the rest), runs an Item virtual fix-up, moves the local into the result and destroys the local with ItemStackBase.dtor. An unknown item name gives an empty stack. The overload that also takes an ILevel& is the function 0x1A7D7B0 on 26.60 and is not this entry. Recipe 0 is a loop call site in a function that loads stacks from a list (`jge; lea rcx,[rbp+..]; mov rdx,r12; call`), read as the call target. Recipe 1 is a call site that follows a sign test (`js; mov rcx,r14; mov rdx,r13; call`), read the same way. Recipe 2 is the prologue of the function itself (`push rbp; push r14; push rsi; push rdi; push rbx; sub rsp,..; lea rbp,[rsp+..]; mov qword ptr [rbp+..],-2; mov rdi,rdx; mov rsi,rcx; lea rbx,[rbp+..]`). The three recipes are in three functions and share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. The check is function_start. The gate (check entry_is) LevelChunk.mSubChunks = 456 (1C8h, the 26.60 layout) ties this entry to the 26.60 build: it refuses as not for this build on 26.51, and must be widened when a later build is added. Value 1A7D560h on 6ad79ee4-17d51891a1119914 (26.60)."
+  notes    = "static ItemStack ItemStack::fromTag(CompoundTag const& tag): rcx the hidden result pointer (the 98h-byte ItemStack the caller owns), rdx the tag; returns the result pointer in rax. It builds a local ItemStack (the ItemStackBase constructor, called on 26.63 and inlined on 70.26; the ItemStack vtable; an empty net id variant), loads it from the tag with the shared stack loader (the only function that loads the string WasPickedUp; it also reads Name, Count, Damage, CanPlaceOn and the rest), runs an Item virtual fix-up, moves the local into the result and destroys the local with ItemStackBase.dtor. An unknown item name gives an empty stack. The overload that also takes an ILevel& (r8) is a neighbour function with the same shape and is not this entry. Recipe 0 is a loop call site in a function that loads stacks from a list (`imul eax,..; cmp r32,eax; jge; lea rcx,[rbp+..]; mov rdx,r64; call`), read as the call target. Recipe 1 is a call site that follows a sign test (`sub eax,edi; mov [rbp+..],eax; lea rdi,[rip+..]; js; mov rcx,r14; mov rdx,r64; call`), read the same way. Recipe 2 is in the body of the function itself, where the local is moved into the result (`mov [rsi+..],rax; mov [rsi],r14; mov byte ptr [rsi+..],..; movzx eax,byte ptr [rbp+..]; movzx ecx,al; cmp ecx,..`; the ILevel overload holds the vtable in r15 and does not match), then function_start_of. The three recipes are in three functions and share no pattern bytes. Every displacement, immediate and branch byte is a wildcard, and the source register of the `mov rdx` in recipes 0 and 1 is a wildcard (r12/r13 on 26.63, r13/r12 on 70.26). The check is function_start (recipes 0 and 1 do not end with function_start_of, so it counts). No build gate: builds before 26.63 are not supported. What changed in 6afa4e47-dadc375797a3d31a (70.26): the ItemStackBase constructor is inlined, so the prologue pushes r15 too and the frame grew; the old prologue recipe matched an unrelated function there (it builds assert text and has 2 callers) and was replaced by the body recipe. The two caller sites swapped registers for the tag pointer. Class: would have survived with a better recipe. Evidence on 70.26: (1) the stack loader, found by the WasPickedUp string on both builds, has one caller whose body matches the old function step for step (ItemStack.vtable store, loader call, the Item virtual fix-up, the move into the result and ItemStackBase.dtor), and the recipe 2 body pattern drafted from the old function matches once there; (2) the two old caller sites of recipes 0 and 1, drafted from 26.63, each match once on 70.26 and call that function; the function has 16 direct callers on both builds."
 
   recipe {
     step "pattern" {
-      bytes  = "0F 8D ?? ?? ?? ?? 48 8D 4D ?? 4C 89 E2 E8 ?? ?? ?? ??"
-      offset = 13
+      bytes  = "69 C0 ?? ?? ?? ?? 41 39 ?? 0F 8D ?? ?? ?? ?? 48 8D 4D ?? 4C 89 ?? E8 ?? ?? ?? ??"
+      offset = 22
     }
     step "operand" {
       index = 0
@@ -131,8 +132,8 @@ entry "ItemStack.fromTag" {
 
   recipe {
     step "pattern" {
-      bytes  = "0F 88 ?? ?? ?? ?? 4C 89 F1 4C 89 EA E8 ?? ?? ?? ??"
-      offset = 12
+      bytes  = "29 F8 89 45 ?? 48 8D 3D ?? ?? ?? ?? 0F 88 ?? ?? ?? ?? 4C 89 F1 4C 89 ?? E8 ?? ?? ?? ??"
+      offset = 24
     }
     step "operand" {
       index = 0
@@ -141,15 +142,11 @@ entry "ItemStack.fromTag" {
   }
 
   recipe {
-    step "pattern" { bytes = "55 41 56 56 57 53 48 81 EC ?? ?? ?? ?? 48 8D AC 24 ?? ?? ?? ?? 48 C7 45 ?? ?? ?? ?? ?? 48 89 D7 48 89 CE 48 8D 5D ??" }
+    step "pattern" { bytes = "48 89 46 ?? 4C 89 36 C6 86 ?? ?? ?? ?? ?? 0F B6 45 ?? 0F B6 C8 83 F9 ??" }
+    step "function_start_of" {}
   }
 
   check "function_start" {}
-
-  check "entry_is" {
-    entry = "LevelChunk.mSubChunks"
-    value = 456
-  }
 }
 
 entry "ItemStack.mNetIdVariant" {
@@ -185,5 +182,27 @@ entry "ItemStack.mNetIdVariant" {
   check "range" {
     min = 96
     max = 128
+  }
+}
+
+
+entry "ItemStack.size" {
+  kind     = "field"
+  notes    = "Size of the game's ItemStack: 98h on 26.63 (6aed1906-b127418e74d2f2f9) and 26.70.26 (6afa4e47-dadc375797a3d31a), the stride of std::vector<ItemStack> FillingContainer::mItems and the anchor of the loader's ItemStack mirror (the ItemStackBase part 80h, then the net id variant: its storage at 80h, its index byte at 90h). The recipe is the slot index in FillingContainer::removeResource (a .pdata function), as in recipe 0 of FillingContainer.mItems: `test eax,eax; js; mov eax,edi; mov rbx,[r15+disp]; imul r12,rax,imm32; lea rdx,[rbx+r12]; mov rcx,r13; call`, ended at the call; it reads the immediate of the imul. Every displacement, immediate and branch byte is a wildcard. One recipe and a range check, as for the size of a mirror. Evidence: the ItemStack copy constructor writes its last member, the variant index byte, at +90h on both builds (`inspect fields`), and the getItem leaf of the container table indexes the vector with the same stride and divides its length by it (`shr 3; imul 286BCA1Bh`, the inverse of 19). Range window 80h..C0h. Class: new entry."
+
+  recipe {
+    step "pattern" {
+      bytes  = "85 C0 0F 88 ?? ?? ?? ?? 89 F8 49 8B 9F ?? ?? ?? ?? 4C 69 E0 ?? ?? ?? ?? 4A 8D 14 23 4C 89 E9 E8"
+      offset = 17
+    }
+    step "operand" {
+      index = 2
+      kind  = "immediate"
+    }
+  }
+
+  check "range" {
+    min = 128
+    max = 192
   }
 }

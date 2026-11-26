@@ -74,6 +74,27 @@ name = "amml-abi"
 version = "26.63.6"
 
 [[package]]
+name = "amml-api"
+version = "26.63.4"
+dependencies = [
+ "amml-abi",
+ "amml-api",
+ "amml-derive",
+ "amml-runtime",
+ "tempfile",
+ "thiserror 2.0.21",
+ "windows",
+]
+
+[[package]]
+name = "amml-apitest"
+version = "26.63.4"
+dependencies = [
+ "amml-api",
+ "windows",
+]
+
+[[package]]
 name = "amml-data"
 version = "26.63.6"
 dependencies = [
@@ -221,11 +242,13 @@ dependencies = [
  "curia",
  "hcl-rs",
  "pelite",
+ "png",
  "region",
  "retour",
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
+ "windows",
  "windows-sys 0.61.2",
 ]
 
@@ -1888,6 +1911,13 @@ checksum = "8be9f3dfaaffdae2972880079a491a1a8bb7cbed0b8dd7a347f668b4150a3b93"
 dependencies = [
  "event-listener",
  "pin-project-lite",
+]
+
+[[package]]
+name = "events-mod"
+version = "0.1.0"
+dependencies = [
+ "amml-abi",
 ]
 
 [[package]]

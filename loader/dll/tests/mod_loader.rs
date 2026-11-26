@@ -1,10 +1,21 @@
+use std::ffi::c_void;
 use std::fs;
+use std::io::Write;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
-use amml::{ModLoadError, ModLoader, ModPhase};
-use amml_abi::{AmmlStatus, AmmlStr};
+use amml::{ClientAdapter, EventHub, LoaderState, ModListener, ModLoadError, ModLoader, ModPhase, SessionAdapter};
+use amml_abi::{
+    AmmlApi, AmmlBand, AmmlClientFlag, AmmlEventContext, AmmlEventHeader, AmmlPhase, AmmlServices, AmmlStatus, AmmlStr,
+    ClientTick, FrameUpdate, WorldLeft,
+};
 use amml_runtime::{AmmlVersion, ModRegistry, ModSpec};
 
-use crate::support::{EchoMod, Harness, HeapProbe, HookTarget, LogFile};
+use crate::support::{
+    CLIENT_A, ClientGame, EchoMod, EventsMod, GAME_CLIENT_A, Harness, HeapProbe, HookTarget, LogFile, SessionGame,
+};
 
 #[test]
 fn mods_load_in_sorted_order_and_a_bad_manifest_skips_only_that_mod() {
@@ -78,15 +89,15 @@ fn a_mod_needing_a_newer_api_is_refused_with_version_mismatch() {
     let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
     let loader = ModLoader::new(harness.state);
 
-    // The manifest says 2 but the DLL needs loader API 3, so its own load call refuses this loader.
+    // The manifest says 2 but the DLL needs loader API 4, so its own load call refuses this loader.
     let mut reports = loader.load_all(&scan.mods);
-    // A manifest asking for version 3 is refused before the DLL is mapped.
+    // A manifest asking for version 4 is refused before the DLL is mapped.
     let ahead = ModSpec {
         namespace: "echo".to_string(),
         name: "ahead".to_string(),
         dir: harness.mods().join("@echo").join("ahead"),
         entry: "missing.dll".to_string(),
-        api_version: 3,
+        api_version: 4,
         version: None,
         amml_version: None,
         entries: Vec::new(),
@@ -410,4 +421,479 @@ fn folder_with_malformed_amml_version_is_skipped() {
     assert_eq!(reports.len(), 1);
     assert_eq!(reports[0].id, "@echo/echo");
     assert_eq!(reports[0].phase, ModPhase::Loaded, "malformed / plain / load");
+}
+
+// Installs each `(name, dll)` as `@events/<name>` and loads every mod.
+fn load_events_mods(harness: &Harness, mods: &[(&str, &std::path::Path)]) -> ModLoader {
+    for (name, dll) in mods {
+        harness.install_mod("events", name, dll, &format!("{}.dll", name.replace('-', "_")), 3);
+    }
+    let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
+    let loader = ModLoader::new(harness.state);
+    assert!(loader.load_all(&scan.mods).iter().all(|report| report.is_ok()));
+    loader
+}
+
+fn tick() -> ClientTick {
+    ClientTick { header: EventHub::header::<ClientTick>(AmmlPhase::AFTER) }
+}
+
+#[test]
+fn a_v2_mod_still_loads_and_hooks() {
+    let dll = EchoMod::build("hook", &["hook-target"]);
+    let harness = Harness::start();
+    harness.install_mod("echo", "echo-hook", &dll, "echo_hook.dll", 2);
+    let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
+    let loader = ModLoader::new(harness.state);
+
+    assert!(loader.load_all(&scan.mods).iter().all(|report| report.is_ok()));
+    assert!(loader.enable_all().iter().all(|report| report.is_ok()));
+
+    // SAFETY: the loader's table lives for the process.
+    let header = unsafe { AmmlApi::header(harness.state.api()) };
+    assert_eq!(header, Some((AmmlApi::SIZE_V3, 3)));
+    // SAFETY: as above.
+    assert!(unsafe { AmmlApi::services(harness.state.api()) }.is_some());
+    assert_eq!(loader.phases(), [("@echo/echo-hook".to_string(), ModPhase::Enabled)]);
+    assert_eq!(HookTarget::call(1), 1002);
+}
+
+#[test]
+fn disable_drops_providers_then_removes_listeners_then_disables() {
+    let plain = EventsMod::build("plain", &[]);
+    let provider = EventsMod::build("provider", &["provider"]);
+    let harness = Harness::start();
+    let hub = harness.state.events();
+    hub.offer("client.tick", 1);
+    let loader = load_events_mods(&harness, &[("events", &plain), ("events-provider", &provider)]);
+    loader.enable_all();
+    let mods = harness.mods();
+    assert_eq!(EventsMod::lines_of(&mods, "events-provider", "provide"), ["events-provider provide status=0"]);
+    let ready = EventsMod::lines_of(&mods, "events", "registry.provider_ready");
+    assert_eq!(ready, ["events registry.provider_ready thread=0 epoch=0 alive=0 name=test.table major=1 minor=0"]);
+
+    loader.disable_one(1);
+    hub.raise(&mut tick(), &hub.loader_context());
+
+    assert_eq!(EventsMod::lines_of(&mods, "events-provider", "client.tick").len(), 0);
+    assert_eq!(EventsMod::lines_of(&mods, "events", "client.tick").len(), 1);
+    assert_eq!(harness.state.require("test.table", 1, 0), Err(AmmlStatus::NOT_AVAILABLE));
+    let gone = EventsMod::lines_of(&mods, "events", "registry.provider_gone");
+    assert_eq!(gone, ["events registry.provider_gone thread=0 epoch=0 alive=0 name=test.table major=1"]);
+    assert!(EventsMod::lines_of(&mods, "events-provider", "registry.provider_gone").is_empty());
+    // Consumers hear of the dropped table before the provider's own disable runs.
+    let lines = EventsMod::lines(&mods);
+    let position = |needle: &str| lines.iter().position(|line| line.starts_with(needle)).unwrap();
+    assert!(position("events registry.provider_gone") < position("events-provider disable listen"), "{lines:?}");
+    assert_eq!(loader.phases()[1], ("@events/events-provider".to_string(), ModPhase::Disabled));
+}
+
+static NESTED_DISABLES: AtomicUsize = AtomicUsize::new(0);
+
+// Tries to disable mod 1 again while its disable raises `ProviderGone`.
+unsafe extern "C" fn disable_again(
+    _event: *mut AmmlEventHeader,
+    _context: *const AmmlEventContext,
+    _user: *mut c_void,
+) -> AmmlStatus {
+    if let Some(state) = LoaderState::get() {
+        ModLoader::new(state).disable_one(1);
+        NESTED_DISABLES.fetch_add(1, Ordering::SeqCst);
+    }
+    AmmlStatus::OK
+}
+
+#[test]
+fn a_second_disable_during_the_first_does_nothing() {
+    let plain = EventsMod::build("plain", &[]);
+    let provider = EventsMod::build("provider", &["provider"]);
+    let harness = Harness::start();
+    let loader = load_events_mods(&harness, &[("events", &plain), ("events-provider", &provider)]);
+    loader.enable_all();
+    let listener = ModListener { owner: 50, callback: disable_again, user: 0 };
+    harness.state.events().listen("registry.provider_gone", 1, AmmlBand::NORMAL, listener).unwrap();
+
+    loader.disable_one(1);
+
+    assert_eq!(NESTED_DISABLES.load(Ordering::SeqCst), 1);
+    assert_eq!(EventsMod::lines_of(&harness.mods(), "events-provider", "disable listen").len(), 1);
+    assert_eq!(loader.phases()[1], ("@events/events-provider".to_string(), ModPhase::Disabled));
+}
+
+#[test]
+fn a_missing_required_event_fails_load() {
+    let required = EventsMod::build("load-required", &["require-in-load"]);
+    let harness = Harness::start();
+    harness.install_mod("events", "events-load-required", &required, "events_load_required.dll", 3);
+    let scan = ModRegistry::new(ModRegistry::MAX_MODS).scan(&harness.mods()).unwrap();
+    let loader = ModLoader::new(harness.state);
+
+    let reports = loader.load_all(&scan.mods);
+
+    assert_eq!(reports[0].phase, ModPhase::Failed);
+    assert!(matches!(&reports[0].error, Some(ModLoadError::RequiredEvent { feature, event })
+            if feature == "ticker" && event == "client.tick"));
+    assert!(loader.enable_all().is_empty());
+}
+
+#[test]
+fn shutdown_comes_before_every_disable_and_keeps_the_gate_shut() {
+    let plain = EventsMod::build("plain", &[]);
+    let harness = Harness::start();
+    let loader = load_events_mods(&harness, &[("events", &plain)]);
+    loader.enable_all();
+    let hub = harness.state.events();
+    let mut frame = FrameUpdate { header: EventHub::header::<FrameUpdate>(AmmlPhase::BEFORE) };
+    hub.raise(&mut frame, &hub.loader_context());
+    assert!(hub.gate().is_open());
+
+    loader.shutdown();
+
+    let lines = EventsMod::lines(&harness.mods());
+    let position = |needle: &str| lines.iter().position(|line| line == needle).unwrap();
+    let shutdown = position("events loader.shutdown thread=0 epoch=0 alive=0");
+    let disable = position(&format!("events disable listen status={} game_alive=0", AmmlStatus::FAILED.0));
+    assert!(shutdown < disable, "{lines:?}");
+    assert_eq!(loader.phases(), [("@events/events".to_string(), ModPhase::Disabled)]);
+    let mut frame = FrameUpdate { header: EventHub::header::<FrameUpdate>(AmmlPhase::BEFORE) };
+    hub.raise(&mut frame, &hub.loader_context());
+    assert!(!hub.gate().is_open());
+}
+
+#[test]
+fn a_missing_required_event_fails_enable() {
+    let required = EventsMod::build("required", &["require-tick"]);
+    let harness = Harness::start();
+    let loader = load_events_mods(&harness, &[("events-required", &required)]);
+
+    let reports = loader.enable_all();
+
+    assert_eq!(reports[0].phase, ModPhase::Failed);
+    assert_eq!(reports[0].error.as_ref().map(ModLoadError::status), Some(AmmlStatus::NOT_AVAILABLE));
+    assert_eq!(loader.phases(), [("@events/events-required".to_string(), ModPhase::Failed)]);
+    let log = LogFile::wait_for(&harness.logs().join("loader.log"), "mod switched off");
+    assert!(log.contains("ticker") && log.contains("client.tick"), "{log}");
+}
+
+#[test]
+fn a_required_event_of_the_uses_block_is_checked_before_enable_runs() {
+    let required = EventsMod::build("required", &["require-tick"]);
+    let harness = Harness::start();
+    let loader = load_events_mods(&harness, &[("events-required", &required)]);
+
+    let reports = loader.enable_all();
+
+    assert_eq!(reports[0].phase, ModPhase::Failed);
+    assert!(matches!(&reports[0].error, Some(ModLoadError::RequiredEvent { feature, event })
+            if feature == "ticker" && event == "client.tick"));
+    assert!(EventsMod::lines_of(&harness.mods(), "events-required", "enable").is_empty());
+}
+
+#[test]
+fn an_optional_listen_of_an_event_not_offered_logs_the_feature_that_is_off() {
+    let plain = EventsMod::build("plain", &[]);
+    let harness = Harness::start();
+    let loader = load_events_mods(&harness, &[("events", &plain)]);
+
+    let reports = loader.enable_all();
+
+    assert_eq!(reports[0].phase, ModPhase::Enabled);
+    let log = LogFile::wait_for(&harness.logs().join("loader.log"), "feature off");
+    let line = log.lines().find(|line| line.contains("feature off")).unwrap();
+    assert!(line.contains("@events/events") && line.contains("ticker") && line.contains("client.tick"), "{log}");
+}
+
+#[test]
+fn a_missing_required_area_fails_enable() {
+    let area = EventsMod::build("area", &["require-area"]);
+    let harness = Harness::start();
+    let loader = load_events_mods(&harness, &[("events-area", &area)]);
+
+    let reports = loader.enable_all();
+
+    assert_eq!(reports[0].phase, ModPhase::Failed);
+    assert!(matches!(&reports[0].error, Some(ModLoadError::RequiredArea { feature, area })
+            if feature == "keys" && area == "input.key_inject"));
+    assert_eq!(reports[0].error.as_ref().map(ModLoadError::status), Some(AmmlStatus::NOT_AVAILABLE));
+    assert!(EventsMod::lines_of(&harness.mods(), "events-area", "enable").is_empty());
+    let log = LogFile::wait_for(&harness.logs().join("loader.log"), "a required area is not available");
+    let line = log.lines().find(|line| line.contains("a required area is not available")).unwrap();
+    assert!(
+        line.contains("@events/events-area") && line.contains("keys") && line.contains("input.key_inject"),
+        "{log}"
+    );
+}
+
+#[test]
+fn a_missing_optional_area_logs_the_feature_that_is_off_and_enables() {
+    let area = EventsMod::build("optional-area", &["optional-area"]);
+    let harness = Harness::start();
+    let loader = load_events_mods(&harness, &[("events-optional-area", &area)]);
+
+    let reports = loader.enable_all();
+
+    assert_eq!(reports[0].phase, ModPhase::Enabled);
+    assert!(reports[0].error.is_none());
+    let log = LogFile::wait_for(&harness.logs().join("loader.log"), "feature off: its area is not available");
+    let line = log.lines().find(|line| line.contains("feature off: its area is not available")).unwrap();
+    assert!(
+        line.contains("@events/events-optional-area") && line.contains("keys") && line.contains("input.key_inject"),
+        "{log}"
+    );
+    assert!(!log.contains("a required area is not available"), "{log}");
+    let too_old = log.lines().find(|line| line.contains("loader too old")).unwrap_or_default();
+    assert!(
+        too_old.contains("future") && too_old.contains("actor.read") && too_old.contains("\"served\":\"4\""),
+        "{log}"
+    );
+    assert_eq!(log.matches("loader too old").count(), 1, "{log}");
+}
+
+#[test]
+fn the_core_available_call_answers_areas() {
+    let harness = Harness::start();
+    harness.state.areas().offer("input.lease", 1);
+    // SAFETY: the loader's table lives for the process.
+    let services = unsafe { AmmlApi::services(harness.state.api()) }.unwrap();
+    // SAFETY: the loader keeps its service tables alive for the process.
+    let core = unsafe { &*(*services).core };
+    // SAFETY: each view lives for its call.
+    let available = |area: &str, version: u32| unsafe { (core.available)(AmmlStr::from_str(area), version) };
+
+    assert_eq!(available("input.lease", 1), AmmlStatus::OK);
+    assert_eq!(available("input.lease", 2), AmmlStatus::NOT_AVAILABLE);
+    assert_eq!(available("input.key_inject", 1), AmmlStatus::NOT_AVAILABLE);
+}
+
+#[test]
+fn mods_loaded_comes_once_after_every_enable() {
+    let plain = EventsMod::build("plain", &[]);
+    let provider = EventsMod::build("provider", &["provider"]);
+    let harness = Harness::start();
+    let loader = load_events_mods(&harness, &[("events", &plain), ("events-provider", &provider)]);
+
+    loader.enable_all();
+    loader.enable_all();
+
+    let lines = EventsMod::lines(&harness.mods());
+    let position = |needle: &str| lines.iter().position(|line| line == needle).unwrap();
+    let last_enable = position("events enable").max(position("events-provider enable"));
+    for name in ["events", "events-provider"] {
+        let loaded = EventsMod::lines_of(&harness.mods(), name, "mods.loaded");
+        assert_eq!(loaded.len(), 1, "{name}: {lines:?}");
+        assert!(position(&loaded[0]) > last_enable, "{lines:?}");
+    }
+}
+
+#[test]
+fn the_game_gate_stays_closed_until_the_first_frame() {
+    let plain = EventsMod::build("plain", &[]);
+    let harness = Harness::start();
+    let loader = load_events_mods(&harness, &[("events", &plain)]);
+    loader.enable_all();
+    let hub = harness.state.events();
+
+    assert!(!hub.gate().is_open());
+    assert_eq!(hub.gate().require_open(), Err(AmmlStatus::NOT_READY));
+
+    let mut frame = FrameUpdate { header: EventHub::header::<FrameUpdate>(AmmlPhase::BEFORE) };
+    hub.raise(&mut frame, &hub.loader_context());
+
+    assert!(hub.gate().is_open());
+    assert_eq!(hub.gate().require_open(), Ok(()));
+}
+
+static PROVIDER_GONE_SEEN: AtomicUsize = AtomicUsize::new(0);
+
+unsafe extern "C" fn count_provider_gone(
+    _event: *mut AmmlEventHeader,
+    _context: *const AmmlEventContext,
+    _user: *mut c_void,
+) -> AmmlStatus {
+    PROVIDER_GONE_SEEN.fetch_add(1, Ordering::SeqCst);
+    AmmlStatus::OK
+}
+
+#[test]
+fn a_provider_that_fails_its_enable_raises_provider_gone_to_a_consumer_that_required_it() {
+    let failing = EventsMod::build("provider-fails", &["provider-fails"]);
+    let harness = Harness::start();
+    let loader = load_events_mods(&harness, &[("events-provider-fails", &failing)]);
+    // A consumer took the table between the provider's load and its enable.
+    assert!(harness.state.require("test.table", 1, 0).is_ok());
+    let consumer = ModListener { owner: 50, callback: count_provider_gone, user: 0 };
+    harness.state.events().listen("registry.provider_gone", 1, AmmlBand::NORMAL, consumer).unwrap();
+
+    let reports = loader.enable_all();
+
+    assert_eq!(reports[0].phase, ModPhase::Failed);
+    assert_eq!(PROVIDER_GONE_SEEN.load(Ordering::SeqCst), 1);
+    assert_eq!(harness.state.require("test.table", 1, 0), Err(AmmlStatus::NOT_AVAILABLE));
+}
+
+static EVENTS_LOG: OnceLock<PathBuf> = OnceLock::new();
+static BLOCKED_STARTED: AtomicBool = AtomicBool::new(false);
+
+// A listener of mod 1 that is still running when the disable starts: it ends 300 ms later and
+// writes its end to the events log.
+unsafe extern "C" fn slow_listener(
+    _event: *mut AmmlEventHeader,
+    _context: *const AmmlEventContext,
+    _user: *mut c_void,
+) -> AmmlStatus {
+    BLOCKED_STARTED.store(true, Ordering::SeqCst);
+    std::thread::sleep(Duration::from_millis(300));
+    if let Some(path) = EVENTS_LOG.get()
+        && let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(path)
+    {
+        let _ = writeln!(file, "slow listener ended");
+    }
+    AmmlStatus::OK
+}
+
+#[test]
+fn a_listener_running_on_another_thread_ends_before_the_mod_disable_runs() {
+    let plain = EventsMod::build("plain", &[]);
+    let provider = EventsMod::build("provider", &["provider"]);
+    let harness = Harness::start();
+    let hub = harness.state.events();
+    hub.offer("client.tick", 1);
+    let loader = load_events_mods(&harness, &[("events", &plain), ("events-provider", &provider)]);
+    loader.enable_all();
+    EVENTS_LOG.set(harness.mods().join("events.log")).unwrap();
+    let slow = ModListener { owner: 1, callback: slow_listener, user: 0 };
+    hub.listen("client.tick", 1, AmmlBand::LAST, slow).unwrap();
+
+    let raiser = std::thread::spawn(move || {
+        hub.raise(&mut tick(), &hub.loader_context());
+    });
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !BLOCKED_STARTED.load(Ordering::SeqCst) {
+        assert!(Instant::now() < deadline, "the slow listener never started");
+        std::thread::yield_now();
+    }
+    loader.disable_one(1);
+    raiser.join().unwrap();
+
+    let lines = EventsMod::lines(&harness.mods());
+    let position = |needle: &str| lines.iter().position(|line| line.starts_with(needle)).unwrap();
+    assert!(position("slow listener ended") < position("events-provider disable listen"), "{lines:?}");
+    assert_eq!(loader.phases()[1], ("@events/events-provider".to_string(), ModPhase::Disabled));
+}
+
+// One line per `world.left` or `loader.shutdown` a test listener saw.
+static CLOSING_SEEN: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+// The events of `record_closing`; a listener's `user` value is its index here.
+const CLOSING_EVENTS: [&str; 2] = ["world.left", "loader.shutdown"];
+
+// Records `<event> alive=<game_alive> epoch=<context epoch> client=<context client>`, and the world of a `WorldLeft`.
+unsafe extern "C" fn record_closing(
+    event: *mut AmmlEventHeader,
+    context: *const AmmlEventContext,
+    user: *mut c_void,
+) -> AmmlStatus {
+    let id = CLOSING_EVENTS[user as usize];
+    // SAFETY: the loader passes a live context for the call.
+    let context = unsafe { &*context };
+    let world = if id == "world.left" {
+        // SAFETY: the loader raises `world.left` with a `WorldLeft`.
+        format!(" world={}", unsafe { (*event.cast::<WorldLeft>()).epoch })
+    } else {
+        String::new()
+    };
+    CLOSING_SEEN.lock().unwrap().push(format!(
+        "{id} alive={} epoch={} client={:#x}{world}",
+        context.game_alive, context.epoch, context.client as usize
+    ));
+    AmmlStatus::OK
+}
+
+fn listen_closing(harness: &Harness) {
+    for (index, event) in CLOSING_EVENTS.iter().enumerate() {
+        let listener = ModListener { owner: 40, callback: record_closing, user: index };
+        harness.state.events().listen(event, 1, AmmlBand::NORMAL, listener).unwrap();
+    }
+}
+
+#[test]
+fn shutdown_live_leaves_the_joined_world_before_shutdown() {
+    let harness = Harness::start_with_entries(&SessionGame::entries(&[]));
+    SessionAdapter::install(harness.state);
+    listen_closing(&harness);
+    SessionGame::frame();
+    SessionGame::set_player(0x5000);
+    SessionGame::start_join(&CLIENT_A, [0; 7]);
+    SessionGame::update(&CLIENT_A);
+    assert_eq!(harness.state.events().gate().epoch().0, 1);
+    let client = SessionGame::client(&CLIENT_A) as usize;
+
+    ModLoader::new(harness.state).shutdown_live(client);
+
+    assert_eq!(
+        *CLOSING_SEEN.lock().unwrap(),
+        [
+            format!("world.left alive=1 epoch=1 client={client:#x} world=1"),
+            format!("loader.shutdown alive=1 epoch=0 client={client:#x}"),
+        ]
+    );
+    assert_eq!(harness.state.events().gate().epoch().0, 0);
+    assert!(!harness.state.events().gate().is_open());
+    assert_eq!(SessionAdapter::primary_client(), None);
+}
+
+#[test]
+fn hud_is_restored_before_the_gate_closes() {
+    let harness = Harness::start_with_entries(&ClientGame::entries(&[]));
+    SessionAdapter::install(harness.state);
+    ClientAdapter::install(harness.state);
+    ClientGame::frame();
+    ClientGame::update(&GAME_CLIENT_A);
+    ClientGame::set_hide_hud(false);
+    let plain = EventsMod::build("plain", &[]);
+    let loader = load_events_mods(&harness, &[("events", &plain)]);
+    loader.enable_all();
+    // SAFETY: the loader's tables live for the process.
+    let services = unsafe { AmmlApi::services(harness.state.api()) }.unwrap();
+    // SAFETY: as above.
+    let table = unsafe { &*AmmlServices::client(services).unwrap() };
+    let client = ClientGame::client(&GAME_CLIENT_A);
+    // SAFETY: the table is live and the view lives for the call.
+    let status = unsafe {
+        (table.set_flag)(AmmlStr::from_str("@events/events"), client.cast_const(), AmmlClientFlag::HIDE_HUD, 1)
+    };
+    assert_eq!(status, AmmlStatus::OK);
+
+    loader.shutdown_live(client as usize);
+
+    assert_eq!(ClientGame::hud_sets(), [true, false]);
+    assert_eq!(loader.phases(), [("@events/events".to_string(), ModPhase::Disabled)]);
+    assert!(!harness.state.events().gate().is_open());
+    let log = LogFile::wait_for(&harness.logs().join("loader.log"), "client flag restored");
+    assert!(log.contains("HideHud"), "{log}");
+}
+
+#[test]
+fn a_shutdown_after_the_live_shutdown_does_nothing() {
+    let plain = EventsMod::build("plain", &[]);
+    let harness = Harness::start();
+    let loader = load_events_mods(&harness, &[("events", &plain)]);
+    loader.enable_all();
+    let hub = harness.state.events();
+    hub.raise(&mut FrameUpdate { header: EventHub::header::<FrameUpdate>(AmmlPhase::BEFORE) }, &hub.loader_context());
+    hub.gate().note_game_thread();
+
+    loader.shutdown_live(0);
+    loader.shutdown_live(0);
+    loader.shutdown();
+
+    let mods = harness.mods();
+    assert_eq!(
+        EventsMod::lines_of(&mods, "events", "loader.shutdown"),
+        ["events loader.shutdown thread=0 epoch=0 alive=1"]
+    );
+    let disables = EventsMod::lines_of(&mods, "events", "disable listen");
+    assert_eq!(disables, [format!("events disable listen status={} game_alive=1", AmmlStatus::FAILED.0)]);
+    assert!(!hub.gate().is_open());
+    assert!(harness.state.shutdown().is_closing());
 }

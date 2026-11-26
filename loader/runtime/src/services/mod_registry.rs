@@ -107,19 +107,25 @@ impl ModRegistry {
 
     fn spec(dir: &Path, body: &Body) -> Result<ModSpec, String> {
         let mut listing_seen = false;
+        let mut uses_seen = false;
         let mut ignored = Vec::new();
         for block in body.blocks() {
-            if block.identifier() != "listing" {
-                ignored.push(format!("block `{}`", block.identifier()));
-                continue;
-            }
+            // `uses` is read by the compat check; the loader takes the uses from the mod's info block
+            let seen = match block.identifier() {
+                "listing" => &mut listing_seen,
+                "uses" => &mut uses_seen,
+                other => {
+                    ignored.push(format!("block `{other}`"));
+                    continue;
+                }
+            };
             if !block.labels().is_empty() {
-                return Err("`listing` takes no labels".to_string());
+                return Err(format!("`{}` takes no labels", block.identifier()));
             }
-            if listing_seen {
-                return Err("only one `listing` block is allowed".to_string());
+            if *seen {
+                return Err(format!("only one `{}` block is allowed", block.identifier()));
             }
-            listing_seen = true;
+            *seen = true;
         }
         let mut namespace = None;
         let mut name = None;

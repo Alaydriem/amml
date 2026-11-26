@@ -69,8 +69,10 @@ impl RecipeLoader {
         let kind = EntryKind::from_name(&kind_name)
             .ok_or_else(|| reader.fail(format!("unknown kind `{kind_name}` in attribute `kind`")))?;
         let hooked = reader.optional_bool("hooked")?.unwrap_or(false);
-        if hooked && kind != EntryKind::Function {
-            return Err(reader.fail(format!("attribute `hooked` is only valid on function entries, not {kind_name}")));
+        if hooked && !matches!(kind, EntryKind::Function | EntryKind::VSlot) {
+            return Err(
+                reader.fail(format!("attribute `hooked` is only valid on function and vslot entries, not {kind_name}"))
+            );
         }
         let mut recipes = Vec::new();
         let mut checks = Vec::new();
@@ -125,6 +127,7 @@ impl RecipeLoader {
             "pattern_any" => &["patterns", "offset", "literal_ok"],
             "function_start_of" => &[],
             "vtable_holding" => &[],
+            "vptr_offset" => &[],
             "string_xref" => &["text", "nth"],
             "rtti_vtable" => &["class", "slot"],
             "ref" => &["entry"],
@@ -161,6 +164,7 @@ impl RecipeLoader {
             }
             "function_start_of" => Ok(Step::FunctionStartOf),
             "vtable_holding" => Ok(Step::VtableHolding),
+            "vptr_offset" => Ok(Step::VptrOffset),
             "string_xref" => {
                 let text = reader.string("text")?;
                 if text.is_empty() || text.contains(char::from(0)) {
@@ -233,6 +237,7 @@ impl RecipeLoader {
             "function_start" | "leaf_start" => &[],
             "in_vtable_of" => &["class"],
             "in_vtable" => &["vtable", "min_slot", "max_slot"],
+            "in_stored_vtable" => &[],
             "range" => &["min", "max"],
             "section" => &["name"],
             "entry_is" => &["entry", "value"],
@@ -243,6 +248,7 @@ impl RecipeLoader {
             "function_start" => Ok(Check::FunctionStart),
             "leaf_start" => Ok(Check::LeafStart),
             "in_vtable_of" => Ok(Check::InVtableOf { class: reader.string("class")? }),
+            "in_stored_vtable" => Ok(Check::InStoredVtable),
             "in_vtable" => {
                 let (min_slot, max_slot) = (reader.u32("min_slot")?, reader.u32("max_slot")?);
                 if min_slot > max_slot {

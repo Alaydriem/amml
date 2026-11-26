@@ -51,7 +51,7 @@ entry "ItemStackBase.getMaxStackSize" {
 
 entry "ItemStackBase.getDamageValue" {
   kind     = "function"
-  notes    = "short ItemStackBase::getDamageValue() const: rcx the stack, the damage in ax. It needs the WeakPtr<Item> at +8 and the user data at +10h, looks up the IntTag `Damage` in the user data (CompoundTag::get, then the Int accessor) and returns its low 16 bits; 0 without user data or tag. 26 direct callers. Recipe 0 is the prologue (`push rsi; push rdi; sub rsp,..; mov rax,[rip+..]; xor rax,rsp; mov [rsp+..],rax; mov rax,[rcx+8]; test rax,rax; je; cmp qword ptr [rax],0; je; mov rsi,[rcx+..]`). Recipe 1 is a call site after a null test of a local (`test edi,edi; je; mov rcx,[rbp+..]; call`), read as the call target. Recipe 2 is a call site in a function that returns zero on the other branch (`jmp; xor r15d,r15d; mov rcx,r14; call`), read the same way. The three recipes are in three functions and share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. The check is function_start. The gate (check entry_is) LevelChunk.mSubChunks = 456 (1C8h, the 26.60 layout) ties this entry to the 26.60 build: it refuses as not for this build on 26.51, and must be widened when a later build is added. Value 1ACF510h on 6ad79ee4-17d51891a1119914 (26.60)."
+  notes    = "short ItemStackBase::getDamageValue() const: rcx the stack, the damage in ax. It needs the WeakPtr<Item> at +8 and the user data at +10h, looks up the IntTag `Damage` in the user data (CompoundTag::get, then the Int accessor) and returns its low 16 bits; 0 without user data or tag. 26 direct callers. Recipe 0 is the prologue (`push rsi; push rdi; sub rsp,..; mov rax,[rip+..]; xor rax,rsp; mov [rsp+..],rax; mov rax,[rcx+8]; test rax,rax; je; cmp qword ptr [rax],0; je; mov rsi,[rcx+..]`). Recipe 1 is a call site after a null test of a local (`test edi,edi; je; mov rcx,[rbp+..]; call`), read as the call target. Recipe 2 is a call site in a function that returns zero on the other branch and then calls this function twice (`xor r15d,r15d; mov rcx,r14; call; nop; mov r12w,ax; mov rcx,rbx; call`), read as the first call target; the jump before the xor is a near jump on 26.60 to 26.63 and a short jump on 70.26, so the pattern starts at the xor. The three recipes are in three functions and share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. The check is function_start. Value 1ACF510h on 6ad79ee4-17d51891a1119914 (26.60). No build gate: builds before 26.63 are not supported."
 
   recipe {
     step "pattern" { bytes = "56 57 48 83 EC ?? 48 8B 05 ?? ?? ?? ?? 48 31 E0 48 89 44 24 ?? 48 8B 41 ?? 48 85 C0 74 ?? 48 83 38 ?? 74 ?? 48 8B 71 ??" }
@@ -70,8 +70,8 @@ entry "ItemStackBase.getDamageValue" {
 
   recipe {
     step "pattern" {
-      bytes  = "E9 ?? ?? ?? ?? 45 31 FF 4C 89 F1 E8 ?? ?? ?? ??"
-      offset = 11
+      bytes  = "45 31 FF 4C 89 F1 E8 ?? ?? ?? ?? 90 66 41 89 ?? 48 89 ?? E8 ?? ?? ?? ??"
+      offset = 6
     }
     step "operand" {
       index = 0
@@ -80,16 +80,11 @@ entry "ItemStackBase.getDamageValue" {
   }
 
   check "function_start" {}
-
-  check "entry_is" {
-    entry = "LevelChunk.mSubChunks"
-    value = 456
-  }
 }
 
 entry "ItemStackBase.isDamaged" {
   kind     = "function"
-  notes    = "bool ItemStackBase::isDamaged() const: rcx the stack, the bool in al. The name is from behaviour: it asks the Item whether it is damageable (Item virtual at +70h, slot 14), returns false for a stack whose user data has the ByteTag `Unbreakable`, and otherwise tests that the damage value is above 0. It replaces the plan's isDamageableItem, which is not a function of this build. 9 callers (one is a tail jump). Recipe 0 is the prologue (`push rsi; push rdi; sub rsp,..; mov rax,[rip+..]; xor rax,rsp; mov [rsp+..],rax; mov rax,[rcx+8]; test rax,rax; je; mov rdx,[rax]; test rdx,rdx`). Recipe 1 is a call site that follows the damageable test on an Item (`mov rsi,rax; mov rax,[rax]; mov rax,[rax+..]; mov rcx,rsi; call [guard]; test al,al; je; mov rcx,rsi; call`), read as the call target. Recipe 2 is a second call site with the same test in a function that returns early (`mov rdi,rcx; mov rax,[rdx]; mov rax,[rax+..]; mov rcx,rdx; call [guard]; mov ecx,eax; mov al,..; test cl,cl; je; mov rcx,rsi; call`), read the same way. The three recipes are in three functions and share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. The check is function_start. The gate (check entry_is) LevelChunk.mSubChunks = 456 (1C8h, the 26.60 layout) ties this entry to the 26.60 build: it refuses as not for this build on 26.51, and must be widened when a later build is added. Value 1AD1050h on 6ad79ee4-17d51891a1119914 (26.60)."
+  notes    = "bool ItemStackBase::isDamaged() const: rcx the stack, the bool in al. The name is from behaviour: it asks the Item whether it is damageable (Item virtual at +70h, slot 14), returns false for a stack whose user data has the ByteTag `Unbreakable`, and otherwise tests that the damage value is above 0. It replaces the plan's isDamageableItem, which is not a function of this build. 9 callers (one is a tail jump). Recipe 0 is the prologue (`push rsi; push rdi; sub rsp,..; mov rax,[rip+..]; xor rax,rsp; mov [rsp+..],rax; mov rax,[rcx+8]; test rax,rax; je; mov rdx,[rax]; test rdx,rdx`). Recipe 1 is a call site that follows the damageable test on an Item (`mov rsi,rax; mov rax,[rax]; mov rax,[rax+..]; mov rcx,rsi; call [guard]; test al,al; je; mov rcx,rsi; call`), read as the call target. Recipe 2 is a second call site with the same test in a function that returns early (`mov rdi,rcx; mov rax,[rdx]; mov rax,[rax+..]; mov rcx,rdx; call [guard]; mov ecx,eax; mov al,..; test cl,cl; je; mov rcx,rsi; call`), read the same way. The three recipes are in three functions and share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. The check is function_start. Value 1AD1050h on 6ad79ee4-17d51891a1119914 (26.60). No build gate: builds before 26.63 are not supported."
 
   recipe {
     step "pattern" { bytes = "56 57 48 83 EC ?? 48 8B 05 ?? ?? ?? ?? 48 31 E0 48 89 44 24 ?? 48 8B 41 ?? 48 85 C0 0F 84 ?? ?? ?? ?? 48 8B 10 48 85 D2" }
@@ -118,11 +113,6 @@ entry "ItemStackBase.isDamaged" {
   }
 
   check "function_start" {}
-
-  check "entry_is" {
-    entry = "LevelChunk.mSubChunks"
-    value = 456
-  }
 }
 
 entry "ItemStackBase.mBlock" {
@@ -158,5 +148,64 @@ entry "ItemStackBase.mBlock" {
   check "range" {
     min = 8
     max = 64
+  }
+}
+
+
+entry "ItemStackBase.mItem" {
+  kind     = "field"
+  notes    = "Offset of WeakPtr<Item> ItemStackBase::mItem: 8 on 26.63 (6aed1906-b127418e74d2f2f9) and 26.70.26 (6afa4e47-dadc375797a3d31a), the first member after the vtable. The WeakPtr is one pointer to a SharedCounter<Item> whose first member is the Item pointer; a stack with a null counter or a null Item is empty. The loader's ItemStack mirror reads it at this offset and refuses `inventory.read` when the entry has another value. Recipe 0 is the head of ItemStackBase::getDamageValue (`ref`): `mov rax,[rcx+disp]; test rax,rax; je; cmp qword ptr [rax],0; je` (the counter, then the Item in it), offset 0, the displacement of the load. Recipe 1 is the ItemStackBase copy constructor, the first call of ItemStack::copyCtor (`ref`, `call` nth 0): `lea rax,[rip+..]; mov [rcx],rax; lea rax,[rcx+disp]; mov [rbp+..],rax` (the vtable store, then the address of the member for the WeakPtr copy), the displacement of the lea. The two recipes are in two functions. Every displacement, immediate and branch byte is a wildcard. Range window 8..18h. Class: new entry."
+
+  recipe {
+    step "ref" { entry = "ItemStackBase.getDamageValue" }
+    step "pattern" {
+      bytes  = "48 8B 41 ?? 48 85 C0 74 ?? 48 83 38 ?? 74 ??"
+      offset = 0
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  recipe {
+    step "ref" { entry = "ItemStack.copyCtor" }
+    step "call" { nth = 0 }
+    step "pattern" {
+      bytes  = "48 8D 05 ?? ?? ?? ?? 48 89 01 48 8D 41 ?? 48 89 45 ??"
+      offset = 10
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 8
+    max = 24
+  }
+}
+
+entry "ItemStackBase.mCount" {
+  kind     = "field"
+  notes    = "Offset of the byte ItemStackBase::mCount (the stack size): 22h on 26.63 (6aed1906-b127418e74d2f2f9) and 26.70.26 (6afa4e47-dadc375797a3d31a), right after the short mAuxValue at 20h. The loader's ItemStack mirror reads it at this offset and refuses `inventory.read` when the entry has another value. The recipe is the ItemStackBase copy constructor, the first call of ItemStack::copyCtor (`ref`, `call` nth 0): `cmp r8d,imm32; sete r9b; and r9b,dl; movzx r8d,byte ptr [rsi+disp]; cmp r9b,1; mov [rbp+..],rcx; jne` (the aux value tested against its any-value mark, then the count of the source stack), the displacement of the movzx. Every displacement, immediate and branch byte is a wildcard. One recipe and a range check, as for a mirror member. Evidence: the base useItem body compares the count byte of the stack with `cmp al,[rdi+22h]` (26.70.26) and `cmp al,[rsi+22h]` (26.63) after the use. Range window 18h..30h. Class: new entry."
+
+  recipe {
+    step "ref" { entry = "ItemStack.copyCtor" }
+    step "call" { nth = 0 }
+    step "pattern" {
+      bytes  = "41 81 F8 ?? ?? ?? ?? 41 0F 94 C1 41 20 D1 44 0F B6 46 ?? 41 80 F9 ?? 48 89 4D ?? 75 ??"
+      offset = 14
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+  }
+
+  check "range" {
+    min = 24
+    max = 48
   }
 }

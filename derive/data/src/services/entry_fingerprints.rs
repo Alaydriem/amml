@@ -146,6 +146,7 @@ impl EntryFingerprints {
                 out.extend_from_slice(&local_at.to_le_bytes());
             }
             Step::Alternative => out.push(16),
+            Step::VptrOffset => out.push(17),
         }
     }
 
@@ -172,6 +173,7 @@ impl EntryFingerprints {
                 out.extend_from_slice(&min.to_le_bytes());
                 out.extend_from_slice(&max.to_le_bytes());
             }
+            Check::InStoredVtable => out.push(7),
             Check::EntryIs { entry, value } => {
                 out.push(6);
                 Self::text(out, &entry.0);

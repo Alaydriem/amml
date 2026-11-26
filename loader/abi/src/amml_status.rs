@@ -13,6 +13,10 @@ impl AmmlStatus {
     pub const VERSION_MISMATCH: Self = Self(4);
     pub const PANICKED: Self = Self(5);
     pub const FAILED: Self = Self(6);
+    pub const NOT_AVAILABLE: Self = Self(7);
+    pub const NOT_READY: Self = Self(8);
+    pub const REFUSED: Self = Self(9);
+    pub const STALE: Self = Self(10);
 
     /// Whether the call succeeded. Any value other than `OK`, known or not, is a failure.
     pub fn is_ok(self) -> bool {

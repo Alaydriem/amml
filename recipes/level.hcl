@@ -34,12 +34,12 @@ entry "Level.getCameraPresets" {
 
 entry "Level.getSeed" {
   kind     = "vslot"
-  notes    = "Slot of uint ILevel::getSeed() in the Level vtable: 134 (86h) in 26.51 (LeviLamina ILevel header order: setTime 133, getSeed 134, getLevelSeed64 135; no overloads move it). The result comes back in eax. Level has no RTTI and no vtable global here, so both recipes are call sites whose result seeds a std::mt19937 (the next instructions run the 6C078965h initialisation on eax), which is how the game makes a seeded random from the level seed. Recipe 0 is in a function next to the Dimension code: `mov [rbx+..],rax; mov rcx,[rbx+20h]; mov rax,[rcx]; mov rax,[rax+disp]; call [guard]; lea rcx,[rip+..]; mov [rbp+..],rcx; lea rcx,[rbp+..]` (rbx+20h is the level). Recipe 1 is in another function: `mov rsi,rcx; mov rax,[rdx]; mov rax,[rax+disp]; mov rcx,rdx; call [guard]; lea rcx,[rip+..]; mov [rbp+..],rcx; lea rcx,[rbp+..]` (the level is the second argument). 19 call sites of slot 134 seed a mt19937 this way. Both read the displacement and turn it into a slot. They are in two functions. Every displacement, immediate and branch byte is a wildcard. The range check is a window around the known slot. What changed in 6ad79ee4-17d51891a1119914 (26.60), repaired in Plan 6c Task 8: the compiler now puts a nop after many calls, so an old pattern that ran past a call stopped matching. and the store before the call uses another register. Recipe 0 is now a pattern_any: the old bytes with the store ModRM byte as a wildcard, and the same with the nop after the call (the slot read is before the call). 86h on both. Class: would have survived with a pattern that ends at the call."
+  notes    = "Slot of uint ILevel::getSeed() in the Level vtable: 134 (86h) in 26.51, 87h in 26.70 previews (ILevel header order: setTime, getSeed, getLevelSeed64). The result comes back in eax. Level has no vtable global, so both recipes are call sites whose result seeds a std::mt19937 (rax result stored, then the 6C078965h initialisation). Recipe 0 is the call `mov rcx,[rsi+20h]; mov rax,[rcx]; mov rax,[rax+disp]; call [guard]` followed by the seed-engine setup (`lea rcx,[rip+..]; mov [rbp+..],rcx; lea rcx,[rbp+..]; lea rdx,[rip+..]; mov [rbp+..],rdx; mov rdx,imm64`); a pattern_any with one alternative for a nop after the call and one without; the base register is pinned to rsi, which leaves out the same call in a sibling function (it loads the level through rax or rbx); the slot load is at offset 7. Recipe 1 is another function: `mov rsi,rcx; mov rax,[rdx]; mov rax,[rax+disp]; mov rcx,rdx; call [guard]; lea rcx,[rip+..]; mov [rbp+..],rcx; lea rcx,[rbp+..]` (the level is the second argument). Both read the displacement and turn it into a slot. Every displacement, immediate and branch byte is a wildcard. Range window 126..142. What changed in 6afa4e47-dadc375797a3d31a (1.26.70.26): the store before the call in the old recipe 0 no longer has the old register shape, so recipe 0 now starts at the level load of the rsi site; the slot moved from 86h to 87h (Level.getBiomeRegistry moved 54h to 55h the same way). Evidence on 70.26: the rsi call site of the old build (after `cmp bl,1; jne`) has one counterpart in the new build with the same following seed-engine code, and it reads displacement 438h (slot 87h); the old recipe-1 function maps to the new match of recipe 1 with the same displacement. Would have survived with a better recipe."
 
   recipe {
     step "pattern_any" {
-      patterns = ["48 89 ?? ?? ?? ?? ?? 48 8B 4B ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15 ?? ?? ?? ?? 48 8D 0D ?? ?? ?? ?? 48 89 4D ?? 48 8D 4D ??", "48 89 ?? ?? ?? ?? ?? 48 8B 4B ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15 ?? ?? ?? ?? 90 48 8D 0D ?? ?? ?? ?? 48 89 4D ?? 48 8D 4D ??"]
-      offset = 14
+      patterns = ["48 8B 4E ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15 ?? ?? ?? ?? 48 8D 0D ?? ?? ?? ?? 48 89 4D ?? 48 8D 4D ?? 48 8D 15 ?? ?? ?? ?? 48 89 55 ?? 48 BA", "48 8B 4E ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15 ?? ?? ?? ?? 90 48 8D 0D ?? ?? ?? ?? 48 89 4D ?? 48 8D 4D ?? 48 8D 15 ?? ?? ?? ?? 48 89 55 ?? 48 BA"]
+      offset = 7
     }
     step "operand" {
       index = 1
@@ -115,15 +115,15 @@ entry "Level.getBiomeRegistry" {
 
 entry "Level.getLevelSeed64" {
   kind     = "vslot"
-  notes    = "Slot of LevelSeed64 ILevel::getLevelSeed64() const in the Level vtable: 135 on 26.51, the slot after Level.getSeed (134), which is the ILevel header order (Level::tick at 119 lines up). The body returns the 8-byte value through a hidden pointer (rdx; it writes [rdx] and returns rdx), so a caller passes a buffer in rdx. getSeed (134) reads the low 32 bits of the same value. Recipe 0 is a call site in a LevelChunk function: `mov r12d,[rdx+..]; mov r15d,[rdx+..]; mov rcx,[rdx+50h]` (LevelChunk::mLevel) `; mov rax,[rcx]; mov rax,[rax+disp]; lea rdx,[rbp+..]; call [guard]`. Recipe 1 is a call site on Actor::mLevel (`mov rcx,[rax+1D8h]`; the caller then shifts the result right by 32, so it uses all 64 bits): `test rax,rax; je; mov rcx,[rax+..]; mov rax,[rcx]; mov rax,[rax+disp]; lea rdx,[rsp+..]; call [guard]`. Both read the displacement as a slot. Range window 127..143. Recipe 0 is a pattern_any, one alternative per shape of the LevelChunk function: alternative 0 (26.51) reads the chunk through rdx, alternative 1 (26.60) through r9 (REX bytes 45h and 49h). Value 135 on both builds. What changed in 6ad79ee4-17d51891a1119914 (26.60): the LevelChunk function (the one that loads the 1 Actor _setPos text and has the same 7 texts and size on both builds) holds the chunk in r9, so the 26.51 pattern did not match; recipe 1 (Actor::mLevel site) agrees. Would have survived with a better recipe."
+  notes    = "Slot of LevelSeed64 ILevel::getLevelSeed64() const in the Level vtable: 135 on 26.51, the slot after Level.getSeed, 88h in 26.70 previews. The body returns the 8-byte value through a hidden pointer (rdx), so a caller passes a buffer in rdx. Recipe 0 is the call site in the LevelChunk function that builds a random engine: `mov rax,[rcx]; mov rax,[rax+disp]; lea rdx,[rbp+..]; call [guard]; (nop); mov rdx,[rbp+..]; lea rax,[rip+..]; mov [..],rax`, a pattern_any with one alternative for a nop after the call and one without. Recipe 1 is the call site in a small function that reads the seed to float state: `mov rax,[rcx]; mov rax,[rax+disp]; lea rdx,[rsp+..]; call [guard]; mov rax,[rsp+..]; mov rcx,rax; shr rcx,20h; xor ecx,eax; cmp ecx,0FFFFFFFFh` (the high word xor the low word, tested for -1), also with a nop alternative. Both read the displacement as a slot. Range window 127..143. What changed in 6afa4e47-dadc375797a3d31a (1.26.70.26): the slot moved from 87h to 88h, and the call sites have different surrounding code (a null check of Actor::mLevel and other registers), so the old patterns that started before the level load stopped matching; both recipes now start at the level vtable load. Evidence on 70.26: the old recipe-0 function (same size class, same random engine constants) and the old recipe-1 function each have one new counterpart with the same body shape that reads displacement 440h (slot 88h); Level.getSeed moved 86h to 87h the same way. Would have survived with a better recipe."
 
   recipe {
     step "pattern_any" {
       patterns = [
-        "44 8B ?? ?? 44 8B ?? ?? 48 8B 4A ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8D 95 ?? ?? ?? ?? FF 15",
-        "45 8B ?? ?? 45 8B ?? ?? 49 8B 49 ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8D 95 ?? ?? ?? ?? FF 15",
+        "48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8D 95 ?? ?? ?? ?? FF 15 ?? ?? ?? ?? 48 8B 95 ?? ?? ?? ?? 48 8D 05 ?? ?? ?? ?? 48 89",
+        "48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8D 95 ?? ?? ?? ?? FF 15 ?? ?? ?? ?? 90 48 8B 95 ?? ?? ?? ?? 48 8D 05 ?? ?? ?? ?? 48 89",
       ]
-      offset = 15
+      offset = 3
     }
     step "operand" {
       index = 1
@@ -133,9 +133,12 @@ entry "Level.getLevelSeed64" {
   }
 
   recipe {
-    step "pattern" {
-      bytes  = "48 85 C0 0F 84 ?? ?? ?? ?? 48 8B 88 ?? ?? ?? ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8D 54 24 ?? FF 15"
-      offset = 19
+    step "pattern_any" {
+      patterns = [
+        "48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8D 54 24 ?? FF 15 ?? ?? ?? ?? 48 8B 44 24 ?? 48 89 C1 48 C1 E9 ?? 31 C1 83 F9 ??",
+        "48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8D 54 24 ?? FF 15 ?? ?? ?? ?? 90 48 8B 44 24 ?? 48 89 C1 48 C1 E9 ?? 31 C1 83 F9 ??",
+      ]
+      offset = 3
     }
     step "operand" {
       index = 1
@@ -152,15 +155,15 @@ entry "Level.getLevelSeed64" {
 
 entry "Level.getHitResult" {
   kind     = "vslot"
-  notes    = "Slot of HitResult& ILevel::getHitResult() in the Level vtable: 335 on 26.51 (ILevel header order; Level::tick at 119 and getItemRegistry at 392 line up with the binary). In the three Level vtables, 332..334 forward to the random member (getIRandom, getRandom, getThreadRandom), 335 is the leaf `mov rax,[rcx+1E8h]; ret` (the hit result wrapper), 336 returns that wrapper plus 88h (getLiquidHitResult) and 337 returns the wrapper through a hidden pointer. The callers read the result as a HitResult (`cmp dword ptr [rax+18h],0`, mType; `[rax+1Ch]`, mFacing). Both recipes are calls through Actor::mLevel (`mov rcx,[reg+1D8h]; mov rax,[rcx]; mov rax,[rax+disp]; call [guard]`). Recipe 0 follows a test of a player flag (`jg; cmp byte ptr [rsi+..],..; jne`). Recipe 1 follows two stores into a struct (`mov dword ptr [rax+..],edx; mov byte ptr [rax+..],cl; mov rax,[rdi+..]`). Both read the displacement as a slot. The two recipes are in two functions. Every displacement, immediate and branch byte is a wildcard. Range window 327..343. Recipe 0 is now a pattern_any from the flag test, one alternative per shape (jne on 26.51, je on 26.60), running past the call to the test of the hit type (`cmp dword ptr [rax+18h],..`); the slot load is at offset 19 in both. Value 335 on both builds. What changed in 6ad79ee4-17d51891a1119914 (26.60): the flag test is inverted and Actor::mLevel moved (1D8h to 200h); recipe 1 agrees. Would have survived with a better recipe."
+  notes    = "Slot of HitResult& ILevel::getHitResult() in the Level vtable: 335 on 26.51 (14Fh in the later builds). The callers read the result as a HitResult (mType at +18h, copies of 28h/1Ch/40h). Level has no vtable global, so both recipes are call sites. Recipe 0 is the consumer that reads mType and the next 16 bytes after the call (`mov rax,[rcx]; mov rax,[rax+disp]; call [guard]; nop; mov r32,[rax+18h]; movups xmm0,[rax+28h]`), a pattern_any with one alternative per register shape (44 8B for r14d, 8B for edi). Recipe 1 is a small wrapper function that takes the result and tests mType (`mov rcx,[rcx+20h]; mov rax,[rcx]; mov rax,[rax+disp]; call [guard]; mov rdi,rax; ... cmp dword ptr [rdi+18h],0 ... mov eax,[rdi+28h]`). The next function holds the same code with [rdi+34h], so the byte 28h is kept (literal_ok). Both read the displacement as a slot. Range window 327..343. What changed in 6afa4e47-dadc375797a3d31a (1.26.70.26): the old flag-test recipe and the store-pair recipe no longer match (Actor::mLevel loads now have a null check), the slot did not move (14Fh on 26.51 to 26.70). Evidence on 70.26: the old consumer function and the old wrapper function each have one new counterpart with the same body that reads displacement A78h; a third pair (old function with the pair A78h then A80h reads, the new function with the same two reads in the same order) agrees. Would have survived with a better recipe."
 
   recipe {
     step "pattern_any" {
       patterns = [
-        "80 BE ?? ?? ?? ?? ?? 75 ?? 48 8B 8E ?? ?? ?? ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15 ?? ?? ?? ?? 83 78",
-        "80 BE ?? ?? ?? ?? ?? 74 ?? 48 8B 8E ?? ?? ?? ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15 ?? ?? ?? ?? 83 78",
+        "48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15 ?? ?? ?? ?? 90 44 8B ?? ?? 0F 10 40 ??",
+        "48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15 ?? ?? ?? ?? 90 8B ?? ?? 0F 10 40 ??",
       ]
-      offset = 19
+      offset = 3
     }
     step "operand" {
       index = 1
@@ -171,8 +174,11 @@ entry "Level.getHitResult" {
 
   recipe {
     step "pattern" {
-      bytes  = "88 88 ?? ?? ?? ?? 48 8B 47 ?? 48 8B 88 ?? ?? ?? ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15"
-      offset = 20
+      bytes  = "48 8B 49 ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15 ?? ?? ?? ?? 48 89 C7 48 8B 4B ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15 ?? ?? ?? ?? 84 C0 74 ?? 83 7F ?? ?? 74 ?? 31 C0 88 46 ?? 48 89 F0 48 83 C4 ?? 5B 5F 5E C3 8B 47 28"
+      offset = 7
+      literal_ok = [
+        "71: mov eax,[rdi+28h]: the twin function right after it reads [rdi+34h] and holds the same code otherwise",
+      ]
     }
     step "operand" {
       index = 1
@@ -189,12 +195,12 @@ entry "Level.getHitResult" {
 
 entry "Level.getItemRegistry" {
   kind     = "vslot"
-  notes    = "Slot of ItemRegistryRef ILevel::getItemRegistry() const in the Level vtable: 392 on 26.51 (ILevel header order). The ItemRegistryRef (a 16-byte weak_ptr) comes back through a hidden pointer in rdx. Every caller of ItemRegistryRef::getCreativeItemRegistry that starts from a level does `mov rcx,[actor+1D8h]` (Actor::mLevel), `mov rax,[rcx]; mov rax,[rax+disp]; lea rdx,[local]; call [guard]`, then passes the local as the ItemRegistryRef this. Recipe 0 is one of them: `mov r14b,r8b; mov rsi,rcx; mov rax,[rcx+..]; mov rcx,[rax+..]; mov rax,[rcx]; mov rax,[rax+disp]; lea rdx,[rbp-..]; call [guard]`. Recipe 1 is another: `mov rcx,[rax+..]; mov rax,[rcx]; mov rax,[rax+disp]; lea rbx,[rbp+..]; mov rdx,rbx; call [guard]`. Both read the displacement as a slot. The two recipes are in two functions. Every displacement, immediate and branch byte is a wildcard. Range window 384..400. Recipe 1 is now the caller that passes the result to ItemRegistryRef.getCreativeItemRegistry right after the call (`mov rcx,[rax+..]; mov rax,[rcx]; mov rax,[rax+disp]; lea r64,[rbp+..]; mov rdx,r64; call [guard]; lea rdx,[rbp+..]; mov rcx,r64; call`), with the local register wildcarded. Value 392 on both builds. What changed in 6ad79ee4-17d51891a1119914 (26.60): the 26.51 pattern of recipe 1 matched another call (Level slot 27) on 26.60, so the recipes disagreed and the entry was refused (no wrong value); 15 sites load slot 392 through Actor::mLevel on each build. Would have survived with a better recipe."
+  notes    = "Slot of ItemRegistryRef ILevel::getItemRegistry() const in the Level vtable: 392 on 26.51, 18Bh in 26.70 previews. The ItemRegistryRef (a 16-byte weak_ptr) comes back through a hidden pointer in rdx and every caller then passes it to ItemRegistryRef::getCreativeItemRegistry. Level has no vtable global, so both recipes are call sites. Recipe 0 is a small function (`mov rbx,r8; mov rsi,rdx; mov rdi,rcx; mov rcx,[rcx+50h]; mov rax,[rcx]; mov rax,[rax+disp]; lea rdx,[rbp-..]; call [guard]`). Recipe 1 is a larger sibling that starts with eight pushes (`sub rsp,imm32; lea rbp,[rsp+..]; mov rsi,rcx; mov rcx,[rcx+50h]; mov rax,[rcx]; mov rax,[rax+disp]; lea rdx,[rbp+..]; call [guard]; mov byte ptr [rbp+..],0; xorps xmm0,xmm0; movups; movaps; mov rax,[rbp+..]; test rax,rax; je`). The two recipes are in two different functions. Both read the displacement as a slot. Range window 384..400. What changed in 6afa4e47-dadc375797a3d31a (1.26.70.26): the slot moved from 188h to 18Bh, and the call sites that started with a Actor::mLevel load changed shape (null check); the two recipes now anchor on the functions that load the level through [rcx+50h]. Evidence on 70.26: the old small function and the old sibling each have one new counterpart with the same body (same prologue, same weak_ptr handling) that reads displacement C58h (slot 18Bh); the function order (sizes, first site offsets) of the five consecutive callers matches across builds. Would have survived with a better recipe."
 
   recipe {
     step "pattern" {
-      bytes  = "45 88 C6 48 89 CE 48 8B 41 ?? 48 8B 88 ?? ?? ?? ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8D 55 ?? FF 15"
-      offset = 20
+      bytes  = "4C 89 C3 48 89 D6 48 89 CF 48 8B 49 ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8D 55 ?? FF 15"
+      offset = 16
     }
     step "operand" {
       index = 1
@@ -205,8 +211,8 @@ entry "Level.getItemRegistry" {
 
   recipe {
     step "pattern" {
-      bytes  = "48 8B 88 ?? ?? ?? ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8D ?? ?? ?? ?? ?? 48 89 ?? FF 15 ?? ?? ?? ?? 48 8D 55 ?? 48 89 ?? E8"
-      offset = 10
+      bytes  = "55 41 57 41 56 41 55 41 54 56 57 53 48 81 EC ?? ?? ?? ?? 48 8D AC 24 ?? ?? ?? ?? 48 C7 45 ?? ?? ?? ?? ?? 48 89 CE 48 8B 49 ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? 48 8D 55 ?? FF 15 ?? ?? ?? ?? C6 45 ?? ?? 0F 57 C0 0F 11 45 ?? 0F 29 45 ?? 48 8B 45 ?? 48 85 C0 74 ??"
+      offset = 45
     }
     step "operand" {
       index = 1
@@ -218,5 +224,48 @@ entry "Level.getItemRegistry" {
   check "range" {
     min = 384
     max = 400
+  }
+}
+
+entry "Level.isClientSide" {
+  kind  = "vslot"
+  notes = "Slot of the ILevel virtual whose byte the block actor factory takes as its flag on 70.26 (6afa4e47-dadc375797a3d31a): 317 (13Dh). rcx = the level; it returns a byte in al. Its body in the Level, ServerLevel and third Level vtables is `movzx eax,byte ptr [rcx+238h]; ret` (0x2fd45c0); the Level constructor copies that byte from its argument block (`movzx eax,byte ptr [rsi+141h]; mov [rcx+238h],al`, 0x2fa3601). The name is the header name of the client-side flag; no text in the exe names it. BlockActor::loadStatic calls it on its ILevel (r9) and passes the result by pointer to the factory std::function (`mov rax,[r9]; mov rax,[rax+9E8h]; mov rcx,r9; call [guard]; ...; mov [rbp+2Fh],al; ...; lea r9,[rbp+2Fh]`, 0x72cf900); the factory is VanillaBlockActorFactory.createBlockActorWithFlag (r8b). A caller of that factory passes what this slot returns for its level, as the game does. Level has no vtable global, so both recipes are call sites. Recipe 0 is the call in BlockActor.loadStatic (`mov rax,[r9]; mov rax,[rax+disp32]; mov rcx,r9; call [guard]`), offset 3. Recipe 1 is a second caller of the factory (0x45373a0): first its factory call (`mov rcx,[rip+factory]; test rcx,rcx; je; mov [rbp+..],al; mov rax,[rcx]; mov rax,[rax+10h]; mov r10,[rip+..]; mov [rsp+20h],r14; lea rdx,[rbp+..]; lea r8,[rbp+..]; lea r9,[rbp+..]; call r10`), then in the same function the level call before it (`mov r14,[rbx+..]; mov rcx,[rdi+..]; mov rax,[rcx]; mov rax,[rax+disp32]; call [guard]`), offset 11. Both read the displacement as a slot. The two recipes are in two functions. Every displacement, immediate and branch byte is a wildcard. Range window 309..325. Layout gate: entry_is VanillaBlockActorFactory.createBlockActorForm = 1 (70.26); the 26.63 factory takes no flag and its callers make no such call, so this name refuses there as not for this build."
+
+  recipe {
+    step "ref" { entry = "BlockActor.loadStatic" }
+    step "pattern" {
+      bytes  = "49 8B 01 48 8B 80 ?? ?? ?? ?? 4C 89 C9 FF 15"
+      offset = 3
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+    step "displacement_to_slot" {}
+  }
+
+  recipe {
+    step "pattern" {
+      bytes = "48 8B 0D ?? ?? ?? ?? 48 85 C9 74 ?? 88 45 ?? 48 8B 01 48 8B 40 ?? 4C 8B 15 ?? ?? ?? ?? 4C 89 74 24 ?? 48 8D 55 ?? 4C 8D 45 ?? 4C 8D 4D ?? 41 FF D2"
+    }
+    step "pattern" {
+      bytes  = "4C 8B 73 ?? 48 8B 4F ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15"
+      offset = 11
+    }
+    step "operand" {
+      index = 1
+      kind  = "displacement"
+    }
+    step "displacement_to_slot" {}
+  }
+
+  check "range" {
+    min = 309
+    max = 325
+  }
+
+  check "entry_is" {
+    entry = "VanillaBlockActorFactory.createBlockActorForm"
+    value = 1
   }
 }

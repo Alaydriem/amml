@@ -60,4 +60,6 @@ pub enum StepError {
     UnreadableTable { rva: u32, slot: u32 },
     #[error("function {rva:#x} is in {count} vtables, so it does not name one")]
     InSeveralVtables { rva: u32, count: usize },
+    #[error("the table that holds function {rva:#x} is stored as a vptr at {count} offsets, so it names no subobject")]
+    SeveralVptrOffsets { rva: u32, count: usize },
 }

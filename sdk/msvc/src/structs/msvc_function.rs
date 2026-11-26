@@ -1,15 +1,8 @@
 use std::ffi::c_void;
 
 use crate::structs::callback_guard::CallbackGuard;
+use crate::structs::function_storage::FunctionStorage;
 use crate::structs::vtable::RustObject;
-
-/// The pointers of the MSVC `std::function` storage: seven words of small-object space, then the pointer to the
-/// callable object (`_Func_base`) in the last word. 64 bytes on x64.
-#[repr(C)]
-struct FunctionStorage {
-    space: [*mut c_void; 7],
-    callable: *mut c_void,
-}
 
 /// The virtual functions of the MSVC `_Func_base` in slot order: `_Copy`, `_Move`, `_Do_call`, then `_Target_type`
 /// (built with RTTI) or `_Delete_this` (without), then the rest. Only `_Do_call` may run: the holder of an

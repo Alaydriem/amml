@@ -259,6 +259,22 @@ fn known_manifest_has_nothing_ignored() {
 }
 
 #[test]
+fn a_uses_block_is_known_and_not_listed_as_ignored() {
+    let uses = "uses {\n  feature \"core\" {\n    event \"client.tick\" {\n      version  = 1\n      required = true\n    }\n  }\n}\n";
+    let scan = Manifests::scan(uses);
+
+    assert_eq!(scan.mods.len(), 1, "{:?}", scan.skipped);
+    assert!(scan.mods[0].ignored.is_empty(), "{:?}", scan.mods[0].ignored);
+}
+
+#[test]
+fn second_uses_block_is_refused() {
+    let reason = Manifests::refusal("uses {\n}\nuses {\n}\n");
+
+    assert!(reason.contains("only one `uses` block"), "{reason}");
+}
+
+#[test]
 fn known_attribute_with_wrong_type_is_still_refused_next_to_an_unknown_one() {
     let reason = Manifests::refusal("future_field = 1\nentries = \"Echo.found\"\n");
 

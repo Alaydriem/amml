@@ -26,6 +26,8 @@ pub enum CliError {
     BadAddress(String),
     #[error("rva {0:#x} is outside every section")]
     AddressUnmapped(u32),
+    #[error("cannot use {}: {message}", path.display())]
+    Manifest { path: PathBuf, message: String },
     #[error("cannot write {}: {source}", path.display())]
     Write { path: PathBuf, source: std::io::Error },
 }
@@ -42,6 +44,7 @@ impl CliError {
             | Self::ZeroCount
             | Self::NoVtableSource
             | Self::XrefsSource
+            | Self::Manifest { .. }
             | Self::AddressUnmapped(_) => 2,
             Self::Store(_) | Self::Write { .. } => 4,
         }

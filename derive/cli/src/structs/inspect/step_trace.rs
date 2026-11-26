@@ -38,6 +38,7 @@ impl StepTrace {
             Step::MemberDisplacement { index, local_at } => format!("member_displacement {index} local_at {local_at}"),
             Step::FunctionStartOf
             | Step::VtableHolding
+            | Step::VptrOffset
             | Step::ReadPointer
             | Step::DisplacementToSlot
             | Step::Alternative => step.name().to_string(),

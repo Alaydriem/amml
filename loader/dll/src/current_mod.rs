@@ -19,6 +19,14 @@ impl CurrentMod {
         result
     }
 
+    /// Runs `body` with no current mod, as when the loader calls a mod listener.
+    pub fn outside<R>(body: impl FnOnce() -> R) -> R {
+        let previous = CURRENT.with(|cell| cell.replace(None));
+        let result = body();
+        CURRENT.with(|cell| cell.set(previous));
+        result
+    }
+
     pub fn get() -> Option<(usize, Callback)> {
         CURRENT.with(Cell::get)
     }

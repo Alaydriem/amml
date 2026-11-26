@@ -78,7 +78,7 @@ entry "Mesh.isValid" {
 entry "Mesh.renderMesh" {
   kind      = "function"
   msvc_name = "?renderMesh@Mesh@mce@@QEBAXAEAVMeshContext@2@AEBVMaterialPtr@2@AEBV?$variant@Umonostate@std@@VTexturePtr@mce@@UClientTexture@4@UServerTexture@4@@std@@IIAEBUOffscreenCaptureDescription@@PEBVIndexBufferContainer@2@@Z"
-  notes     = "void mce::Mesh::renderMesh(MeshContext&, MaterialPtr const&, std::variant<monostate, TexturePtr, ClientTexture, ServerTexture> const&, uint, uint, OffscreenCaptureDescription const&, IndexBufferContainer const*) const, the first overload: rcx = this, rdx = MeshContext (ScreenContext+10h), r8 = material, r9 = the texture variant (index byte at +20h), [rsp+20h] start, [rsp+28h] count, [rsp+30h] offscreen, [rsp+38h] index buffer. A caller passes `mov rdx,[rsi+28h]; add rdx,10h` and a TexturePtr variant with index 1. The body copies the variant (`movsx rcx,byte ptr [r9+20h]; inc rcx`) and calls the implementation. Recipe 0 is the body head (`mov rsi,r8; mov rdi,rdx; mov rbx,rcx; mov byte ptr [rbp+..],0; mov qword ptr [rbp+..],0; mov byte ptr [rbp+..],..; lea rax,[rbp+..]`), then function_start_of. Recipe 1 is a call site in a draw helper after Tessellator.end: `mov dword ptr [rsp+20h],0; mov rcx,r15; mov rdx,rdi; mov r8,r14; mov r9,rbx; call`. Check function_start."
+  notes     = "void mce::Mesh::renderMesh(MeshContext&, MaterialPtr const&, std::variant<monostate, TexturePtr, ClientTexture, ServerTexture> const&, uint, uint, OffscreenCaptureDescription const&, IndexBufferContainer const*) const, the first overload: rcx = this, rdx = MeshContext (ScreenContext+10h), r8 = material, r9 = the texture variant (index byte at +20h), [rsp+20h] start, [rsp+28h] count, [rsp+30h] offscreen, [rsp+38h] index buffer. A caller passes `mov rdx,[rsi+28h]; add rdx,10h` and a TexturePtr variant with index 1. The body copies the variant (`movsx rcx,byte ptr [r9+20h]; inc rcx`) and calls the implementation. Recipe 0 is the body head (`mov rsi,r8; mov rdi,rdx; mov rbx,rcx; mov byte ptr [rbp+..],0; mov qword ptr [rbp+..],0; mov byte ptr [rbp+..],..; lea rax,[rbp+..]`), then function_start_of. Recipe 1 is a call site in a draw helper after Tessellator.end: `mov dword ptr [rsp+20h],0; mov rcx,r15; mov rdx,rdi; mov r8,r14; mov r9,rbx; call`. Check function_start. Layout gate: 26.63 only; on 70.x this overload is inlined into every caller (each copies its texture into a one-element texture list and calls the list overload); the replacement is Mesh.renderMeshTextureList."
 
   recipe {
     step "pattern" { bytes = "4C 89 C6 48 89 D7 48 89 CB C6 85 ?? ?? ?? ?? ?? 48 C7 85 ?? ?? ?? ?? ?? ?? ?? ?? C6 45 ?? ?? 48 8D 45 ??" }
@@ -89,6 +89,38 @@ entry "Mesh.renderMesh" {
     step "pattern" {
       bytes  = "C7 44 24 ?? ?? ?? ?? ?? 4C 89 F9 48 89 FA 4D 89 F0 49 89 D9 E8"
       offset = 20
+    }
+    step "operand" {
+      index = 0
+      kind  = "branch_target"
+    }
+  }
+
+  check "function_start" {}
+  check "entry_is" {
+    entry = "LevelChunk.mSubChunks"
+    value = 456
+  }
+}
+
+entry "Mesh.renderMeshTextureList" {
+  kind  = "function"
+  notes = "The mce::Mesh::renderMesh overload that takes a list of textures, the implementation that the one-texture overload (Mesh.renderMesh) calls on 26.63 and that every draw helper calls directly on 70.x. The same function on both builds. Signature as the callers use it (the function is internal, so the link-time optimizer dropped unused stack arguments; both builds read only these): rcx = the Mesh (this), rdx = the MeshContext (ScreenContext + 10h, as for Mesh.renderMesh), r8 = MaterialPtr const&, r9 = the texture list: an inline array of 8 texture variants of 28h bytes each (the std::variant<monostate, TexturePtr, ClientTexture, ServerTexture> that Mesh.renderMesh takes, index byte at +20h) and the element count as a u64 at +140h (148h bytes); [rsp+20h], [rsp+28h] and [rsp+38h] are not read; [rsp+30h] = OffscreenCaptureDescription const&; [rsp+40h] = a pointer to an optional value with its engaged byte at +38h on 26.63 and at +30h on 70.26 (`cmp byte ptr [rdx+30h],1` at 0x54dd598); Mesh.renderMesh passes an empty one: 40h bytes with the byte at +38h 0. The list and the optional are by-value arguments: at its exit the function destroys every list element (a TexturePtr drops one use of each of its two control blocks) and sets the count 0, also on its early returns, and destroys the optional when it is engaged; the caller passes a list whose elements hold their own uses. No start and count arguments: the whole mesh is drawn. A mod that called Mesh.renderMesh(mesh, ctx, material, &variant, 0, 0, &capture, null) builds the list with its variant as element 0 and the count 1, and passes an empty optional. Recipe 0 is the head of the texture loop: `mov qword ptr [rbp+..],0`, the load of the count at [list+140h], `test rax,rax; je`, and the scaling of the count by 28h; a pattern_any with one alternative per shape (26.63 keeps the list in r12, `mov rax,[r12+140h]; shl rax,3; lea r12,[rax+rax*4]`; 70.26 spills it, `mov rax,[rbp+..]; mov rax,[rax+140h]; lea rax,[rax+rax*4]; mov r13,[rbp+..]`), then function_start_of. Recipe 1 is a call site in a draw helper after Tessellator.end: `lea rax,[rbp+..]; mov [rsp+40h],rax; mov [rsp+30h],r14; lea rcx,[rbp+..]; lea r9,[rbp+..]; mov rdx,rdi; call`, read as a branch target. Two functions. Every displacement, immediate and branch byte is a wildcard. Check function_start, which recipe 1 can fail. Evidence from the 26.63 function (the only call in the 26.63 Mesh.renderMesh body): (1) the 26.63 body (`mov r14,r8; mov rbx,rdx; mov rdi,rcx`, a call and `test al,al; je`, then `mov rax,[r14]; test rax,rax; je; cmp qword ptr [rax+..],0; je`, a call and a null test, then the count at [list+140h] scaled by 28h) is found in the same order in this body, and of the stack arguments both bodies read only [rsp+30h] and [rsp+40h] of the caller; (2) the 26.63 draw helper that calls this function directly (and Mesh.renderMesh, the 26.63 recipe 1 site) has the call-site shape of recipe 1, drafted on 26.63 (unique there), and that shape matches once on 70.26 and calls this function. Values: 26.63 the same function as the callee of Mesh.renderMesh. What changed in 6afa4e47-dadc375797a3d31a (70.26): the one-texture overload is inlined; this function lost nothing (its frame is 20h smaller and it keeps the list pointer in a frame slot). Class: survives on both builds."
+
+  recipe {
+    step "pattern_any" {
+      patterns = [
+        "48 C7 85 ?? ?? ?? ?? ?? ?? ?? ?? 49 8B 84 24 ?? ?? ?? ?? 48 85 C0 0F 84 ?? ?? ?? ?? 48 C1 E0 ?? 4C 8D 24 80",
+        "48 C7 85 ?? ?? ?? ?? ?? ?? ?? ?? 48 8B 85 ?? ?? ?? ?? 48 8B 80 ?? ?? ?? ?? 48 85 C0 0F 84 ?? ?? ?? ?? 48 8D 04 80 4C 8B AD",
+      ]
+    }
+    step "function_start_of" {}
+  }
+
+  recipe {
+    step "pattern" {
+      bytes  = "48 8D 85 ?? ?? ?? ?? 48 89 44 24 ?? 4C 89 74 24 ?? 48 8D 4D ?? 4C 8D 8D ?? ?? ?? ?? 48 89 FA E8"
+      offset = 31
     }
     step "operand" {
       index = 0

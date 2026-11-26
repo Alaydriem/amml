@@ -1,0 +1,36 @@
+[package]
+name = "amml-apitest"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+autotests = false
+
+[lints]
+workspace = true
+
+[lib]
+name = "amml_apitest"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# `d3d`: the draw surface as `windows` D3D11 types
+amml-api = { path = "../../sdk/api", features = ["d3d"] }
+# `ID3D11DeviceContext1::ClearView` for the square; the same version as `amml-api`'s, D3D11 types only
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi_Common"] }
+
+[dev-dependencies]
+# A WARP device for the draw surface the tests raise
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Direct3D",
+  "Win32_Graphics_Direct3D11",
+  "Win32_Graphics_Dxgi_Common",
+] }
+# The tests drive the mod through `FakeGame`
+amml-api = { path = "../../sdk/api", features = ["test", "d3d"] }
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"

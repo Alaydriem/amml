@@ -1,6 +1,6 @@
 entry "ContainerScreenController.vtable" {
   kind     = "global"
-  notes    = "The primary vtable of ContainerScreenController (no RTTI, 77 slots, 0..76; the secondary base table sits at +0BC8h of the object), a helper for the in_vtable windows of the hover callbacks and for the slot of the visual item stack. The class is abstract on 26.60: slots 72 and 73 are the pure-virtual stub. Found from the constructor, the one function that stores the std::function tables of the lambdas whose type names say `ContainerScreenController::ContainerScreenController(std::shared_ptr<ClientInstanceScreenModel>, InteractionModel)`. After the base constructor call it stores this table at [rsi] and the second base table at [rsi+0BC8h], then clears the members at +0D60h..+0D7Ch. Recipe 0 is that run: `call <base ctor>; nop; lea rax,[rip+..]; mov [rsi],rax; lea rax,[rip+..]; mov [rsi+..],rax; mov qword ptr [rsi+..],0; mov dword ptr [rsi+..],0; mov qword ptr [rsi+..],-1`, read as the RIP target of the first lea. Recipe 1 is the head of the destructor: `mov rsi,rcx; lea rax,[rip+..]; mov [rcx],rax; lea rax,[rip+..]; mov [rcx+..],rax; mov rax,[rcx+..]; mov rcx,[rax+..]; test rcx,rcx; je; cmp byte ptr [rcx],0; jne; mov dword ptr [0],..; mov rcx,[rax+..]; mov rax,[rcx]; mov rax,[rax+..]; call [guard]`, read as the RIP target of the first lea. The destructor of a sibling controller has the same head and reads the virtual at +568h where this one reads +0F0h, so that one byte is kept (literal_ok). The two recipes are in two functions. Every other displacement, immediate and branch byte is a wildcard. The check is section .rdata. The gate (check entry_is) LevelChunk.mSubChunks = 456 (1C8h, the 26.60 layout) ties this entry to the 26.60 build: it refuses as not for this build on 26.51, and must be widened when a later build is added. Value F221EF0h on 6ad79ee4-17d51891a1119914 (26.60)."
+  notes    = "The primary vtable of ContainerScreenController (no RTTI, 77 slots, 0..76; the secondary base table sits at +0BC8h of the object), a helper for the in_vtable windows of the hover callbacks and for the slot of the visual item stack. The class is abstract on 26.60: slots 72 and 73 are the pure-virtual stub. Found from the constructor, the one function that stores the std::function tables of the lambdas whose type names say `ContainerScreenController::ContainerScreenController(std::shared_ptr<ClientInstanceScreenModel>, InteractionModel)`. After the base constructor call it stores this table at [rsi] and the second base table at [rsi+0BC8h], then clears the members at +0D60h..+0D7Ch. Recipe 0 is that run: `call <base ctor>; nop; lea rax,[rip+..]; mov [rsi],rax; lea rax,[rip+..]; mov [rsi+..],rax; mov qword ptr [rsi+..],0; mov dword ptr [rsi+..],0; mov qword ptr [rsi+..],-1`, read as the RIP target of the first lea. Recipe 1 is the head of the destructor, a pattern_any with one alternative per shape. Alternative 0 (26.60 to 26.63): `mov rsi,rcx; lea rax,[rip+..]; mov [rcx],rax; lea rax,[rip+..]; mov [rcx+..],rax; mov rax,[rcx+..]; mov rcx,[rax+..]; test rcx,rcx; je; cmp byte ptr [rcx],0; jne; mov dword ptr [0],..; mov rcx,[rax+..]; mov rax,[rcx]; mov rax,[rax+..]; call [guard]`. Alternative 1 (70.26): the same first five instructions, then `cmp byte ptr [rcx+..],1; jne; mov rcx,[rsi+..]; call; nop; mov rdi,[rsi+..]; test rdi,rdi; je`; the body after the stores changed (a flag test and a call before the release of the model pointer). Both read the RIP target of the first lea. The destructor of a sibling controller has the same head and reads the virtual at +568h where this one reads +0F0h, so that one byte is kept (literal_ok). The two recipes are in two functions. Every other displacement, immediate and branch byte is a wildcard. The check is section .rdata. Value F221EF0h on 6ad79ee4-17d51891a1119914 (26.60). No build gate: builds before 26.63 are not supported."
 
   recipe {
     step "pattern" {
@@ -14,10 +14,13 @@ entry "ContainerScreenController.vtable" {
   }
 
   recipe {
-    step "pattern" {
-      bytes      = "48 89 CE 48 8D 05 ?? ?? ?? ?? 48 89 01 48 8D 05 ?? ?? ?? ?? 48 89 81 ?? ?? ?? ?? 48 8B 81 ?? ?? ?? ?? 48 8B 48 ?? 48 85 C9 0F 84 ?? ?? ?? ?? 80 39 ?? 75 ?? C7 04 25 ?? ?? ?? ?? ?? ?? ?? ?? 48 8B 48 ?? 48 8B 01 48 8B 80 F0 ?? ?? ?? FF 15"
+    step "pattern_any" {
+      patterns   = [
+        "48 89 CE 48 8D 05 ?? ?? ?? ?? 48 89 01 48 8D 05 ?? ?? ?? ?? 48 89 81 ?? ?? ?? ?? 48 8B 81 ?? ?? ?? ?? 48 8B 48 ?? 48 85 C9 0F 84 ?? ?? ?? ?? 80 39 ?? 75 ?? C7 04 25 ?? ?? ?? ?? ?? ?? ?? ?? 48 8B 48 ?? 48 8B 01 48 8B 80 F0 ?? ?? ?? FF 15",
+        "48 89 CE 48 8D 05 ?? ?? ?? ?? 48 89 01 48 8D 05 ?? ?? ?? ?? 48 89 81 ?? ?? ?? ?? 80 B9 ?? ?? ?? ?? ?? 75 ?? 48 8B 8E ?? ?? ?? ?? E8 ?? ?? ?? ?? 90 48 8B BE ?? ?? ?? ?? 48 85 FF 74",
+      ]
       literal_ok = [
-        "73: low byte of the virtual at +0F0h: the destructor of a sibling controller has the same head and calls the virtual at +568h",
+        "0.73: low byte of the virtual at +0F0h: the destructor of a sibling controller has the same head and calls the virtual at +568h",
       ]
       offset     = 3
     }
@@ -30,27 +33,22 @@ entry "ContainerScreenController.vtable" {
   check "section" {
     name = ".rdata"
   }
-
-  check "entry_is" {
-    entry = "LevelChunk.mSubChunks"
-    value = 456
-  }
 }
 
 entry "ContainerScreenController.onContainerSlotHovered" {
   kind     = "function"
   hooked   = true
-  notes    = "ui::ViewRequest ContainerScreenController::_onContainerSlotHovered(std::string const& collectionName, int slot): rcx the controller, rdx the std::string pointer, r8d the slot; the return value (an enum of unsigned int) is in eax, with no hidden pointer. Slot 60 of ContainerScreenController.vtable and of the CraftingScreenController table. It stores the hover (the string into the controller at +1098h, the slot at +10B8h, as its sibling _onContainerSlotUnhovered clears them). CraftingScreenController overrides the slot with a function that ends in a direct call to this one, as do the other screen controllers that have a hover override, so a hook on this function sees the inventory, chest and crafting hovers. Recipe 0 is the prologue and the first tests of the body: `push r15; push r14; push rsi; push rdi; push rbx; sub rsp,..; mov esi,r8d; mov rdi,rdx; mov rbx,rcx; cmp byte ptr [rcx+..],1; jne; mov byte ptr [rbx+..],0; jmp; cmp dword ptr [rbx+..],3; jne; cmp byte ptr [rbx+..],0`. Recipe 1 is the call site in the CraftingScreenController override: `call <free>; mov rcx,rbx; mov rdx,rdi; mov r8d,esi; call <this>`, read as the call target. The recipes are in two functions and share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. The checks are function_start and in_vtable on ContainerScreenController.vtable, window 56..64 (the neighbours _handleTakePlace at 56 and _onContainerSlotPressed at 63 are inside it, the slot is 60). The gate (check entry_is) LevelChunk.mSubChunks = 456 (1C8h, the 26.60 layout) ties this entry to the 26.60 build: it refuses as not for this build on 26.51, and must be widened when a later build is added. Value 500D460h on 6ad79ee4-17d51891a1119914 (26.60)."
+  notes    = "ui::ViewRequest ContainerScreenController::_onContainerSlotHovered(std::string const& collectionName, int slot): rcx the controller, rdx the std::string pointer, r8d the slot; the return value (an enum of unsigned int) is in eax, with no hidden pointer. Slot 60 of ContainerScreenController.vtable and of the CraftingScreenController table. It stores the hover (the string into the controller at +1098h, the slot at +10B8h, as its sibling _onContainerSlotUnhovered clears them). CraftingScreenController overrides the slot with a function that ends in a direct call to this one, as do the other screen controllers that have a hover override, so a hook on this function sees the inventory, chest and crafting hovers. Recipe 0 is the first tests of the body, after the prologue (70.26 puts a stack-cookie load between the prologue and the tests, so the pattern starts at the tests): `cmp byte ptr [rcx+..],1; jne; mov byte ptr [rbx+..],0; jmp; cmp dword ptr [rbx+..],3; jne; cmp byte ptr [rbx+..],0; jne; mov byte ptr [rbx+..],1; mov byte ptr [rbx+..],1`, then function_start_of. Recipe 1 is the call site in the CraftingScreenController override: `mov rcx,r8; call <free>; mov rcx,rbx; mov rdx,rdi; mov r8d,esi; call <this>`, read as the call target; the `mov rcx,r8` before the free call tells it from the two other functions that call a free function and then a function with these arguments. The recipes are in two functions and share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. The checks are function_start and in_vtable on ContainerScreenController.vtable, window 56..64 (the neighbours _handleTakePlace at 56 and _onContainerSlotPressed at 63 are inside it, the slot is 60). Value 500D460h on 6ad79ee4-17d51891a1119914 (26.60). No build gate: builds before 26.63 are not supported."
 
   recipe {
-    step "pattern" { bytes = "41 57 41 56 56 57 53 48 83 EC ?? 44 89 C6 48 89 D7 48 89 CB 80 B9 ?? ?? ?? ?? ?? 75 ?? C6 83 ?? ?? ?? ?? ?? EB ?? 83 BB ?? ?? ?? ?? ?? 75 ?? 80 BB ?? ?? ?? ?? ??" }
+    step "pattern" { bytes = "80 B9 ?? ?? ?? ?? ?? 75 ?? C6 83 ?? ?? ?? ?? ?? EB ?? 83 BB ?? ?? ?? ?? ?? 75 ?? 80 BB ?? ?? ?? ?? ?? 75 ?? C6 83 ?? ?? ?? ?? ?? C6 83 ?? ?? ?? ?? ??" }
     step "function_start_of" {}
   }
 
   recipe {
     step "pattern" {
-      bytes  = "E8 ?? ?? ?? ?? 48 89 D9 48 89 FA 41 89 F0 E8 ?? ?? ?? ??"
-      offset = 14
+      bytes  = "4C 89 C1 E8 ?? ?? ?? ?? 48 89 D9 48 89 FA 41 89 F0 E8 ?? ?? ?? ??"
+      offset = 17
     }
     step "operand" {
       index = 0
@@ -65,25 +63,20 @@ entry "ContainerScreenController.onContainerSlotHovered" {
     min_slot = 56
     max_slot = 64
   }
-
-  check "entry_is" {
-    entry = "LevelChunk.mSubChunks"
-    value = 456
-  }
 }
 
 entry "ContainerScreenController.onContainerSlotUnhovered" {
   kind     = "function"
   hooked   = true
-  notes    = "ui::ViewRequest ContainerScreenController::_onContainerSlotUnhovered(std::string const& collectionName, int slot): rcx the controller, rdx the std::string pointer, r8d the slot; the enum return is in eax (no hidden pointer), as for _onContainerSlotHovered. Slot 61 of ContainerScreenController.vtable (CraftingScreenController does not override it). It builds a temporary std::string, compares the controller's stored hover (+1098h, slot at +10B8h) with the arguments, and when they match and the interaction model at +1230h is 2 it clears the stored hover (`mov qword ptr [rbx+..],0; mov dword ptr [rbx+..],-1`, the same for the other stored strings) and sets +118Ah. It has no direct caller: it is only reached through the table. Recipe 0 is the prologue and the first calls: `push rbp; push r15; push r14; push rsi; push rdi; push rbx; sub rsp,..; lea rbp,[rsp+..]; mov qword ptr [rbp+..],-2; mov esi,r8d; mov rdi,rdx; mov rbx,rcx; lea r14,[rcx+..]; lea r15,[rbp+..]; mov rcx,r15; call`. Recipe 1 is the block that clears the stored hover: `cmp dword ptr [rbx+..],2; jne; mov qword ptr [rbx+..],0; cmp qword ptr [rbx+..],10h; jb; mov r14,[rbx+..]; mov byte ptr [r14],0; mov dword ptr [rbx+..],-1`, then function_start_of. The two anchors are in different parts of the body and share no pattern bytes; the function has no caller, so no call-site recipe exists, and the in_vtable window is the independent fact. Every displacement, immediate and branch byte is a wildcard. The checks are function_start and in_vtable on ContainerScreenController.vtable, window 57..65. The gate (check entry_is) LevelChunk.mSubChunks = 456 (1C8h, the 26.60 layout) ties this entry to the 26.60 build: it refuses as not for this build on 26.51, and must be widened when a later build is added. Value 500D6B0h on 6ad79ee4-17d51891a1119914 (26.60)."
+  notes    = "ui::ViewRequest ContainerScreenController::_onContainerSlotUnhovered(std::string const& collectionName, int slot): rcx the controller, rdx the std::string pointer, r8d the slot; the enum return is in eax (no hidden pointer), as for _onContainerSlotHovered. Slot 61 of ContainerScreenController.vtable (CraftingScreenController does not override it). It builds a temporary std::string, compares the controller's stored hover (+1098h, slot at +10B8h) with the arguments, and when they match and the interaction model at +1230h is 2 it clears the stored hover (`mov qword ptr [rbx+..],0; mov dword ptr [rbx+..],-1`, the same for the other stored strings) and sets +118Ah. It has no direct caller: it is only reached through the table. Recipe 0 is the start of the body after the prologue (70.26 has one more push and a larger frame, so the pattern starts after the frame): `mov esi,r8d; mov rdi,rdx; mov rbx,rcx; lea r14,[rcx+..]; lea r15,[rbp+..]; mov rcx,r15; call; nop; mov rcx,r14; mov rdx,r15; call`, then function_start_of. Recipe 1 is the block that clears the stored hover, from the first store: `mov qword ptr [rbx+..],0; cmp qword ptr [rbx+..],10h; jb; mov r14,[rbx+..]; mov byte ptr [r14],0; mov dword ptr [rbx+..],-1`, then function_start_of (70.26 puts a test of the container manager controller before it, so the pattern starts at the first store). The two anchors are in different parts of the body and share no pattern bytes; the function has no caller, so no call-site recipe exists, and the in_vtable window is the independent fact. Every displacement, immediate and branch byte is a wildcard. The checks are function_start and in_vtable on ContainerScreenController.vtable, window 57..65. Value 500D6B0h on 6ad79ee4-17d51891a1119914 (26.60). No build gate: builds before 26.63 are not supported."
 
   recipe {
-    step "pattern" { bytes = "55 41 57 41 56 56 57 53 48 83 EC ?? 48 8D 6C 24 ?? 48 C7 45 ?? ?? ?? ?? ?? 44 89 C6 48 89 D7 48 89 CB 4C 8D B1 ?? ?? ?? ?? 4C 8D 7D ?? 4C 89 F9 E8 ?? ?? ?? ??" }
+    step "pattern" { bytes = "44 89 C6 48 89 D7 48 89 CB 4C 8D B1 ?? ?? ?? ?? 4C 8D 7D ?? 4C 89 F9 E8 ?? ?? ?? ?? 90 4C 89 F1 4C 89 FA E8 ?? ?? ?? ??" }
     step "function_start_of" {}
   }
 
   recipe {
-    step "pattern" { bytes = "83 BB ?? ?? ?? ?? ?? 0F 85 ?? ?? ?? ?? 48 C7 83 ?? ?? ?? ?? ?? ?? ?? ?? 48 83 BB ?? ?? ?? ?? ?? 72 ?? 4C 8B B3 ?? ?? ?? ?? 41 C6 06 ?? C7 83 ?? ?? ?? ?? ?? ?? ?? ??" }
+    step "pattern" { bytes = "48 C7 83 ?? ?? ?? ?? ?? ?? ?? ?? 48 83 BB ?? ?? ?? ?? ?? 72 ?? 4C 8B B3 ?? ?? ?? ?? 41 C6 06 ?? C7 83 ?? ?? ?? ?? ?? ?? ?? ??" }
     step "function_start_of" {}
   }
 
@@ -94,16 +87,11 @@ entry "ContainerScreenController.onContainerSlotUnhovered" {
     min_slot = 57
     max_slot = 65
   }
-
-  check "entry_is" {
-    entry = "LevelChunk.mSubChunks"
-    value = 456
-  }
 }
 
 entry "ContainerScreenController.getVisualItemStackImpl" {
   kind     = "vslot"
-  notes    = "Slot of ItemStackBase const& ContainerScreenController::_getVisualItemStackImpl(std::string const& collectionName, int slot) in the ContainerScreenController vtable: 71 on 26.60. rcx the controller, rdx the std::string pointer, r8d the slot; the reference comes back in rax and is never null (the static empty stack when nothing is there). The container slot is a 5-byte `jmp` thunk to the function that builds a SlotData, calls _reevaluateSlotData (slot 59) and asks the container manager controller (+12C0h); the thunk has no .pdata, and the CraftingScreenController overrides the slot with its own function. No direct caller is known, and the thunk cannot be matched by its bytes, so both recipes are neighbour routes: the slot is read from the functions on either side of it in the table, and the header order puts the slot between them (function in slot 70, then this slot 71, then the two pure virtuals 72 and 73, then the function in slot 74). Recipe 0 is the body of the function in slot 70 (`push rbp; push r15; push r14; push r13; push r12; push rsi; push rdi; push rbx; sub rsp,..; lea rbp,[rsp+..]; movaps [rbp+..],xmm6; mov qword ptr [rbp+..],-2; cmp qword ptr [rcx+..],..`), then function_start_of, slot_of ContainerScreenController.vtable and add 1. Recipe 1 is the prologue of the function in slot 74 (`push rbp; push rsi; push rdi; push rbx; sub rsp,..; lea rbp,[rsp+..]; mov qword ptr [rbp+..],-2; xorps xmm0,xmm0; movaps [rbp+..],xmm0`), then slot_of and add -3. Every displacement, immediate and branch byte is a wildcard. The check is a range window around the known slot. The gate (check entry_is) LevelChunk.mSubChunks = 456 (1C8h, the 26.60 layout) ties this entry to the 26.60 build: it refuses as not for this build on 26.51, and must be widened when a later build is added. Value 71 on 6ad79ee4-17d51891a1119914 (26.60)."
+  notes    = "Slot of ItemStackBase const& ContainerScreenController::_getVisualItemStackImpl(std::string const& collectionName, int slot) in the ContainerScreenController vtable: 71 on 26.60, 26.63 and 1.26.70.26. rcx the controller, rdx the std::string pointer, r8d the slot; the reference comes back in rax and is never null (the static empty stack when nothing is there). The container slot is a 5-byte `jmp` thunk to the function that builds a SlotData, calls _reevaluateSlotData and asks the container manager controller (+12C0h); the thunk has no .pdata, and the CraftingScreenController overrides the slot with its own function. No direct caller is known, and the thunk cannot be matched by its bytes, so both recipes are neighbour routes: the slot is read from the functions below it in the table, and the header order puts the slot right after them (function in slot 69, function in slot 70, then this slot 71, then the two pure virtuals 72 and 73 that hold one and the same pointer). Recipe 0 is the body of the function in slot 70 (`push rbp; push r15; push r14; push r13; push r12; push rsi; push rdi; push rbx; sub rsp,..; lea rbp,[rsp+..]; movaps [rbp+..],xmm6; mov qword ptr [rbp+..],-2; cmp qword ptr [rcx+..],..`), then function_start_of, slot_of ContainerScreenController.vtable and add 1. Recipe 1 is the body of the function in slot 69, a pattern_any with one alternative per code shape (26.63 returns with `add rsp; ret`, 1.26.70.26 has a stack cookie and returns through a `jmp`): `cmp dword ptr [rcx+..],imm; jne; xor eax,eax; <return>; mov rcx,[rcx+..]; test rcx,rcx; je; mov rax,[rcx]; mov rax,[rax+..]; call [guard]`, then function_start_of, slot_of and add 2. It ends at the call. Each alternative matches once on its own build and zero times on the other. The two recipes anchor on two different functions and share no bytes. Every displacement, immediate and branch byte is a wildcard. The check is a range window around the known slot. The slot after the pair of pure virtuals is not used as an anchor: 1.26.70.26 put two new virtuals after the pair, so the function that was slot 74 is now slot 76. What changed in 6afa4e47-dadc375797a3d31a (1.26.70.26): nothing for this slot (71); the old recipe 1 anchored on the function after the pure virtuals with a fixed distance of 3, which is now 5, and its prologue pattern matched another function. Class: would have survived with a better recipe. Evidence for 70.26: (1) the body of the 26.63 slot 70 function, as drafted in recipe 0, matches once on 70.26, and that function is in slot 70 of the new table; (2) the body of the 26.63 slot 69 function (recipe 1) matches once on 70.26, in slot 69 of the new table; on both builds the table has the same shape around the target, slot 69 function, slot 70 function, a thunk that is not a function start in slot 71, then two slots with one pointer. No build gate: builds before 26.63 are not supported."
 
   recipe {
     step "pattern" { bytes = "55 41 57 41 56 41 55 41 54 56 57 53 48 81 EC ?? ?? ?? ?? 48 8D AC 24 ?? ?? ?? ?? 66 0F 29 B5 ?? ?? ?? ?? 48 C7 85 ?? ?? ?? ?? ?? ?? ?? ?? 48 83 B9 ??" }
@@ -113,20 +101,20 @@ entry "ContainerScreenController.getVisualItemStackImpl" {
   }
 
   recipe {
-    step "pattern" { bytes = "55 56 57 53 48 81 EC ?? ?? ?? ?? 48 8D AC 24 ?? ?? ?? ?? 48 C7 45 ?? ?? ?? ?? ?? 0F 57 C0 0F 29 45 ?? 48 C7 45 ?? ?? ?? ?? ??" }
+    step "pattern_any" {
+      patterns = [
+        "83 B9 ?? ?? ?? ?? ?? 75 ?? 31 C0 48 83 C4 ?? C3 48 8B 89 ?? ?? ?? ?? 48 85 C9 74 ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15",
+        "83 B9 ?? ?? ?? ?? ?? 75 ?? 31 C0 E9 ?? ?? ?? ?? 48 8B 89 ?? ?? ?? ?? 48 85 C9 74 ?? 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15",
+      ]
+    }
     step "function_start_of" {}
     step "slot_of" { vtable = "ContainerScreenController.vtable" }
-    step "add" { value = -3 }
+    step "add" { value = 2 }
   }
 
   check "range" {
     min = 40
     max = 76
-  }
-
-  check "entry_is" {
-    entry = "LevelChunk.mSubChunks"
-    value = 456
   }
 }
 
@@ -135,14 +123,20 @@ entry "ContainerScreenController._handleAutoPlace" {
   notes    = "void ContainerScreenController::_handleAutoPlace(int amount, std::string const& collectionName, int index): rcx the controller, edx the amount (7FFFFFFFh the whole stack, 1 one item), r8 the std::string pointer, r9d the index. Non-virtual. It returns at once when the virtual at +138h (slot 39) is false, builds a SlotData from the name and index, asks the container manager controller (+12C0h) for the stack, takes a separate path on interaction mode 1 (+1230h), and ends in the auto-place call of the manager. Found from the ContainerScreenController constructor: the button hash 7932D52Ah registers the state 11 and state 12 actions, two std::function lambdas that load the controller from [rcx+8] and call this function with edx = 7FFFFFFFh (state 11) and edx = 1 (state 12). The prologue moves the arguments in the int, pointer, int order of the header. Recipe 0 is the head of the body: `mov esi,r9d; mov rdi,r8; mov r14d,edx; mov rbx,rcx; mov rax,[rcx]; mov rax,[rax+..]; call [guard]`, then function_start_of. Recipe 1 is the call site in the state 12 (one item) lambda: `push r14; push rsi; push rdi; push rbx; sub rsp,..; mov rsi,r8; mov rdi,[rcx+..]; mov ebx,[r9]; mov rcx,rdi; mov edx,..; mov r9d,ebx; call <this>`, read as the call target. The state 11 lambda has the same body after a shorter push list (push rsi; push rdi; push rbx), so the leading push r14 makes the match unique without keeping the amount immediate. The recipes are in two functions and share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. The check is function_start. The code is the same on all four builds, so the entry has no gate. Values: 4DFB400h on 6aa482fd-2658118eba0dbac5 (26.51), 500AFB0h on 6ad79ee4-17d51891a1119914 (26.60), 500B320h on 6aea437e-7eff13daabb430da (26.62), 500B080h on 6aed1906-b127418e74d2f2f9 (26.63)."
 
   recipe {
-    step "pattern" { bytes = "44 89 CE 4C 89 C7 41 89 D6 48 89 CB 48 8B 01 48 8B 80 ?? ?? ?? ?? FF 15" }
+    step "pattern" { bytes = "44 89 CE 4C 89 C7 41 89 D6 48 89 CB" }
     step "function_start_of" {}
   }
 
   recipe {
     step "pattern" {
-      bytes  = "41 56 56 57 53 48 83 EC ?? 4C 89 C6 48 8B 79 ?? 41 8B 19 48 89 F9 BA ?? ?? ?? ?? 41 89 D9 E8 ?? ?? ?? ??"
-      offset = 30
+      bytes      = "4C 89 C6 48 8B 79 ?? 41 8B 19 48 89 F9 BA 01 00 00 00 41 89 D9 E8 ?? ?? ?? ??"
+      offset     = 21
+      literal_ok = [
+        "14: mov edx,1: the one-item amount; the whole-stack lambda passes 7FFFFFFFh in the same shape",
+        "15: mov edx,1: byte 1 of the immediate, same reason",
+        "16: mov edx,1: byte 2 of the immediate, same reason",
+        "17: mov edx,1: byte 3 of the immediate, same reason",
+      ]
     }
     step "operand" {
       index = 0
@@ -189,7 +183,7 @@ entry "ContainerScreenController._handleTakeAll" {
 
 entry "ContainerScreenController._handlePlaceAll" {
   kind     = "vslot"
-  notes    = "Slot of void ContainerScreenController::_handlePlaceAll(std::string const& collectionName, int index) in the ContainerScreenController vtable: 54 on 26.60, 26.62 and 26.63. rcx the controller, rdx the std::string pointer, r8d the index. It puts the cursor stack into the slot (into an empty slot, onto a matching stack, or a swap): it returns at once when the virtual at +138h (slot 39) is false, flushes the pending coalesce list, reads the selected slot through the virtual at +1D0h (slot 58, _getSelectedSlotInfo) and calls the container manager controller (+12C0h) at its slot 11 (+58h). The header order puts it second among the own virtuals of the class: _handleTakeHalf 53, _handlePlaceAll 54, _handlePlaceOne 55, _handleTakePlace 56. The table on these builds agrees: the slot 56 function is _handleTakePlace (it makes the two calls of recipe 0) and slot 60 is _onContainerSlotHovered. Recipe 0 is the call site in _handleTakePlace (slot 56): it tests its bool allItems and calls [vt+1B0h] when it is true, [vt+1B8h] (_handlePlaceOne) when it is false: `mov rax,[rdi]; test r14b,r14b; je; mov rax,[rax+..]; mov rcx,rdi; mov rdx,rbx; mov r8d,esi; call [guard]`, read as the displacement, then displacement_to_slot. The je before the load picks the allItems branch, so the pattern cannot match the _handlePlaceOne call. Recipe 1 is the body of the function: `cmp dword ptr [rsi+..],2; jne; mov r14,[rbp+..]; test r14,r14; je; lea r15,[rip+..]; mov [rbp+..],r15; mov qword ptr [rbp+..],13h`, then function_start_of and slot_of ContainerScreenController.vtable. The recipes are in two functions and share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. The check is a range window 50..58 around the known slot. The gate (check entry_is) LevelChunk.mSubChunks = 456 (1C8h, the 26.60 layout) ties this entry to the layout of ContainerScreenController.vtable, which recipe 1 needs: it refuses as not for this build on 26.51. On 26.51 the call site of recipe 0 also reads +1B0h (slot 54), but the vtable entry does not resolve there, so no second recipe could agree. Values: 54 on 6ad79ee4-17d51891a1119914 (26.60), 6aea437e-7eff13daabb430da (26.62) and 6aed1906-b127418e74d2f2f9 (26.63)."
+  notes    = "Slot of void ContainerScreenController::_handlePlaceAll(std::string const& collectionName, int index) in the ContainerScreenController vtable: 54 on 26.60, 26.62 and 26.63. rcx the controller, rdx the std::string pointer, r8d the index. It puts the cursor stack into the slot (into an empty slot, onto a matching stack, or a swap): it returns at once when the virtual at +138h (slot 39) is false, flushes the pending coalesce list, reads the selected slot through the virtual at +1D0h (slot 58, _getSelectedSlotInfo) and calls the container manager controller (+12C0h) at its slot 11 (+58h). The header order puts it second among the own virtuals of the class: _handleTakeHalf 53, _handlePlaceAll 54, _handlePlaceOne 55, _handleTakePlace 56. The table on these builds agrees: the slot 56 function is _handleTakePlace (it makes the two calls of recipe 0) and slot 60 is _onContainerSlotHovered. Recipe 0 is the call site in _handleTakePlace (slot 56): it tests its bool allItems and calls [vt+1B0h] when it is true, [vt+1B8h] (_handlePlaceOne) when it is false: `mov rax,[rdi]; test r14b,r14b; je; mov rax,[rax+..]; mov rcx,rdi; mov rdx,rbx; mov r8d,esi; call [guard]`, read as the displacement, then displacement_to_slot. The je before the load picks the allItems branch, so the pattern cannot match the _handlePlaceOne call. Recipe 1 is the body of the function: `cmp dword ptr [rsi+..],2; jne; mov r14,[rbp+..]; test r14,r14; je; lea r15,[rip+..]; mov [rbp+..],r15; mov qword ptr [rbp+..],13h`, then function_start_of and slot_of ContainerScreenController.vtable. The recipes are in two functions and share no pattern bytes. Every displacement, immediate and branch byte is a wildcard. The check is a range window 50..58 around the known slot. On 26.51 the call site of recipe 0 also reads +1B0h (slot 54), but the vtable entry does not resolve there, so no second recipe could agree. Values: 54 on 6ad79ee4-17d51891a1119914 (26.60), 6aea437e-7eff13daabb430da (26.62) and 6aed1906-b127418e74d2f2f9 (26.63). No build gate: builds before 26.63 are not supported."
 
   recipe {
     step "pattern" {
@@ -212,11 +206,6 @@ entry "ContainerScreenController._handlePlaceAll" {
   check "range" {
     min = 50
     max = 58
-  }
-
-  check "entry_is" {
-    entry = "LevelChunk.mSubChunks"
-    value = 456
   }
 }
 

@@ -1,8 +1,17 @@
-use amml_data::EntryId;
-use amml_runtime::{CacheSource, DeriveSource, EntryTable, HostResolver};
+use std::collections::BTreeSet;
+
+use amml_data::{AdapterCatalog, EntryId};
+use amml_runtime::{CacheSource, DeriveSource, EntryTable, HostResolver, ModSpec};
 
 use crate::{
-    FolderRedirect, HeapCheck, HostError, HostInputs, HostPaths, HostProcess, HostStartup, InstanceSettings, LoaderLog,
+    ActiveCameraAdapter, ActorAdapter, BlockEntityAdapter, BlockListener, BlockReadAdapter, BlockStateAdapter,
+    BodyHideAdapter, CameraAdapter, ChatAdapter, ClientAdapter, FocusAdapter, FolderRedirect, ForegroundHandback,
+    FreeCameraAdapter, GameModeAdapter, HeapCheck, HostError, HostInputs, HostPaths, HostProcess, HostStartup,
+    HudAdapter, InlineIconAdapter, InputAdapter, InstanceSettings, InventoryAdapter, ItemDrawAdapter, JoinEvents,
+    KindsAdapter, LevelRendererAdapter, LightingAdapter, LoaderLog, LocatorBarAdapter, NetworkAdapter, OptionsAdapter,
+    OverlayService, PlayerActionAdapter, PlayerMovedAdapter, RequestAdapter, RouterAdapter, ScreenAdapter,
+    SessionActions, SessionAdapter, ShapesAdapter, TestWorld, TextAdapter, TextureAdapter, TextureReloadAdapter,
+    TimeAdapter, UiDrawAdapter, UiInputAdapter, WireAdapter, WorldAdapter, WorldInfoAdapter, WorldRenderAdapter,
 };
 
 /// The host where AMML starts itself, with no LeviLamina: the exe entry-point detour runs `run`
@@ -78,19 +87,91 @@ impl StandaloneHost {
         }
     }
 
-    /// Resolves the entries of every mod under `paths.mods`, starts `LoaderState` over them and loads
-    /// the mods. Works once per process, like `LoaderState`.
+    /// Resolves the entries of every mod under `paths.mods` and of the adapter catalog, starts
+    /// `LoaderState` over them, installs the session, client and input adapters and the overlay, and loads the mods. Works once per process, like `LoaderState`.
+    ///
+    /// `AMML_TEST_WORLD` is read once here: when it names a level id, the test world entries are resolved
+    /// too and the test world is installed, with a `test world requested` line.
     pub fn start(paths: &HostPaths, module_base: u64) -> Result<(), HostError> {
         let (settings, scan) = HostStartup::prepare(paths)?;
         if settings.grade {
             curia::warn!("grade skipped: it compares with LeviLamina, which this host does not have");
         }
-        let wanted = HostStartup::wanted(&scan.mods);
+        let test_world = TestWorld::from_env();
+        ForegroundHandback::from_env().start();
+        let mut wanted = Self::wanted(&scan.mods);
+        if let Some(level_id) = test_world.level_id() {
+            curia::info!("test world requested", { level_id: level_id, variable: TestWorld::VARIABLE });
+            wanted.extend(TestWorld::ENTRIES.iter().map(|entry| EntryId((*entry).to_string())));
+            wanted.sort();
+            wanted.dedup();
+        }
         let table = Self::resolve(paths, &wanted);
         HostStartup::log_coverage(&table, wanted.len());
         // SAFETY: the table holds RVAs from the cache or a derive run of the exe at `paths.exe`, which
         // is the running game module at `module_base`.
-        unsafe { HostStartup::finish(paths, module_base, table, &scan, HeapCheck::Deferred) }
+        unsafe {
+            HostStartup::finish(paths, module_base, table, &scan, HeapCheck::Deferred, |state| {
+                SessionAdapter::install(state);
+                ClientAdapter::install(state);
+                FocusAdapter::install(state);
+                SessionActions::install(state);
+                HudAdapter::install(state);
+                ScreenAdapter::install(state);
+                UiInputAdapter::install(state);
+                UiDrawAdapter::install(state);
+                TextAdapter::install(state);
+                TextureAdapter::install(state);
+                TextureReloadAdapter::install(state);
+                ActorAdapter::install(state);
+                WorldAdapter::install(state);
+                WorldInfoAdapter::install(state);
+                JoinEvents::install(state);
+                BlockListener::install(state, || HostProcess::image_layout(module_base));
+                InventoryAdapter::install(state);
+                BlockStateAdapter::install(state);
+                BlockReadAdapter::install(state);
+                KindsAdapter::install(state);
+                ItemDrawAdapter::install(state);
+                RequestAdapter::install(state);
+                NetworkAdapter::install(state);
+                WireAdapter::install(state);
+                TimeAdapter::install(state);
+                BodyHideAdapter::install(state);
+                PlayerMovedAdapter::install(state);
+                LocatorBarAdapter::install(state);
+                ChatAdapter::install(state);
+                InlineIconAdapter::install(state);
+                LightingAdapter::install(state);
+                PlayerActionAdapter::install(state);
+                GameModeAdapter::install(state);
+                LevelRendererAdapter::install(state);
+                WorldRenderAdapter::install(state);
+                BlockEntityAdapter::install(state);
+                CameraAdapter::install(state);
+                ActiveCameraAdapter::install(state);
+                FreeCameraAdapter::install(state);
+                OptionsAdapter::install(state);
+                ShapesAdapter::install(state);
+                RouterAdapter::install(state);
+                InputAdapter::install(state);
+                OverlayService::install(state);
+                test_world.install();
+            })
+        }
+    }
+
+    /// The entries of `HostStartup::wanted` and those of every event and area in the adapter catalog (the
+    /// required and the optional entries of each shape), which the adapters of this host hook and call; sorted
+    /// and without repeats.
+    pub fn wanted(mods: &[ModSpec]) -> Vec<EntryId> {
+        let mut wanted: BTreeSet<EntryId> = HostStartup::wanted(mods).into_iter().collect();
+        let adapters = AdapterCatalog::needs()
+            .iter()
+            .flat_map(|need| need.shapes)
+            .flat_map(|shape| shape.entries.iter().chain(shape.optional));
+        wanted.extend(adapters.map(|entry| EntryId((*entry).to_string())));
+        wanted.into_iter().collect()
     }
 
     /// The table of `wanted` from the cache file under `paths.cache`, or from a derive run of
