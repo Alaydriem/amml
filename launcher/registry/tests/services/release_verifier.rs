@@ -219,6 +219,39 @@ fn amml_version_file_must_match() {
     ));
 }
 
+fn amml_zip_with_loader(loader: &[u8]) -> Vec<u8> {
+    ZipFixture::new()
+        .file("amml.dll", loader)
+        .file("amml-patch.exe", b"MZ-patch")
+        .file("amml/recipes/a.hcl", b"x")
+        .file("amml/amml-version.txt", b"26.60.1")
+        .build()
+}
+
+fn executable_of(len: usize) -> Vec<u8> {
+    let mut bytes = vec![0u8; len];
+    bytes[..2].copy_from_slice(b"MZ");
+    bytes
+}
+
+#[test]
+fn amml_zip_with_a_six_mib_loader_passes() {
+    let (_dir, source) = rig();
+    source.put_release("alaydriem/amml", "26.60.1", AMML_ASSET, &amml_zip_with_loader(&executable_of(6 * 1024 * 1024)));
+    assert!(verify_amml(source, &["1.26.60.5"]).is_ok());
+}
+
+#[test]
+fn amml_zip_with_a_loader_over_the_limit_names_the_size() {
+    let (_dir, source) = rig();
+    let loader = executable_of(64 * 1024 * 1024 + 1);
+    source.put_release("alaydriem/amml", "26.60.1", AMML_ASSET, &amml_zip_with_loader(&loader));
+    match verify_amml(source, &["1.26.60.5"]) {
+        Err(RegistryError::BadZip(reason)) => assert!(reason.contains("larger than"), "{reason}"),
+        other => panic!("expected a size refusal, got {other:?}"),
+    }
+}
+
 #[test]
 fn amml_zip_needs_both_executables_and_recipes() {
     let cases = [
