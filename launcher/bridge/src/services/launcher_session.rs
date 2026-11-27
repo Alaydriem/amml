@@ -695,6 +695,7 @@ impl<S: JobSink> LauncherSession<S> {
                     preview,
                     name,
                     amml: None,
+                    amml_zip: None,
                     data: services.data_choice(own_data, &settings),
                 };
                 let work: JobWork = Box::new(move |manager, progress| {

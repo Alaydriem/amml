@@ -9,6 +9,7 @@ use zip::ZipArchive;
 pub struct AmmlArchive {
     path: PathBuf,
     version: String,
+    api: Option<u32>,
 }
 
 impl AmmlArchive {
@@ -45,11 +46,25 @@ impl AmmlArchive {
         if version.is_empty() {
             return Err(bad("has an empty amml/amml-version.txt"));
         }
-        Ok(AmmlArchive { path: path.to_path_buf(), version })
+        // optional: only a local build's zip carries the API of its loader
+        let api_path = Path::new("amml").join("amml-api.txt");
+        let api = match files.iter().find(|(_, entry)| *entry == api_path) {
+            Some((index, _)) => {
+                let bytes = ZipGuard::read_entry(&mut archive, *index, Self::VERSION_LIMIT)?;
+                String::from_utf8_lossy(&bytes).trim().parse::<u32>().ok()
+            }
+            None => None,
+        };
+        Ok(AmmlArchive { path: path.to_path_buf(), version, api })
     }
 
     pub fn version(&self) -> String {
         self.version.clone()
+    }
+
+    // the API of the loader in the zip, when the zip states one
+    pub fn api(&self) -> Option<u32> {
+        self.api
     }
 
     pub fn extract_to(&self, dest: &Path) -> Result<(), LauncherError> {

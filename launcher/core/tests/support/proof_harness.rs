@@ -99,6 +99,7 @@ impl ProofHarness {
             preview: false,
             name: name.to_string(),
             amml: None,
+            amml_zip: None,
             data: DataChoice::Shared(self.paths.default_data_dir()),
         };
         self.manager().create(&request, &mut |_| {})

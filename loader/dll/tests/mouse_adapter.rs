@@ -285,7 +285,10 @@ fn an_injected_click_reaches_the_game_in_the_next_frame() {
     let harness = start_seven();
     let input = harness.state.input();
     let lease = lease(&harness, AmmlInputBlocks(0));
-    assert_eq!(input.button_down(lease, AmmlMouseButton::LEFT), Err(AmmlStatus::NOT_READY));
+    // after the first frame a click is ready with no real mouse feed
+    let early = input.button_down(lease, AmmlMouseButton::LEFT).unwrap();
+    input.release_hold(early).unwrap();
+    SessionGame::frame();
     InputGame::mouse(device(), MOVE, 0, 30, 40, 0, 0);
     InputGame::clear();
     MOUSE_SEEN.lock().unwrap().clear();

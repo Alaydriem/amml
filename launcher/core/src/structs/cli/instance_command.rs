@@ -16,6 +16,9 @@ pub enum InstanceCommand {
         /// An AMML version other than the newest one that fits
         #[arg(long)]
         amml: Option<String>,
+        /// A local AMML release zip (with amml/amml-api.txt) instead of a registry release; makes a local build
+        #[arg(long, conflicts_with = "amml")]
+        amml_zip: Option<std::path::PathBuf>,
         /// Keep the game's data inside the instance instead of the shared data folder
         #[arg(long)]
         own_data: bool,

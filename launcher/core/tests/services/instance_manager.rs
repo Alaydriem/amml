@@ -15,6 +15,7 @@ fn request(harness: &Harness, name: &str) -> NewInstanceRequest {
         preview: false,
         name: name.to_string(),
         amml: None,
+        amml_zip: None,
         data: DataChoice::Shared(harness.paths.default_data_dir()),
     }
 }
@@ -486,4 +487,53 @@ fn install_into_instance_uses_instance_amml_level() {
     let newer_instance = existing_instance(&harness, "two", "26.62.0");
     assert!(newer_instance.is_dir());
     assert_eq!(manager.resolve_mod("two", &id, None).unwrap().release.version, "2.0.0");
+}
+
+fn local_zip(harness: &Harness, with_api: bool) -> std::path::PathBuf {
+    let mut entries: Vec<(&str, &[u8])> = vec![
+        ("amml.dll", b"loader"),
+        ("amml-patch.exe", b"patcher"),
+        ("amml/recipes/a.hcl", b"recipe"),
+        ("amml/amml-version.txt", b"26.70.0"),
+    ];
+    if with_api {
+        entries.push(("amml/amml-api.txt", b"2"));
+    }
+    crate::support::Zips::raw(&harness.work_dir().join("local-amml.zip"), &entries)
+}
+
+#[test]
+fn a_local_zip_makes_a_local_instance_for_a_game_no_release_lists() {
+    let harness = Harness::new();
+    standard(&harness);
+    let zip = local_zip(&harness, true);
+    let mut asked = request(&harness, "test-1");
+    asked.game = GameVersion::parse("1.26.70.1").unwrap();
+    asked.amml_zip = Some(zip.clone());
+    let outcome = harness.manager().create(&asked, &mut |_| {}).unwrap();
+
+    let state = &outcome.state;
+    assert_eq!(state.amml.version.as_deref(), Some("26.70.0+local"));
+    assert!(state.amml.local);
+    assert_eq!(state.amml.local_api, Some(2));
+    assert!(state.folder.join("amml.dll").is_file());
+    let block = LauncherBlockStore::read(&state.folder).unwrap();
+    assert_eq!(block.amml.as_deref(), Some("26.70.0+local"));
+    // a local build meets every minimum, so the default and core mods of the API are installed
+    let ids: Vec<String> = state.mods.iter().map(|installed| installed.id.as_str()).collect();
+    assert_eq!(ids, vec!["@alaydriem/zoom", "@amml/modmanager"]);
+    // the caller's file is not the launcher's to delete
+    assert!(zip.is_file());
+}
+
+#[test]
+fn a_local_zip_without_an_api_is_refused_and_leaves_no_instance() {
+    let harness = Harness::new();
+    standard(&harness);
+    let mut asked = request(&harness, "test-1");
+    asked.game = GameVersion::parse("1.26.70.1").unwrap();
+    asked.amml_zip = Some(local_zip(&harness, false));
+    let result = harness.manager().create(&asked, &mut |_| {});
+    assert!(matches!(result, Err(LauncherError::BadArchive { .. })), "{result:?}");
+    assert!(!harness.paths.instance("test-1").exists());
 }

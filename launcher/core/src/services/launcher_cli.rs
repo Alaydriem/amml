@@ -149,13 +149,14 @@ impl LauncherCli {
                 let state = InstanceReader::read(&self.paths.checked_instance(name)?)?;
                 Self::show(&state, out);
             }
-            InstanceCommand::New { game, name, preview, amml, own_data } => {
+            InstanceCommand::New { game, name, preview, amml, amml_zip, own_data } => {
                 let settings = self.services.settings()?;
                 let request = NewInstanceRequest {
                     game: GameVersion::parse(game)?,
                     preview: *preview,
                     name: name.clone(),
                     amml: amml.clone(),
+                    amml_zip: amml_zip.clone(),
                     data: self.services.data_choice(*own_data, &settings),
                 };
                 let mut manager = self.services.manager()?;

@@ -56,6 +56,7 @@ mod map_color;
 mod mesh_layouts;
 mod mod_loader;
 mod mouse_adapter;
+mod mouse_feed_ready;
 mod name_reader;
 mod network_table;
 mod options_table;

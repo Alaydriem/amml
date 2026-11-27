@@ -1,8 +1,8 @@
 use crate::{
-    AmmlInstaller, AmmlLevel, Compatibility, CoreProgress, HttpFetch, InstanceApi, InstanceGuard, InstanceHclFile,
-    InstanceReader, InstanceState, LauncherBlock, LauncherBlockStore, LauncherError, LauncherPaths, ModCatalogue,
-    ModChange, ModId, ModInstaller, ModSource, NewInstanceOutcome, NewInstanceRequest, Patcher, ResolvedMod,
-    UpdateChecker, UpdateRow, UrlInspection, VersionJsonFile,
+    AmmlArchive, AmmlInstaller, AmmlLevel, AmmlState, Compatibility, CoreProgress, FileHash, HttpFetch, InstanceApi,
+    InstanceGuard, InstanceHclFile, InstanceReader, InstanceState, LauncherBlock, LauncherBlockStore, LauncherError,
+    LauncherPaths, ModCatalogue, ModChange, ModId, ModInstaller, ModSource, NewInstanceOutcome, NewInstanceRequest,
+    Patcher, ResolvedMod, UpdateChecker, UpdateRow, UrlInspection, VerifiedFile, VersionJsonFile,
 };
 use amml_gdk::{
     Channel, GameVersion, InstallRequest, Installer, InstanceFolder, InstanceService, ProcessInspector, TreeOps,
@@ -54,7 +54,11 @@ impl<I: Installer, T: Patcher, P: ProcessInspector, H: HttpFetch> InstanceManage
         if folder_path.exists() {
             return Err(amml_gdk::GdkError::InstanceExists(request.name.clone()).into());
         }
-        let (_, release) = self.pick_release(&request.game, request.amml.as_deref())?;
+        // a local zip stands in for the registry release; the registry is not asked
+        let release = match &request.amml_zip {
+            Some(_) => None,
+            None => Some(self.pick_release(&request.game, request.amml.as_deref())?.1),
+        };
 
         let version_installed = self.store.get(&request.game).is_none();
         if version_installed {
@@ -67,7 +71,7 @@ impl<I: Installer, T: Patcher, P: ProcessInspector, H: HttpFetch> InstanceManage
 
         progress(CoreProgress::CreatingInstance);
         let folder = self.instances.create(&request.game, &request.name)?;
-        match self.populate(&folder, request, &release, progress) {
+        match self.populate(&folder, request, release.as_ref(), progress) {
             Ok(skipped_mods) => {
                 progress(CoreProgress::Done);
                 let state = InstanceReader::read(&folder.path)?;
@@ -256,7 +260,7 @@ impl<I: Installer, T: Patcher, P: ProcessInspector, H: HttpFetch> InstanceManage
         &mut self,
         folder: &InstanceFolder,
         request: &NewInstanceRequest,
-        release: &AmmlRelease,
+        release: Option<&AmmlRelease>,
         progress: &mut impl FnMut(CoreProgress),
     ) -> Result<Vec<(String, String)>, LauncherError> {
         let path = folder.path.clone();
@@ -264,23 +268,45 @@ impl<I: Installer, T: Patcher, P: ProcessInspector, H: HttpFetch> InstanceManage
         version_json.set_launcher(&LauncherBlock::new(None, BTreeMap::new()));
         version_json.write(&path.join(InstanceReader::VERSION_JSON))?;
 
-        let zip = self.download_amml(release, progress)?;
-        let outcome = self.amml.install(&path, &request.name, &zip, progress);
-        self.catalogue.discard(&zip);
-        let version = outcome?;
-        LauncherBlockStore::set_amml(&path, &version)?;
+        let (api, level) = match (release, &request.amml_zip) {
+            (Some(release), _) => {
+                let zip = self.download_amml(release, progress)?;
+                let outcome = self.amml.install(&path, &request.name, &zip, progress);
+                self.catalogue.discard(&zip);
+                let version = outcome?;
+                LauncherBlockStore::set_amml(&path, &version)?;
+                // the AMML of this instance is the release just installed
+                let level = ReleaseVersion::parse(&release.version).map_or(AmmlLevel::Unknown, AmmlLevel::Release);
+                (release.api_version, level)
+            }
+            (None, Some(local)) => {
+                let api = AmmlArchive::open(local)?.api().ok_or_else(|| LauncherError::BadArchive {
+                    file: local.clone(),
+                    reason: "has no amml/amml-api.txt".to_string(),
+                })?;
+                // the caller's file stays: it is neither verified against a registry nor discarded
+                let zip = VerifiedFile { path: local.clone(), sha256: FileHash::sha256(local)? };
+                let version =
+                    format!("{}{}", self.amml.install(&path, &request.name, &zip, progress)?, AmmlState::LOCAL_SUFFIX);
+                LauncherBlockStore::set_amml(&path, &version)?;
+                // the same two files `install` of the AMML repo writes for a local build
+                let amml_folder = path.join("amml");
+                std::fs::write(amml_folder.join("amml-version.txt"), &version)?;
+                std::fs::write(amml_folder.join("amml-api.txt"), api.to_string())?;
+                (api, AmmlLevel::Local)
+            }
+            (None, None) => return Err(LauncherError::NotSupported { game: request.game.to_string() }),
+        };
         InstanceHclFile::write(&InstanceReader::instance_hcl(&path), &request.data)?;
 
-        // the AMML of this instance is the release just installed
-        let level = ReleaseVersion::parse(&release.version).map_or(AmmlLevel::Unknown, AmmlLevel::Release);
-        let defaults = self.catalogue.defaults_for(release.api_version, &level)?;
+        let defaults = self.catalogue.defaults_for(api, &level)?;
         let mut wanted = defaults.mods;
         // core mods first; the sort keeps the registry order inside each group
         wanted.sort_by_key(|resolved| !resolved.core);
         let mut skipped = defaults.skipped;
         for resolved in wanted {
             let source = ModSource::Registry(resolved.registry.base.clone());
-            match self.install_resolved(&path, &request.name, &resolved, source, release.api_version, progress) {
+            match self.install_resolved(&path, &request.name, &resolved, source, api, progress) {
                 Ok(_) => {}
                 Err(error) if !resolved.core => {
                     curia::warn!("a default mod was not installed", {

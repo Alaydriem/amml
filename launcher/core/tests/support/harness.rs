@@ -36,6 +36,11 @@ impl Harness {
         }
     }
 
+    // the temp folder that holds the zips of this harness
+    pub fn work_dir(&self) -> &std::path::Path {
+        self.work.path()
+    }
+
     pub fn official(&self) -> RegistryRef {
         RegistryRef::official_at(self.server.base())
     }

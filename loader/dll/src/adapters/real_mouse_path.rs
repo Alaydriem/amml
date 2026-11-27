@@ -10,6 +10,11 @@ use crate::{EventHub, InputService, LoaderState};
 /// `MOUSE_BUTTONS` block of the active leases, the button table, the last pointer position, and the
 /// thread rule of mouse injection.
 ///
+/// The thread rule is `GAME_THREAD` from the first frame on: injection runs on the game thread, and the mouse
+/// feed has been the game thread on every build measured. The first real feed then checks it: a real feed off the
+/// game thread withdraws mouse injection for the rest of the process. No real mouse event is needed for injection
+/// to be ready.
+///
 /// Only feeds on the `MouseDevice.instance` device go through the loader; the game's per-pointer devices
 /// (touch and pen) pass unchanged. The thread rule: the first real feed that runs after the game thread is
 /// known decides whether the mouse feed is the game thread. When it is not, mouse injection is not
@@ -189,6 +194,24 @@ impl RealMousePath {
         if self.thread.load(Ordering::Acquire) == Self::OTHER_THREAD { Err(AmmlStatus::NOT_AVAILABLE) } else { Ok(()) }
     }
 
+    /// `Ok` when a button or wheel may be injected: the thread rule has not withdrawn the area, and the first
+    /// frame has run. The first call after the gate opens takes `GAME_THREAD` as the rule when no real feed has
+    /// decided it yet. `NOT_READY` before the first frame, `NOT_AVAILABLE` after a real feed off the game thread.
+    pub fn ready(&self) -> Result<(), AmmlStatus> {
+        self.thread_allows()?;
+        if self.decided() {
+            return Ok(());
+        }
+        if !self.state.events().gate().is_open() {
+            return Err(AmmlStatus::NOT_READY);
+        }
+        if self.thread.compare_exchange(Self::UNDECIDED, Self::GAME_THREAD, Ordering::AcqRel, Ordering::Acquire).is_ok()
+        {
+            curia::info!("mouse feed thread is taken as the game thread");
+        }
+        self.thread_allows()
+    }
+
     /// Whether a real feed has decided the thread rule.
     pub fn decided(&self) -> bool {
         self.thread.load(Ordering::Acquire) != Self::UNDECIDED
@@ -200,8 +223,22 @@ impl RealMousePath {
 
     // Decides the thread rule at the first feed once the game thread is known (the gate opens at the first
     // frame); before that, nothing is decided.
+    // A real feed off the game thread after the rule said "game thread" withdraws mouse injection as well.
     fn decide(&self, on_game_thread: bool) {
-        if self.decided() || !self.state.events().gate().is_open() {
+        if !self.state.events().gate().is_open() {
+            return;
+        }
+        if !on_game_thread
+            && self
+                .thread
+                .compare_exchange(Self::GAME_THREAD, Self::OTHER_THREAD, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+        {
+            curia::warn!("mouse injection not available: the mouse feed is not the game thread");
+            self.state.areas().withdraw(Self::MOUSE_INJECT);
+            return;
+        }
+        if self.decided() {
             return;
         }
         let value = if on_game_thread { Self::GAME_THREAD } else { Self::OTHER_THREAD };

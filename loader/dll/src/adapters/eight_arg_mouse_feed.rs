@@ -12,8 +12,9 @@ static FEED: OnceLock<Arc<EightArgMouseFeed>> = OnceLock::new();
 /// real path.
 ///
 /// Injected input is fed to `MouseDevice.instance` at the pointer position of the last real feed, with
-/// controller id 0, as every desktop caller of the game passes. Injection is `NOT_READY` until a real feed
-/// has shown which thread feeds the mouse, and `NOT_AVAILABLE` for good when that is not the game thread.
+/// controller id 0, as every desktop caller of the game passes. Injection is `NOT_READY` until the first
+/// frame, then ready with no real feed needed (the position is 0, 0 until one comes), and `NOT_AVAILABLE` for good
+/// when a real feed shows that the mouse is not fed on the game thread.
 pub struct EightArgMouseFeed {
     path: RealMousePath,
 }
@@ -59,8 +60,9 @@ impl EightArgMouseFeed {
     fn send(&self, action: u8, data: i8) {
         let (x, y) = self.path.last_position();
         let device = std::ptr::with_exposed_provenance_mut::<c_void>(self.path.instance());
-        // SAFETY: `device` is the game's static `MouseDevice`; `send_button` and `send_wheel` run on the game
-        // thread, which `ready` has checked is the thread of the real feed.
+        // SAFETY: `device` is the game's static `MouseDevice`; `send_button` and `send_wheel` run in the frame
+        // flush on the game thread; `ready` refuses injection once a real feed has run off the game thread
+        // (`RealMousePath::ready`).
         let sent = unsafe { MouseDetours::send_eight_arg(device, action, data, x, y, Self::DESKTOP_CONTROLLER) };
         if !sent {
             curia::debug!("an injected mouse action was dropped: the mouse hook is not installed", { action: action });
@@ -74,11 +76,7 @@ impl MouseFeed for EightArgMouseFeed {
     }
 
     fn ready(&self) -> Result<(), AmmlStatus> {
-        self.path.thread_allows()?;
-        if !self.path.decided() {
-            return Err(AmmlStatus::NOT_READY);
-        }
-        Ok(())
+        self.path.ready()
     }
 
     fn send_button(&self, button: AmmlMouseButton, down: bool) {

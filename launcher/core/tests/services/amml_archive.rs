@@ -87,3 +87,20 @@ fn an_archive_with_data_extracts_it() {
     archive.extract_to(&dest).unwrap();
     assert_eq!(std::fs::read(dest.join("amml").join("data").join("build-one.hcl")).unwrap(), b"solved");
 }
+
+#[test]
+fn a_zip_states_its_api_only_when_it_carries_the_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let base: [(&str, &[u8]); 4] = [
+        ("amml.dll", b"x"),
+        ("amml-patch.exe", b"x"),
+        ("amml/recipes/a.hcl", b"x"),
+        ("amml/amml-version.txt", b"1.0.0"),
+    ];
+    let without = Zips::raw(&dir.path().join("a.zip"), &base);
+    assert_eq!(AmmlArchive::open(&without).unwrap().api(), None);
+    let mut entries = base.to_vec();
+    entries.push(("amml/amml-api.txt", b"3\n"));
+    let with = Zips::raw(&dir.path().join("b.zip"), &entries);
+    assert_eq!(AmmlArchive::open(&with).unwrap().api(), Some(3));
+}
