@@ -14,7 +14,7 @@ pub struct ReleaseVerifier<S: ReleaseSource> {
 impl<S: ReleaseSource> ReleaseVerifier<S> {
     const SUMS: &'static str = "SHA256SUMS.txt";
     // the largest single file the verifier reads out of a zip
-    const MAX_ENTRY_BYTES: u64 = 4 * 1024 * 1024;
+    const MAX_ENTRY_BYTES: u64 = 64 * 1024 * 1024;
 
     pub fn new(source: S) -> Self {
         Self { source }
@@ -87,8 +87,7 @@ impl<S: ReleaseSource> ReleaseVerifier<S> {
         let mut archive = Self::open(&zip)?;
 
         for exe in ["amml.dll", "amml-patch.exe"] {
-            let bytes =
-                Self::read_bytes(&mut archive, exe).map_err(|_| Self::bad_zip(format!("`{exe}` is missing")))?;
+            let bytes = Self::read_bytes(&mut archive, exe)?;
             if !bytes.starts_with(b"MZ") {
                 return Err(Self::bad_zip(format!("`{exe}` is not a Windows executable")));
             }
